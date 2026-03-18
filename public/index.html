@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ビレッジひろば</title>
+    <style>
+      :root {
+        --bg: #fffdfa;
+        --panel: rgba(255, 255, 255, 0.92);
+        --panel-soft: rgba(255, 248, 243, 0.94);
+        --line: rgba(226, 207, 196, 0.88);
+        --text: #5b4a43;
+        --muted: #8a766d;
+        --pink: #f5d9dd;
+        --pink-strong: #e8b9c1;
+        --beige: #f4e7d8;
+        --mint: #dcebe2;
+        --shadow: 0 22px 48px rgba(160, 123, 110, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(245, 217, 221, 0.72), transparent 30%),
+          radial-gradient(circle at top right, rgba(244, 231, 216, 0.88), transparent 34%),
+          linear-gradient(180deg, #fffdfa 0%, #fff8f4 100%);
+      }
+
+      .page {
+        width: min(1160px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 34px 0 56px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: 30px 30px 28px;
+        border: 1px solid rgba(232, 185, 193, 0.46);
+        border-radius: 32px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(255, 247, 242, 0.96));
+        box-shadow: var(--shadow);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        right: -60px;
+        top: -80px;
+        width: 240px;
+        height: 240px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(245, 217, 221, 0.54), transparent 62%);
+      }
+
+      .hero__eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(245, 217, 221, 0.9), rgba(244, 231, 216, 0.9));
+        color: #7b5c62;
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 18px 0 10px;
+        font-size: clamp(2rem, 4vw, 3.35rem);
+        line-height: 1.1;
+        letter-spacing: 0.03em;
+      }
+
+      .hero__subtitle {
+        margin: 0;
+        max-width: 620px;
+        font-size: clamp(1rem, 2vw, 1.15rem);
+        line-height: 1.8;
+        color: var(--muted);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 28px;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 1.35rem;
+      }
+
+      .section-head p {
+        margin: 4px 0 0;
+        color: var(--muted);
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+        margin-top: 18px;
+      }
+
+      .card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-height: 268px;
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        background: linear-gradient(180deg, var(--panel) 0%, var(--panel-soft) 100%);
+        box-shadow: 0 18px 34px rgba(143, 112, 96, 0.1);
+      }
+
+      .card[data-tone="schedule"] {
+        background:
+          radial-gradient(circle at top right, rgba(232, 185, 193, 0.24), transparent 30%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 240, 0.96));
+      }
+
+      .card[data-tone="training"] {
+        background:
+          radial-gradient(circle at top right, rgba(220, 235, 226, 0.44), transparent 32%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 247, 0.96));
+      }
+
+      .card__number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 66px;
+        height: 66px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, rgba(245, 217, 221, 0.98), rgba(244, 231, 216, 0.96));
+        color: #7d5e66;
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      .card__label {
+        display: inline-block;
+        align-self: flex-start;
+        margin-top: 16px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(245, 217, 221, 0.72);
+        color: #7d5e66;
+        font-size: 0.85rem;
+        font-weight: 700;
+      }
+
+      .card h3 {
+        margin: 16px 0 10px;
+        font-size: 1.48rem;
+        line-height: 1.35;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.8;
+        flex: 1;
+      }
+
+      .card a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        margin-top: 24px;
+        padding: 14px 22px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, var(--pink-strong), #e9cfc0);
+        color: #5c4741;
+        text-decoration: none;
+        font-weight: 700;
+        box-shadow: 0 12px 22px rgba(174, 137, 128, 0.16);
+      }
+
+      .footer {
+        margin-top: 20px;
+        text-align: center;
+        color: #a08b82;
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 860px) {
+        .page {
+          width: min(100% - 24px, 760px);
+          padding-top: 24px;
+          padding-bottom: 40px;
+        }
+
+        .cards {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+
+        .hero,
+        .card {
+          border-radius: 24px;
+        }
+
+        .card {
+          min-height: auto;
+          padding: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="hero__eyebrow">ビレッジ翼</div>
+        <h1>ビレッジひろば</h1>
+        <p class="hero__subtitle">
+          日々の業務をやわらかく整理するための入口です。必要なメニューを選んで、スケジュール確認や各種報告へ進めます。
+        </p>
+      </section>
+
+      <section aria-label="業務メニュー">
+        <div class="section-head">
+          <div>
+            <h2>業務メニュー</h2>
+            <p>まず使うことの多い入口を大きめのカードでまとめています。</p>
+          </div>
+        </div>
+
+        <div class="cards">
+          <article class="card" data-tone="schedule">
+            <div class="card__number">01</div>
+            <span class="card__label">業務メニュー 01</span>
+            <h3>スケジュール反映</h3>
+            <p>
+              月間スケジュールを確認しながら、移動支援予定や居宅介護予定の反映を進めるための画面です。
+            </p>
+            <a href="/schedule-sync/">開く</a>
+          </article>
+
+          <article class="card" data-tone="training">
+            <div class="card__number">04</div>
+            <span class="card__label">業務メニュー 04</span>
+            <h3>研修報告</h3>
+            <p>
+              研修の実施内容や学びを整理して記録するための入口です。画面は順次整備していく前提で先に導線を置いています。
+            </p>
+            <a href="/training-reports/">開く</a>
+          </article>
+        </div>
+      </section>
+
+      <p class="footer">必要な業務を選んでご利用ください。</p>
+    </main>
+  </body>
+</html>
