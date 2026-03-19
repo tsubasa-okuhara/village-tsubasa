@@ -3,6 +3,7 @@
     "source": "functions"
   },
   "hosting": {
+    "site": "village-tsubasa",
     "public": "public",
     "rewrites": [
       {
