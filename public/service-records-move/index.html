@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Move Service Records</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="panel hero">
+        <p class="eyebrow">Move Service Records</p>
+        <h1>移動支援記録の入力</h1>
+        <p class="lead">
+          未記入予定から対象を選び、実務向けの入力項目を整えたうえで記録を保存します。
+        </p>
+      </section>
+
+      <section class="panel controls">
+        <div class="toolbar">
+          <div class="field grow">
+            <label for="helper-email">helper_email</label>
+            <input
+              id="helper-email"
+              name="helper-email"
+              type="email"
+              placeholder="test@example.com"
+              autocomplete="email"
+            />
+          </div>
+          <div class="toolbar-actions">
+            <button id="load-button" type="button">未記入予定を取得</button>
+            <span id="loading-text" class="muted" aria-live="polite"></span>
+          </div>
+        </div>
+        <p id="error-message" class="message error" aria-live="polite"></p>
+        <p id="success-message" class="message success" aria-live="polite"></p>
+      </section>
+
+      <section class="layout">
+        <section class="panel list-panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Unwritten Queue</p>
+              <h2>未記入予定一覧</h2>
+            </div>
+            <span id="list-count" class="badge">0 件</span>
+          </div>
+          <div id="empty-state" class="empty-state">
+            helper email を入力して一覧を取得してください。
+          </div>
+          <div id="records-list" class="records-list" role="listbox" aria-label="未記入予定一覧"></div>
+        </section>
+
+        <section class="panel workspace-panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Record Workspace</p>
+              <h2>移動支援記録入力</h2>
+            </div>
+            <span id="selected-status" class="muted">未選択</span>
+          </div>
+
+          <section class="subpanel">
+            <h3>予定情報</h3>
+            <div id="schedule-overview" class="schedule-overview empty">
+              保存対象を一覧から1件選択してください。
+            </div>
+
+            <div class="grid-two">
+              <div class="field">
+                <label for="destination-input">行先</label>
+                <input id="destination-input" name="destination" type="text" />
+              </div>
+              <div class="field">
+                <label for="support-input">主な援助内容</label>
+                <input id="support-input" name="support" type="text" />
+              </div>
+            </div>
+          </section>
+
+          <section class="subpanel">
+            <h3>大枠チェック</h3>
+            <div class="macro-grid">
+              <label class="macro-card">
+                <input type="checkbox" id="macro-move" />
+                <span>移動</span>
+              </label>
+              <label class="macro-card">
+                <input type="checkbox" id="macro-condition" />
+                <span>状態</span>
+              </label>
+              <label class="macro-card">
+                <input type="checkbox" id="macro-toilet" />
+                <span>トイレ</span>
+              </label>
+              <label class="macro-card">
+                <input type="checkbox" id="macro-weather" />
+                <span>天候</span>
+              </label>
+              <label class="macro-card">
+                <input type="checkbox" id="macro-meal-hydration" />
+                <span>食事・水分</span>
+              </label>
+              <label class="macro-card">
+                <input type="checkbox" id="macro-medication" />
+                <span>服薬</span>
+              </label>
+              <label class="macro-card">
+                <input type="checkbox" id="macro-communication" />
+                <span>交流</span>
+              </label>
+            </div>
+
+            <div class="detail-groups">
+              <section id="group-move" class="detail-group" hidden>
+                <h4>移動</h4>
+                <div class="chip-grid">
+                  <label class="chip"><input type="checkbox" name="moveOptions" value="車" /><span>車</span></label>
+                  <label class="chip"><input type="checkbox" name="moveOptions" value="バス" /><span>バス</span></label>
+                  <label class="chip"><input type="checkbox" name="moveOptions" value="電車" /><span>電車</span></label>
+                  <label class="chip"><input type="checkbox" name="moveOptions" value="徒歩" /><span>徒歩</span></label>
+                </div>
+              </section>
+
+              <section id="group-condition" class="detail-group" hidden>
+                <h4>状態</h4>
+                <div class="chip-grid">
+                  <label class="chip"><input type="checkbox" name="conditionOptions" value="落ち着いていた" /><span>落ち着いていた</span></label>
+                  <label class="chip"><input type="checkbox" name="conditionOptions" value="やや不安定" /><span>やや不安定</span></label>
+                  <label class="chip"><input type="checkbox" name="conditionOptions" value="興奮気味" /><span>興奮気味</span></label>
+                  <label class="chip"><input type="checkbox" name="conditionOptions" value="発作あり" /><span>発作あり</span></label>
+                  <label class="chip"><input type="checkbox" name="conditionOptions" value="発作なし" /><span>発作なし</span></label>
+                  <label class="chip"><input type="checkbox" name="conditionOptions" value="変化あり" /><span>変化あり</span></label>
+                  <label class="chip"><input type="checkbox" name="conditionOptions" value="変化なし" /><span>変化なし</span></label>
+                </div>
+              </section>
+
+              <section id="group-toilet" class="detail-group" hidden>
+                <h4>トイレ</h4>
+                <div class="chip-grid">
+                  <label class="chip"><input type="checkbox" name="toiletOptions" value="排尿" /><span>排尿</span></label>
+                  <label class="chip"><input type="checkbox" name="toiletOptions" value="排便" /><span>排便</span></label>
+                  <label class="chip"><input type="checkbox" name="toiletOptions" value="両方" /><span>両方</span></label>
+                  <label class="chip"><input type="checkbox" name="toiletOptions" value="なし" /><span>なし</span></label>
+                  <label class="chip"><input type="checkbox" name="toiletOptions" value="おむつ" /><span>おむつ</span></label>
+                  <label class="chip"><input type="checkbox" name="toiletOptions" value="介助" /><span>介助</span></label>
+                </div>
+              </section>
+
+              <section id="group-weather" class="detail-group" hidden>
+                <h4>天候</h4>
+                <div class="chip-grid">
+                  <label class="chip"><input type="radio" name="weatherOption" value="晴れ" /><span>晴れ</span></label>
+                  <label class="chip"><input type="radio" name="weatherOption" value="晴れ時々曇り" /><span>晴れ時々曇り</span></label>
+                  <label class="chip"><input type="radio" name="weatherOption" value="曇り" /><span>曇り</span></label>
+                  <label class="chip"><input type="radio" name="weatherOption" value="雨" /><span>雨</span></label>
+                </div>
+              </section>
+
+              <section id="group-meal-hydration" class="detail-group" hidden>
+                <h4>食事・水分</h4>
+                <div class="stack">
+                  <div>
+                    <p class="group-label">食事</p>
+                    <div class="chip-grid">
+                      <label class="chip"><input type="radio" name="mealOption" value="全量" /><span>全量</span></label>
+                      <label class="chip"><input type="radio" name="mealOption" value="半量" /><span>半量</span></label>
+                      <label class="chip"><input type="radio" name="mealOption" value="なし" /><span>なし</span></label>
+                    </div>
+                  </div>
+                  <div>
+                    <p class="group-label">水分</p>
+                    <div class="chip-grid">
+                      <label class="chip"><input type="radio" name="hydrationOption" value="十分" /><span>十分</span></label>
+                      <label class="chip"><input type="radio" name="hydrationOption" value="不足" /><span>不足</span></label>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="group-medication" class="detail-group" hidden>
+                <h4>服薬</h4>
+                <div class="chip-grid">
+                  <label class="chip"><input type="radio" name="medicationOption" value="服薬" /><span>服薬</span></label>
+                  <label class="chip"><input type="radio" name="medicationOption" value="飲み忘れ" /><span>飲み忘れ</span></label>
+                  <label class="chip"><input type="radio" name="medicationOption" value="拒否" /><span>拒否</span></label>
+                </div>
+              </section>
+
+              <section id="group-communication" class="detail-group" hidden>
+                <h4>交流</h4>
+                <div class="chip-grid">
+                  <label class="chip"><input type="radio" name="communicationOption" value="交流あり" /><span>交流あり</span></label>
+                  <label class="chip"><input type="radio" name="communicationOption" value="交流なし" /><span>交流なし</span></label>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="subpanel">
+            <h3>利用者メモ</h3>
+            <div class="field">
+              <label for="memo-text">その日の様子や気づき</label>
+              <textarea
+                id="memo-text"
+                name="memo-text"
+                rows="5"
+                placeholder="その日の様子、体調、会話、気づいたことを自由入力"
+              ></textarea>
+            </div>
+          </section>
+
+          <section class="subpanel">
+            <div class="section-row">
+              <div>
+                <h3>AI記録案</h3>
+                <p class="subtext">今回は UI のみ。API 連携は次段階です。</p>
+              </div>
+              <button id="draft-button" type="button" class="secondary-button">
+                AI記録案を作成
+              </button>
+            </div>
+            <div class="field">
+              <label for="draft-text">AI記録案 textarea</label>
+              <textarea
+                id="draft-text"
+                name="draft-text"
+                rows="6"
+                placeholder="次段階で AI 記録案をここに反映"
+              ></textarea>
+            </div>
+          </section>
+
+          <section class="subpanel save-panel">
+            <h3>保存</h3>
+            <p class="subtext">
+              現段階では既存の save API を使い、記録本文が空なら利用者メモを保存します。
+            </p>
+            <div class="field">
+              <label for="record-text">記録本文</label>
+              <textarea
+                id="record-text"
+                name="record-text"
+                rows="8"
+                placeholder="保存したい記録本文を入力"
+              ></textarea>
+            </div>
+            <div class="actions">
+              <button id="save-button" type="button" disabled>保存</button>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

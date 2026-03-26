@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>移動支援サービス実績記録票</title>
+    <link rel="stylesheet" href="./sheet.css" />
+  </head>
+  <body>
+    <main class="sheet-page">
+      <section class="sheet-controls" aria-label="帳票操作">
+        <div class="control-group">
+          <label for="user-filter">利用者名</label>
+          <select id="user-filter">
+            <option value="">すべて</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="beneficiary-filter">受給者番号</label>
+          <select id="beneficiary-filter">
+            <option value="">すべて</option>
+          </select>
+        </div>
+        <div class="control-group static-group">
+          <span class="control-label">並び順</span>
+          <span class="control-value">受給者番号昇順</span>
+        </div>
+        <div class="control-actions">
+          <button id="reset-filters" type="button">絞り込み解除</button>
+          <button id="print-sheets" type="button">印刷</button>
+        </div>
+      </section>
+
+      <p id="sheet-status" class="sheet-status" aria-live="polite"></p>
+      <p id="sheet-error" class="sheet-error" aria-live="polite"></p>
+
+      <section id="sheet-list" class="sheet-list" aria-label="サービス実績記録票一覧"></section>
+    </main>
+
+    <template id="sheet-template">
+      <section class="sheet-frame">
+        <header class="sheet-header">
+          <div class="sheet-header-top">
+            <p class="sheet-kicker">サービス実施記録</p>
+            <p class="sheet-beneficiary">受給者番号: <span data-field="beneficiaryNumber"></span></p>
+          </div>
+          <h1>移動支援サービス実績記録票</h1>
+        </header>
+
+        <section class="sheet-block">
+          <div class="row">
+            <div class="cell label-cell small">事業所名</div>
+            <div class="cell value-cell wide" data-field="officeName"></div>
+            <div class="cell label-cell small">作成日</div>
+            <div class="cell value-cell date" data-field="createdDate"></div>
+          </div>
+          <div class="row">
+            <div class="cell label-cell small">利用者名</div>
+            <div class="cell value-cell" data-field="userName"></div>
+            <div class="cell label-cell small">ヘルパー名</div>
+            <div class="cell value-cell" data-field="helperName"></div>
+            <div class="cell label-cell verify">利用者確認欄</div>
+            <div class="cell value-cell verify-box" data-field="verification"></div>
+          </div>
+          <div class="row">
+            <div class="cell label-cell small">年月日</div>
+            <div class="cell value-cell" data-field="serviceDate"></div>
+            <div class="cell label-cell small">時間</div>
+            <div class="cell value-cell" data-field="serviceTime"></div>
+          </div>
+        </section>
+
+        <section class="sheet-block compact-block">
+          <div class="row stack-row">
+            <div class="cell label-cell tall">行先</div>
+            <div class="cell value-cell tall" data-field="destination"></div>
+          </div>
+          <div class="row stack-row">
+            <div class="cell label-cell tall">主な援助内容</div>
+            <div class="cell value-cell tall" data-field="supportSummary"></div>
+          </div>
+          <div class="row stack-row notes-row">
+            <div class="cell label-cell tall">備考</div>
+            <div class="cell value-cell tall notes-cell" data-field="memo"></div>
+          </div>
+        </section>
+
+        <section class="sheet-block route-block">
+          <div class="row route-row">
+            <div class="cell label-cell route-label">経路</div>
+            <div class="cell value-cell route-value" data-field="route"></div>
+          </div>
+          <div class="row transport-row">
+            <div class="cell label-cell transport-head">移動手段</div>
+            <div class="cell choice-cell">
+              <span class="choice-label">徒歩</span>
+              <span class="choice-mark" data-choice="walk"></span>
+            </div>
+            <div class="cell choice-cell">
+              <span class="choice-label">バス</span>
+              <span class="choice-mark" data-choice="bus"></span>
+            </div>
+            <div class="cell choice-cell">
+              <span class="choice-label">電車</span>
+              <span class="choice-mark" data-choice="train"></span>
+            </div>
+          </div>
+        </section>
+      </section>
+    </template>
+
+    <script src="./sheet.js"></script>
+  </body>
+</html>
