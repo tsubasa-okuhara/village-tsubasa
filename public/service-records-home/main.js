@@ -1,0 +1,685 @@
+const HOME_UNWRITTEN_API = "/api/service-records-home/unwritten";
+const HOME_SUMMARY_API = "/api/service-records-home/summary";
+const HOME_SAVE_API = "/api/service-records-home/save";
+const HOME_CATEGORY_ITEMS = {
+  身体介護: [
+    "食事介助",
+    "排泄介助",
+    "更衣介助",
+    "服薬介助",
+    "移乗・移動介助",
+    "整容介助",
+    "入浴介助",
+    "見守り",
+  ],
+  家事援助: [
+    "調理",
+    "配膳・片付け",
+    "洗濯",
+    "掃除",
+    "買い物",
+    "薬の受け取り",
+    "生活必需品の整理",
+    "ゴミ出し",
+  ],
+  "通院等介助・通院等乗降介助": [
+    "通院同行",
+    "病院内介助",
+    "受付・受診補助",
+    "移動介助",
+    "乗車介助",
+    "降車介助",
+    "薬受け取り",
+    "帰宅支援",
+  ],
+};
+
+function normalizeOptionalText(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue === "" ? null : trimmedValue;
+}
+
+function normalizeRequiredText(value, fieldName) {
+  if (typeof value !== "string") {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  return trimmedValue;
+}
+
+async function fetchHomeUnwritten(helperEmail) {
+  const url = new URL(HOME_UNWRITTEN_API, window.location.origin);
+  const normalizedHelperEmail = normalizeOptionalText(helperEmail);
+
+  if (normalizedHelperEmail) {
+    url.searchParams.set("helper_email", normalizedHelperEmail);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.message || "failed to fetch home unwritten tasks");
+  }
+
+  return data;
+}
+
+function buildHomeSavePayload(values) {
+  return {
+    scheduleTaskId: normalizeRequiredText(values.scheduleTaskId, "scheduleTaskId"),
+    serviceDate: normalizeRequiredText(values.serviceDate, "serviceDate"),
+    helperName: normalizeRequiredText(values.helperName, "helperName"),
+    helperEmail: normalizeOptionalText(values.helperEmail),
+    userName: normalizeRequiredText(values.userName, "userName"),
+    task: normalizeOptionalText(values.task),
+    memo: normalizeOptionalText(values.memo),
+    aiSummary: normalizeOptionalText(values.aiSummary),
+    finalNote: normalizeRequiredText(values.finalNote, "finalNote"),
+  };
+}
+
+async function saveHomeRecord(values) {
+  const payload = buildHomeSavePayload(values);
+  const response = await fetch(HOME_SAVE_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.message || "failed to save home service record");
+  }
+
+  return data;
+}
+
+async function generateHomeSummary(values) {
+  const response = await fetch(HOME_SUMMARY_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.message || "failed to generate home summary");
+  }
+
+  return data;
+}
+
+window.homeServiceRecordsApi = {
+  fetchHomeUnwritten,
+  generateHomeSummary,
+  buildHomeSavePayload,
+  saveHomeRecord,
+};
+
+const state = {
+  items: [],
+  selectedTask: null,
+  selectedCategory: "身体介護",
+  finalNoteTouched: false,
+};
+
+function getRequiredElement(id) {
+  const element = document.getElementById(id);
+
+  if (!element) {
+    throw new Error(`missing element: ${id}`);
+  }
+
+  return element;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function getDisplayValue(value, fallback) {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function formatTimeRange(item) {
+  const startTime = getDisplayValue(item.start_time, "");
+  const endTime = getDisplayValue(item.end_time, "");
+
+  if (startTime && endTime) {
+    return `${startTime}〜${endTime}`;
+  }
+
+  return startTime || endTime || "時間未設定";
+}
+
+function setStatus(element, message, type) {
+  element.textContent = message || "";
+  element.classList.remove("is-error", "is-success");
+
+  if (type) {
+    element.classList.add(type);
+  }
+}
+
+function getInitialHelperEmail() {
+  const searchParams = new URLSearchParams(window.location.search);
+  return normalizeOptionalText(searchParams.get("helper_email"));
+}
+
+function inferCategory(taskName) {
+  const text = String(taskName ?? "").trim();
+
+  if (text === "家事援助") {
+    return "家事援助";
+  }
+
+  if (text === "通院等介助・通院等乗降介助") {
+    return "通院等介助・通院等乗降介助";
+  }
+
+  return "身体介護";
+}
+
+function getCheckedItems(checklistElement) {
+  return Array.from(checklistElement.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(function (inputElement) {
+      return String(inputElement.value || "").trim();
+    })
+    .filter(Boolean);
+}
+
+function buildMemoText(category, checkedItems, otherDetail, freeMemo) {
+  const lines = [];
+  const itemTexts = checkedItems.slice();
+  const normalizedOtherDetail = normalizeOptionalText(otherDetail);
+  const normalizedFreeMemo = normalizeOptionalText(freeMemo);
+
+  if (normalizedOtherDetail) {
+    itemTexts.push(`その他(${normalizedOtherDetail})`);
+  }
+
+  lines.push(`区分: ${category}`);
+  lines.push(
+    `実施項目: ${itemTexts.length > 0 ? itemTexts.join("、") : "選択なし"}`
+  );
+
+  if (normalizedFreeMemo) {
+    lines.push(`補足: ${normalizedFreeMemo}`);
+  }
+
+  return lines.join("\n");
+}
+
+function buildFinalNoteText(task, category, checkedItems, otherDetail, freeMemo) {
+  const userName = getDisplayValue(task?.user_name, "利用者");
+  const serviceDate = getDisplayValue(task?.service_date, "本日");
+  const timeRange = formatTimeRange(task);
+  const normalizedOtherDetail = normalizeOptionalText(otherDetail);
+  const normalizedFreeMemo = normalizeOptionalText(freeMemo);
+  const detailTexts = checkedItems.slice();
+
+  if (normalizedOtherDetail) {
+    detailTexts.push(normalizedOtherDetail);
+  }
+
+  const detailText = detailTexts.length > 0 ? detailTexts.join("、") : "必要な支援";
+  const sentences = [
+    `${serviceDate} ${timeRange}、${userName}様へ${category}を実施しました。`,
+    `実施内容: ${detailText}。`,
+  ];
+
+  if (normalizedFreeMemo) {
+    sentences.push(`特記事項: ${normalizedFreeMemo}。`);
+  }
+
+  return sentences.join("");
+}
+
+function renderChecklist(checklistElement) {
+  const items = HOME_CATEGORY_ITEMS[state.selectedCategory] || [];
+
+  checklistElement.innerHTML = items
+    .map(function (item, index) {
+      const itemId = `home-check-item-${index}`;
+
+      return `
+        <label class="checkbox-item" for="${escapeHtml(itemId)}">
+          <input id="${escapeHtml(itemId)}" type="checkbox" value="${escapeHtml(item)}" />
+          <span>${escapeHtml(item)}</span>
+        </label>
+      `;
+    })
+    .join("");
+}
+
+function renderTaskList(listElement, selectedSummaryElement, saveStatusElement) {
+  if (!Array.isArray(state.items) || state.items.length === 0) {
+    listElement.innerHTML = "";
+    return;
+  }
+
+  listElement.innerHTML = state.items
+    .map(function (item) {
+      const isSelected = state.selectedTask && state.selectedTask.id === item.id;
+
+      return `
+        <button
+          type="button"
+          class="task-card ${isSelected ? "is-selected" : ""}"
+          data-task-id="${escapeHtml(item.id)}"
+        >
+          <div class="task-card__title">
+            ${escapeHtml(getDisplayValue(item.user_name, "利用者未設定"))}
+          </div>
+          <div class="task-card__meta">
+            <div>担当: ${escapeHtml(getDisplayValue(item.helper_name, "担当未設定"))}</div>
+            <div>日付: ${escapeHtml(getDisplayValue(item.service_date, "日付未設定"))}</div>
+            <div>時間: ${escapeHtml(formatTimeRange(item))}</div>
+            <div>内容: ${escapeHtml(getDisplayValue(item.task, "内容未設定"))}</div>
+          </div>
+        </button>
+      `;
+    })
+    .join("");
+
+  listElement.querySelectorAll("[data-task-id]").forEach(function (buttonElement) {
+    buttonElement.addEventListener("click", function () {
+      const taskId = buttonElement.getAttribute("data-task-id");
+      state.selectedTask =
+        state.items.find(function (item) {
+          return item.id === taskId;
+        }) || null;
+
+      renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
+      renderSelectedTask(selectedSummaryElement, saveStatusElement);
+    });
+  });
+}
+
+function renderSelectedTask(selectedSummaryElement, saveStatusElement) {
+  if (!state.selectedTask) {
+    selectedSummaryElement.innerHTML =
+      '<div class="empty-text">予定を選択すると詳細が表示されます。</div>';
+    return;
+  }
+
+  const item = state.selectedTask;
+
+  selectedSummaryElement.innerHTML = `
+    <div class="selected-card__title">
+      ${escapeHtml(getDisplayValue(item.user_name, "利用者未設定"))}
+    </div>
+    <div>担当: ${escapeHtml(getDisplayValue(item.helper_name, "担当未設定"))}</div>
+    <div>helper_email: ${escapeHtml(getDisplayValue(item.helper_email, "未設定"))}</div>
+    <div>日付: ${escapeHtml(getDisplayValue(item.service_date, "日付未設定"))}</div>
+    <div>時間: ${escapeHtml(formatTimeRange(item))}</div>
+    <div>内容: ${escapeHtml(getDisplayValue(item.task, "内容未設定"))}</div>
+    <div>予定概要: ${escapeHtml(getDisplayValue(item.summary, "概要なし"))}</div>
+  `;
+
+  setStatus(saveStatusElement, "メモと記録本文を入力して保存してください。");
+}
+
+function fillFormFromSelectedTask(serviceDateElement, helperNameElement, userNameElement, taskElement) {
+  const item = state.selectedTask;
+
+  serviceDateElement.value = item ? item.service_date || "" : "";
+  helperNameElement.value = item ? item.helper_name || "" : "";
+  userNameElement.value = item ? item.user_name || "" : "";
+  taskElement.value = item ? state.selectedCategory : "";
+}
+
+function resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement) {
+  memoElement.value = "";
+  finalNoteElement.value = "";
+  otherDetailElement.value = "";
+  checklistElement.querySelectorAll('input[type="checkbox"]').forEach(function (inputElement) {
+    inputElement.checked = false;
+  });
+  state.finalNoteTouched = false;
+}
+
+function syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement) {
+  taskElement.value = state.selectedTask ? state.selectedCategory : "";
+
+  const checkedItems = getCheckedItems(checklistElement);
+  const composedMemo = buildMemoText(
+    state.selectedCategory,
+    checkedItems,
+    otherDetailElement.value,
+    memoElement.value
+  );
+
+  if (!state.finalNoteTouched) {
+    finalNoteElement.value = buildFinalNoteText(
+      state.selectedTask,
+      state.selectedCategory,
+      checkedItems,
+      otherDetailElement.value,
+      memoElement.value
+    );
+  }
+
+  return composedMemo;
+}
+
+async function loadHomeTasks(
+  helperEmail,
+  options
+) {
+  const {
+    listStatusElement,
+    saveStatusElement,
+    checklistElement,
+    selectedSummaryElement,
+    listElement,
+    serviceDateElement,
+    helperNameElement,
+    userNameElement,
+    taskElement,
+    memoElement,
+    finalNoteElement,
+    otherDetailElement,
+  } = options;
+
+  setStatus(listStatusElement, "一覧を取得しています...");
+  setStatus(saveStatusElement, "");
+  state.selectedTask = null;
+  state.items = [];
+  state.selectedCategory = inferCategory("");
+  renderChecklist(checklistElement);
+  fillFormFromSelectedTask(serviceDateElement, helperNameElement, userNameElement, taskElement);
+  resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
+  renderSelectedTask(selectedSummaryElement, saveStatusElement);
+  renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
+
+  try {
+    const data = await fetchHomeUnwritten(helperEmail);
+    state.items = Array.isArray(data.items) ? data.items : [];
+
+    if (state.items.length === 0) {
+      setStatus(listStatusElement, "未記入の予定はありません。");
+      renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
+      return;
+    }
+
+    setStatus(listStatusElement, `${state.items.length} 件の未記入予定を取得しました。`, "is-success");
+    renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
+  } catch (error) {
+    console.error("[service-records-home] list error:", error);
+    setStatus(listStatusElement, "未記入一覧の取得に失敗しました。", "is-error");
+  }
+}
+
+function initializeHomeUi() {
+  const filterFormElement = document.getElementById("home-records-filter-form");
+
+  if (!filterFormElement) {
+    return;
+  }
+
+  const helperEmailElement = getRequiredElement("home-helper-email");
+  const listStatusElement = getRequiredElement("home-records-list-status");
+  const listElement = getRequiredElement("home-records-list");
+  const selectedSummaryElement = getRequiredElement("home-records-selected-summary");
+  const entryFormElement = getRequiredElement("home-records-entry-form");
+  const serviceDateElement = getRequiredElement("home-service-date");
+  const helperNameElement = getRequiredElement("home-helper-name");
+  const userNameElement = getRequiredElement("home-user-name");
+  const taskElement = getRequiredElement("home-task");
+  const categoryGroupElement = getRequiredElement("home-category-group");
+  const checklistElement = getRequiredElement("home-checklist");
+  const otherDetailElement = getRequiredElement("home-other-detail");
+  const memoElement = getRequiredElement("home-memo");
+  const finalNoteElement = getRequiredElement("home-final-note");
+  const generateSummaryButtonElement = getRequiredElement("home-generate-summary-button");
+  const clearButtonElement = getRequiredElement("home-clear-button");
+  const saveStatusElement = getRequiredElement("home-records-save-status");
+
+  renderChecklist(checklistElement);
+
+  filterFormElement.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    await loadHomeTasks(helperEmailElement.value, {
+      listStatusElement,
+      saveStatusElement,
+      checklistElement,
+      selectedSummaryElement,
+      listElement,
+      serviceDateElement,
+      helperNameElement,
+      userNameElement,
+      taskElement,
+      memoElement,
+      finalNoteElement,
+      otherDetailElement,
+    });
+  });
+
+  listElement.addEventListener("click", function () {
+    state.selectedCategory = inferCategory(state.selectedTask?.task);
+    categoryGroupElement
+      .querySelectorAll('input[name="homeCategory"]')
+      .forEach(function (inputElement) {
+        inputElement.checked = inputElement.value === state.selectedCategory;
+      });
+    renderChecklist(checklistElement);
+    fillFormFromSelectedTask(serviceDateElement, helperNameElement, userNameElement, taskElement);
+    resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
+    syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
+  });
+
+  clearButtonElement.addEventListener("click", function () {
+    resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
+    syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
+    setStatus(saveStatusElement, "");
+  });
+
+  categoryGroupElement.querySelectorAll('input[name="homeCategory"]').forEach(function (inputElement) {
+    inputElement.addEventListener("change", function () {
+      state.selectedCategory = inputElement.value;
+      renderChecklist(checklistElement);
+      state.finalNoteTouched = false;
+      syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
+    });
+  });
+
+  checklistElement.addEventListener("change", function () {
+    syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
+  });
+
+  otherDetailElement.addEventListener("input", function () {
+    syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
+  });
+
+  memoElement.addEventListener("input", function () {
+    syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
+  });
+
+  finalNoteElement.addEventListener("input", function () {
+    state.finalNoteTouched = true;
+  });
+
+  generateSummaryButtonElement.addEventListener("click", async function () {
+    if (!state.selectedTask) {
+      setStatus(saveStatusElement, "先に保存する予定を1件選択してください。", "is-error");
+      return;
+    }
+
+    if (!state.selectedCategory) {
+      setStatus(saveStatusElement, "区分を選択してください。", "is-error");
+      return;
+    }
+
+    const checkedItems = getCheckedItems(checklistElement);
+
+    if (checkedItems.length === 0) {
+      setStatus(saveStatusElement, "実施項目を1件以上選択してください。", "is-error");
+      return;
+    }
+
+    if (state.finalNoteTouched) {
+      setStatus(saveStatusElement, "記録本文を手編集済みのため、AI要約では上書きしません。", "is-error");
+      return;
+    }
+
+    try {
+      setStatus(saveStatusElement, "AI要約を作成しています...");
+
+      const data = await generateHomeSummary({
+        helperName: state.selectedTask.helper_name,
+        userName: state.selectedTask.user_name,
+        serviceDate: state.selectedTask.service_date,
+        startTime: state.selectedTask.start_time,
+        endTime: state.selectedTask.end_time,
+        category: state.selectedCategory,
+        items: checkedItems,
+        otherDetail: otherDetailElement.value,
+        memo: memoElement.value,
+      });
+
+      finalNoteElement.value = data.summaryText || "";
+      state.finalNoteTouched = false;
+      setStatus(
+        saveStatusElement,
+        data.source === "fallback"
+          ? "フォールバックの記録文を反映しました。"
+          : "AI要約を記録本文に反映しました。",
+        "is-success"
+      );
+    } catch (error) {
+      console.error("[service-records-home] summary error:", error);
+      setStatus(
+        saveStatusElement,
+        error instanceof Error ? error.message : "AI要約の作成に失敗しました。",
+        "is-error"
+      );
+    }
+  });
+
+  entryFormElement.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    if (!state.selectedTask) {
+      setStatus(saveStatusElement, "保存する予定を1件選択してください。", "is-error");
+      return;
+    }
+
+    const checkedItems = getCheckedItems(checklistElement);
+    const finalNote = String(finalNoteElement.value || "").trim();
+
+    if (!state.selectedCategory) {
+      setStatus(saveStatusElement, "区分を選択してください。", "is-error");
+      return;
+    }
+
+    if (checkedItems.length === 0) {
+      setStatus(saveStatusElement, "実施項目を1件以上選択してください。", "is-error");
+      return;
+    }
+
+    if (!finalNote) {
+      setStatus(saveStatusElement, "記録本文を入力してください。", "is-error");
+      return;
+    }
+
+    try {
+      setStatus(saveStatusElement, "保存しています...");
+      const composedMemo = syncDerivedFields(
+        taskElement,
+        memoElement,
+        finalNoteElement,
+        otherDetailElement,
+        checklistElement
+      );
+
+      await saveHomeRecord({
+        scheduleTaskId: state.selectedTask.id,
+        serviceDate: state.selectedTask.service_date,
+        helperName: state.selectedTask.helper_name,
+        helperEmail: state.selectedTask.helper_email,
+        userName: state.selectedTask.user_name,
+        task: state.selectedCategory,
+        memo: composedMemo,
+        aiSummary: null,
+        finalNote,
+      });
+
+      setStatus(saveStatusElement, "保存しました。", "is-success");
+
+      state.items = state.items.filter(function (item) {
+        return item.id !== state.selectedTask.id;
+      });
+      state.selectedTask = null;
+      fillFormFromSelectedTask(serviceDateElement, helperNameElement, userNameElement, taskElement);
+      resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
+      renderSelectedTask(selectedSummaryElement, saveStatusElement);
+      renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
+      setStatus(listStatusElement, `${state.items.length} 件の未記入予定があります。`, "is-success");
+    } catch (error) {
+      console.error("[service-records-home] save error:", error);
+      setStatus(
+        saveStatusElement,
+        error instanceof Error ? error.message : "保存に失敗しました。",
+        "is-error"
+      );
+    }
+  });
+
+  const initialHelperEmail = getInitialHelperEmail();
+
+  if (initialHelperEmail) {
+    helperEmailElement.value = initialHelperEmail;
+    loadHomeTasks(initialHelperEmail, {
+      listStatusElement,
+      saveStatusElement,
+      checklistElement,
+      selectedSummaryElement,
+      listElement,
+      serviceDateElement,
+      helperNameElement,
+      userNameElement,
+      taskElement,
+      memoElement,
+      finalNoteElement,
+      otherDetailElement,
+    });
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initializeHomeUi);
+} else {
+  initializeHomeUi();
+}

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>研修報告</title>
+    <style>
+      :root {
+        --bg: #fffdfb;
+        --panel: #ffffff;
+        --line: #eadfd7;
+        --text: #5c4b44;
+        --muted: #8b776f;
+        --accent: #f3d7db;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top right, rgba(243, 215, 219, 0.58), transparent 30%),
+          linear-gradient(180deg, #fffdfb 0%, #fff8f5 100%);
+      }
+
+      .page {
+        width: min(760px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 24px 0 40px;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        margin-bottom: 20px;
+        color: var(--muted);
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .panel {
+        min-height: calc(100vh - 108px);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 16px 36px rgba(149, 118, 104, 0.1);
+        text-align: center;
+      }
+
+      .content {
+        max-width: 420px;
+      }
+
+      h1 {
+        margin: 0 0 14px;
+        font-size: clamp(1.8rem, 4vw, 2.5rem);
+      }
+
+      .status {
+        display: inline-block;
+        margin-bottom: 16px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--accent), #f4e7d8);
+        font-weight: 700;
+        color: #7c6269;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.8;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <a class="back-link" href="/">ビレッジひろばへ戻る</a>
+      <section class="panel">
+        <div class="content">
+          <h1>研修報告</h1>
+          <div class="status">準備中</div>
+          <p>このページは現在作成中です。</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

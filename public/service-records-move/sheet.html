@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>移動支援サービス実績記録票</title>
+    <link rel="stylesheet" href="./sheet.css" />
+  </head>
+  <body>
+    <main class="sheet-page">
+      <header class="sheet-toolbar">
+        <a class="sheet-toolbar__link" href="/service-records-move/">移動記録画面へ戻る</a>
+        <button id="sheet-print-button" class="sheet-toolbar__button" type="button">印刷</button>
+      </header>
+
+      <article class="service-sheet">
+        <section class="service-sheet__heading">
+          <p class="service-sheet__kicker">サービス実施記録</p>
+          <h1 class="service-sheet__title">移動支援サービス実績記録票</h1>
+          <p class="service-sheet__subtitle">利用者の移動支援状況を確認しやすい帳票イメージの初版レイアウト</p>
+        </section>
+
+        <section class="service-sheet__panel service-sheet__panel--identity">
+          <div class="sheet-grid sheet-grid--identity-top">
+            <section class="sheet-field">
+              <p class="sheet-field__label">事業所名</p>
+              <p class="sheet-field__value" data-field="officeName"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">利用者名</p>
+              <p class="sheet-field__value" data-field="userName"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">ヘルパー名</p>
+              <p class="sheet-field__value" data-field="helperName"></p>
+            </section>
+          </div>
+
+          <div class="sheet-grid sheet-grid--identity-bottom">
+            <section class="sheet-field">
+              <p class="sheet-field__label">利用者確認欄</p>
+              <div class="sheet-signature">
+                <p class="sheet-signature__name" data-field="confirmationName"></p>
+                <p class="sheet-signature__note">署名または押印</p>
+              </div>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">年月日</p>
+              <p class="sheet-field__value" data-field="serviceDate"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">時間</p>
+              <p class="sheet-field__value" data-field="serviceTime"></p>
+            </section>
+          </div>
+        </section>
+
+        <section class="service-sheet__panel">
+          <div class="sheet-grid sheet-grid--middle">
+            <section class="sheet-field">
+              <p class="sheet-field__label">行先</p>
+              <p class="sheet-field__value sheet-field__value--multiline" data-field="destination"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">主な援助内容</p>
+              <div class="sheet-lines" data-field="supportDetails"></div>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">備考</p>
+              <div class="sheet-lines" data-field="remarks"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="service-sheet__panel">
+          <div class="sheet-grid sheet-grid--route">
+            <section class="sheet-field">
+              <p class="sheet-field__label">経路</p>
+              <div class="sheet-lines" data-field="route"></div>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">徒歩</p>
+              <p class="sheet-field__value sheet-field__value--center" data-field="walk"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">バス</p>
+              <p class="sheet-field__value sheet-field__value--center" data-field="bus"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">電車</p>
+              <p class="sheet-field__value sheet-field__value--center" data-field="train"></p>
+            </section>
+          </div>
+        </section>
+
+        <section class="service-sheet__panel">
+          <div class="sheet-grid sheet-grid--money">
+            <section class="sheet-field">
+              <p class="sheet-field__label">預り金</p>
+              <p class="sheet-field__value sheet-field__value--amount" data-field="deposit"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">使用額</p>
+              <p class="sheet-field__value sheet-field__value--amount" data-field="usedAmount"></p>
+            </section>
+            <section class="sheet-field">
+              <p class="sheet-field__label">使用の内訳</p>
+              <div class="sheet-lines" data-field="expenseBreakdown"></div>
+            </section>
+          </div>
+        </section>
+      </article>
+    </main>
+
+    <script src="./sheet.js" defer></script>
+  </body>
+</html>

@@ -1,8 +1,11 @@
+.DS_Store
+.firebase/
 .env
 .env.*
-functions/.env
-functions/.env.*
-node_modules/
+*.local
+functions/.secret.local
 functions/node_modules/
-/lib/
-/functions/lib/
+node_modules/
+village-tsubasa-home/
+village-tsubasa-move/
+home/

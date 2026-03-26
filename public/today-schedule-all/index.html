@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>全体の今日の予定</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8f4ef;
+        --panel: rgba(255, 255, 255, 0.94);
+        --panel-strong: rgba(255, 253, 250, 0.98);
+        --line: rgba(223, 207, 196, 0.92);
+        --text: #463830;
+        --muted: #7b6c63;
+        --danger: #ba4b59;
+        --shadow: 0 20px 42px rgba(144, 113, 98, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(245, 217, 221, 0.62), transparent 26%),
+          radial-gradient(circle at top right, rgba(244, 231, 216, 0.88), transparent 30%),
+          linear-gradient(180deg, #fcfaf7 0%, var(--bg) 100%);
+      }
+
+      .page {
+        width: min(840px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 24px 0 40px;
+      }
+
+      .surface {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 24px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(245, 217, 221, 0.85), rgba(244, 231, 216, 0.9));
+        color: #7a5d63;
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 14px 0 0;
+        font-size: clamp(2rem, 5vw, 2.7rem);
+        line-height: 1.1;
+      }
+
+      .lead {
+        margin: 12px 0 0;
+        color: var(--muted);
+        line-height: 1.75;
+      }
+
+      .hero-meta {
+        display: grid;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .meta-card,
+      .status-card,
+      .empty-card,
+      .schedule-card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.76);
+      }
+
+      .meta-card,
+      .status-card,
+      .empty-card {
+        padding: 16px 18px;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .meta-label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .meta-value {
+        margin-top: 6px;
+        font-size: 1rem;
+        font-weight: 800;
+        word-break: break-word;
+      }
+
+      .status-card {
+        min-height: 60px;
+        display: none;
+        align-items: center;
+      }
+
+      .status-card.is-visible {
+        display: flex;
+      }
+
+      .status-card.is-error {
+        color: var(--danger);
+        background: rgba(255, 245, 246, 0.95);
+        border-color: rgba(219, 157, 166, 0.88);
+      }
+
+      .list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .empty-card {
+        display: none;
+        color: var(--muted);
+      }
+
+      .empty-card.is-visible {
+        display: block;
+      }
+
+      .schedule-card {
+        padding: 18px;
+      }
+
+      .schedule-time {
+        font-size: 1.15rem;
+        font-weight: 800;
+      }
+
+      .schedule-helper {
+        margin-top: 10px;
+        font-size: 1.08rem;
+        font-weight: 800;
+      }
+
+      .schedule-details {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .schedule-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px;
+        line-height: 1.6;
+      }
+
+      .schedule-label {
+        color: var(--muted);
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+
+      .schedule-value {
+        font-size: 0.98rem;
+      }
+
+      .schedule-value.is-danger {
+        color: var(--danger);
+        font-weight: 700;
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          width: min(100%, calc(100% - 16px));
+          padding: 16px 0 28px;
+        }
+
+        .hero {
+          padding: 18px;
+        }
+
+        .meta-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .schedule-card {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="surface hero">
+        <div class="eyebrow">Village Tsubasa</div>
+        <h1>全体の今日の予定</h1>
+        <p class="lead">当日の予定を全体一覧で確認できます</p>
+
+        <div class="hero-meta">
+          <section class="meta-card">
+            <div class="meta-grid">
+              <div>
+                <span class="meta-label">表示日</span>
+                <div id="schedule-date" class="meta-value">-</div>
+              </div>
+              <div>
+                <span class="meta-label">件数</span>
+                <div id="schedule-count" class="meta-value">-</div>
+              </div>
+            </div>
+          </section>
+
+          <section id="status-card" class="status-card is-visible" aria-live="polite">
+            読み込み中...
+          </section>
+
+          <section id="empty-card" class="empty-card" aria-live="polite">
+            本日の予定はありません
+          </section>
+
+          <section id="schedule-list" class="list" aria-live="polite"></section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

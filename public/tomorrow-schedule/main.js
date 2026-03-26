@@ -1,6 +1,6 @@
 import { getSavedHelperEmail } from "../lib/helperEmail.js";
 
-const TODAY_SCHEDULE_ENDPOINT = "/api/today-schedule";
+const TOMORROW_SCHEDULE_ENDPOINT = "/api/tomorrow-schedule";
 
 const state = {
   helperEmail: "",
@@ -49,7 +49,7 @@ function getHelperEmailFromQuery() {
 }
 
 function buildApiUrl(helperEmail) {
-  const url = new URL(TODAY_SCHEDULE_ENDPOINT, window.location.origin);
+  const url = new URL(TOMORROW_SCHEDULE_ENDPOINT, window.location.origin);
   url.searchParams.set("helper_email", helperEmail);
   return url.toString();
 }
@@ -84,7 +84,8 @@ function renderMeta() {
 }
 
 function renderEmpty() {
-  const shouldShowEmpty = state.status === "success" && state.items.length === 0;
+  const shouldShowEmpty = state.status === "empty";
+  emptyCardElement.textContent = state.message || "明日の予定はありません";
   emptyCardElement.classList.toggle("is-visible", shouldShowEmpty);
 }
 
@@ -129,7 +130,7 @@ function render() {
   renderItems();
 }
 
-async function fetchTodaySchedule(helperEmail) {
+async function fetchTomorrowSchedule(helperEmail) {
   const response = await fetch(buildApiUrl(helperEmail), {
     method: "GET",
     headers: {
@@ -169,14 +170,22 @@ async function initializePage() {
     setStatus("loading", "読み込み中...");
     render();
 
-    const result = await fetchTodaySchedule(state.helperEmail);
+    const result = await fetchTomorrowSchedule(state.helperEmail);
     state.date = result.date || "";
     state.helperEmail = result.helperEmail || state.helperEmail;
     state.items = Array.isArray(result.items) ? result.items : [];
+
+    if ((Number(result.count) || 0) === 0 || state.items.length === 0) {
+      state.items = [];
+      setStatus("empty", "明日の予定はありません");
+      render();
+      return;
+    }
+
     setStatus("success", "");
     render();
   } catch (error) {
-    console.error("[today-schedule] fetch error:", error);
+    console.error("[tomorrow-schedule] fetch error:", error);
     state.items = [];
     setStatus("error", "予定の取得に失敗しました");
     render();

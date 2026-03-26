@@ -70,12 +70,12 @@ export function getDateJstByOffset(dayOffset: number): string {
   return formatter.format(targetDate);
 }
 
-function buildScheduleUrl(helperEmail: string): string {
+function buildScheduleUrl(routePath: string, helperEmail: string): string {
   const query = new URLSearchParams({
     helper_email: helperEmail,
   });
 
-  return `/today-schedule/?${query.toString()}`;
+  return `/${routePath}/?${query.toString()}`;
 }
 
 function compareStartTime(a: string | null, b: string | null): number {
@@ -94,7 +94,10 @@ function compareStartTime(a: string | null, b: string | null): number {
   return a.localeCompare(b);
 }
 
-export async function fetchHelperSummaryByDate(date: string): Promise<HelperSummaryItem[]> {
+export async function fetchHelperSummaryByDate(
+  date: string,
+  routePath: string
+): Promise<HelperSummaryItem[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("schedule")
@@ -157,19 +160,23 @@ export async function fetchHelperSummaryByDate(date: string): Promise<HelperSumm
         helperEmail: helper.helperEmail,
         scheduleCount: helper.scheduleCount,
         firstStartTime: helper.firstStartTime,
-        scheduleUrl: buildScheduleUrl(helper.helperEmail),
+        scheduleUrl: buildScheduleUrl(routePath, helper.helperEmail),
       };
     });
 }
 
-export function createHelperSummaryHandler(dayOffset: number, logLabel: string) {
+export function createHelperSummaryHandler(
+  dayOffset: number,
+  logLabel: string,
+  routePath: string
+) {
   return async function handleHelperSummary(
     _req: Request,
     res: Response<HelperSummarySuccessResponse | HelperSummaryErrorResponse>
   ): Promise<void> {
     try {
       const targetDate = getDateJstByOffset(dayOffset);
-      const helpers = await fetchHelperSummaryByDate(targetDate);
+      const helpers = await fetchHelperSummaryByDate(targetDate, routePath);
 
       res.status(200).json({
         ok: true,

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>移動支援サービス記録</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="move-records-page">
+      <div class="move-records-page__topbar">
+        <a class="move-records-link" href="/">ビレッジひろばへ戻る</a>
+      </div>
+
+      <section class="move-records-hero move-records-surface">
+        <div>
+          <p class="move-records-eyebrow">Move Service Records</p>
+          <h1>移動支援サービス記録</h1>
+          <p class="move-records-copy">
+            未記入予定を選択し、記録を入力して AI 記録案を確認したうえで保存する最小構成です。
+          </p>
+        </div>
+      </section>
+
+      <section class="move-records-layout">
+        <section class="move-records-panel move-records-surface">
+          <div class="move-records-panel__head">
+            <div>
+              <h2>1. 未記入予定を読み込む</h2>
+              <p>helper_email で `schedule_tasks_move` の未記入予定を取得します。</p>
+            </div>
+          </div>
+
+          <form id="move-records-filter-form" class="move-records-form-row">
+            <label class="move-records-field">
+              <span>helper_email</span>
+              <input
+                id="move-helper-email"
+                name="helper_email"
+                type="email"
+                placeholder="helper@example.com"
+                autocomplete="email"
+                required
+              />
+            </label>
+            <button class="move-records-button" type="submit">一覧取得</button>
+          </form>
+
+          <p id="move-records-list-status" class="move-records-status" aria-live="polite">
+            helper_email を入力して一覧取得してください。
+          </p>
+
+          <div id="move-records-list" class="move-records-list"></div>
+        </section>
+
+        <section class="move-records-panel move-records-surface">
+          <div class="move-records-panel__head">
+            <div>
+              <h2>2. 記録入力</h2>
+              <p>予定を1件選択して記録本文を入力し、要約生成と保存を行います。</p>
+            </div>
+          </div>
+
+          <div id="move-records-selected-summary" class="move-records-selected-card">
+            予定を選択すると詳細が表示されます。
+          </div>
+
+          <form id="move-records-entry-form" class="move-records-entry-form">
+            <label class="move-records-field">
+              <span>支援内容メモ</span>
+              <textarea
+                id="move-support-notes"
+                name="notes"
+                rows="6"
+                placeholder="例: 自宅から病院まで同行し、受付補助と移動支援を実施。待機中の見守りあり。"
+                required
+              ></textarea>
+            </label>
+
+            <div class="move-records-button-row">
+              <button id="move-generate-summary-button" class="move-records-button" type="button">
+                AI記録案を作成
+              </button>
+              <button id="move-save-button" class="move-records-button move-records-button--strong" type="submit">
+                保存
+              </button>
+            </div>
+
+            <label class="move-records-field">
+              <span>AI記録案</span>
+              <textarea
+                id="move-summary-text"
+                name="summaryText"
+                rows="6"
+                placeholder="AI記録案がここに表示されます。"
+                required
+              ></textarea>
+            </label>
+          </form>
+
+          <p id="move-records-save-status" class="move-records-status" aria-live="polite">
+            保存前に AI 記録案を確認してください。
+          </p>
+        </section>
+      </section>
+    </main>
+
+    <script src="./main.js" defer></script>
+  </body>
+</html>

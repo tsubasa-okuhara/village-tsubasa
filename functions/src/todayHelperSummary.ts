@@ -1,3 +1,7 @@
 import { createHelperSummaryHandler } from "./helperSummary";
 
-export const handleTodayHelperSummary = createHelperSummaryHandler(0, "today-helper-summary");
+export const handleTodayHelperSummary = createHelperSummaryHandler(
+  0,
+  "today-helper-summary",
+  "today-schedule"
+);

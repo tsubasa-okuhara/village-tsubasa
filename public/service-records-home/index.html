@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>居宅介護サービス記録</title>
+    <style>
+      :root {
+        --bg: #fcf8f4;
+        --panel: rgba(255, 255, 255, 0.96);
+        --line: #e7d6c7;
+        --text: #5a463b;
+        --muted: #8b7568;
+        --accent: #d77f52;
+        --accent-soft: #f7e1d4;
+        --success: #1f7a52;
+        --error: #b84d3d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(247, 225, 212, 0.95), transparent 24%),
+          linear-gradient(180deg, #fffdfb 0%, var(--bg) 100%);
+      }
+
+      .page {
+        width: min(1120px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 24px 0 40px;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        margin-bottom: 16px;
+        color: var(--muted);
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--panel);
+        box-shadow: 0 18px 40px rgba(121, 87, 65, 0.08);
+      }
+
+      .hero {
+        padding: 28px 28px 18px;
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-size: clamp(1.9rem, 3vw, 2.5rem);
+      }
+
+      .hero p {
+        margin: 0;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+        gap: 20px;
+        padding: 0 20px 20px;
+      }
+
+      .column {
+        display: grid;
+        gap: 16px;
+      }
+
+      .card {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: #fffdfa;
+      }
+
+      .card h2 {
+        margin: 0 0 14px;
+        font-size: 1.05rem;
+      }
+
+      .status-text {
+        min-height: 24px;
+        margin: 10px 0 0;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .status-text.is-success {
+        color: var(--success);
+      }
+
+      .status-text.is-error {
+        color: var(--error);
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .field:last-child {
+        margin-bottom: 0;
+      }
+
+      .field-group {
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        font-size: 0.92rem;
+        font-weight: 700;
+      }
+
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #d9c4b6;
+        border-radius: 12px;
+        background: #ffffff;
+        color: var(--text);
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      input[readonly] {
+        background: #f8f2ed;
+      }
+
+      .button-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        background: var(--accent);
+        color: #fffdfb;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .button.secondary {
+        background: #ecd6c8;
+        color: #6a5447;
+      }
+
+      .button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+
+      .segmented-control {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .segmented-control input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .segmented-control label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 10px 12px;
+        border: 1px solid #d9c4b6;
+        border-radius: 14px;
+        background: #fff;
+        color: var(--muted);
+        text-align: center;
+        cursor: pointer;
+      }
+
+      .segmented-control input:checked + label {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--text);
+      }
+
+      .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .checkbox-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px 12px;
+        border: 1px solid #e2d3c7;
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .checkbox-item input {
+        width: auto;
+        margin-top: 2px;
+      }
+
+      .checkbox-item span {
+        line-height: 1.5;
+        font-size: 0.92rem;
+      }
+
+      .hint-text {
+        margin: 0;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+
+      .task-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .task-card {
+        width: 100%;
+        padding: 14px;
+        border: 1px solid #ddc9bb;
+        border-radius: 14px;
+        background: #fff;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .task-card.is-selected {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .task-card__title {
+        margin-bottom: 8px;
+        font-weight: 700;
+      }
+
+      .task-card__meta {
+        display: grid;
+        gap: 4px;
+        font-size: 0.92rem;
+        color: var(--muted);
+      }
+
+      .selected-card {
+        min-height: 152px;
+        display: grid;
+        gap: 8px;
+        align-content: start;
+        line-height: 1.7;
+      }
+
+      .selected-card__title {
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+
+      .empty-text {
+        color: var(--muted);
+      }
+
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .segmented-control,
+        .checkbox-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <a class="back-link" href="/">ビレッジひろばへ戻る</a>
+
+      <section class="panel">
+        <header class="hero">
+          <h1>居宅介護サービス記録</h1>
+          <p>未記入の予定を選び、記録を入力して保存します。</p>
+        </header>
+
+        <div class="layout">
+          <section class="column">
+            <div class="card">
+              <h2>未記入一覧</h2>
+              <form id="home-records-filter-form">
+                <div class="field">
+                  <label for="home-helper-email">helper_email</label>
+                  <input
+                    id="home-helper-email"
+                    name="helperEmail"
+                    type="email"
+                    autocomplete="email"
+                    placeholder="helper@example.com"
+                  />
+                </div>
+                <div class="button-row">
+                  <button id="home-load-button" class="button" type="submit">一覧取得</button>
+                </div>
+              </form>
+              <p id="home-records-list-status" class="status-text"></p>
+            </div>
+
+            <div class="card">
+              <h2>対象予定</h2>
+              <div id="home-records-list" class="task-list"></div>
+            </div>
+          </section>
+
+          <section class="column">
+            <div class="card">
+              <h2>選択中の予定</h2>
+              <div id="home-records-selected-summary" class="selected-card">
+                <div class="empty-text">予定を選択すると詳細が表示されます。</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>保存</h2>
+              <form id="home-records-entry-form">
+                <div class="field">
+                  <label for="home-service-date">サービス日</label>
+                  <input id="home-service-date" name="serviceDate" type="text" readonly />
+                </div>
+                <div class="field">
+                  <label for="home-helper-name">担当者</label>
+                  <input id="home-helper-name" name="helperName" type="text" readonly />
+                </div>
+                <div class="field">
+                  <label for="home-user-name">利用者</label>
+                  <input id="home-user-name" name="userName" type="text" readonly />
+                </div>
+                <div class="field">
+                  <label for="home-task">サービス内容</label>
+                  <input id="home-task" name="task" type="text" readonly />
+                </div>
+                <div class="field">
+                  <label>区分</label>
+                  <div id="home-category-group" class="segmented-control">
+                    <div>
+                      <input
+                        id="home-category-body"
+                        name="homeCategory"
+                        type="radio"
+                        value="身体介護"
+                        checked
+                      />
+                      <label for="home-category-body">身体介護</label>
+                    </div>
+                    <div>
+                      <input
+                        id="home-category-housework"
+                        name="homeCategory"
+                        type="radio"
+                        value="家事援助"
+                      />
+                      <label for="home-category-housework">家事援助</label>
+                    </div>
+                    <div>
+                      <input
+                        id="home-category-hospital"
+                        name="homeCategory"
+                        type="radio"
+                        value="通院等介助・通院等乗降介助"
+                      />
+                      <label for="home-category-hospital">通院等介助・通院等乗降介助</label>
+                    </div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>実施項目</label>
+                  <div id="home-checklist" class="checkbox-grid"></div>
+                  <p id="home-checklist-hint" class="hint-text">
+                    区分に応じた実施項目を選択します。
+                  </p>
+                </div>
+                <div class="field">
+                  <label for="home-other-detail">その他</label>
+                  <input
+                    id="home-other-detail"
+                    name="otherDetail"
+                    type="text"
+                    placeholder="必要な補足項目があれば入力"
+                  />
+                </div>
+                <div class="field">
+                  <label for="home-memo">メモ</label>
+                  <textarea
+                    id="home-memo"
+                    name="memo"
+                    placeholder="当日の様子や気づきを入力"
+                  ></textarea>
+                </div>
+                <div class="field">
+                  <label for="home-final-note">記録本文</label>
+                  <textarea
+                    id="home-final-note"
+                    name="finalNote"
+                    placeholder="区分と実施項目から自動反映されます。必要に応じて編集してください。"
+                  ></textarea>
+                </div>
+                <div class="button-row">
+                  <button id="home-generate-summary-button" class="button secondary" type="button">
+                    AI要約作成
+                  </button>
+                  <button id="home-save-button" class="button" type="submit">保存</button>
+                  <button id="home-clear-button" class="button secondary" type="button">入力クリア</button>
+                </div>
+              </form>
+              <p id="home-records-save-status" class="status-text"></p>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="/service-records-home/main.js"></script>
+  </body>
+</html>

@@ -333,13 +333,28 @@ function renderDayModal(date, items) {
   dayModalBodyElement.innerHTML = items
     .map(function (item) {
       return `
-        <article class="schedule-card">
-          <div class="schedule-card__time">${escapeHtml(formatTimeRange(item))}</div>
-          <div class="schedule-card__helper">${escapeHtml(item.helperName || "")}</div>
-          <div class="schedule-card__user">${escapeHtml(item.userName || "")}</div>
-          <div class="schedule-card__meta">配車: ${escapeHtml(item.haisha || "-")}</div>
-          <div class="schedule-card__meta">内容: ${escapeHtml(item.task || "-")}</div>
-          <div class="schedule-card__summary">${escapeHtml(item.summary || "")}</div>
+        <article class="schedule-card schedule-card--modal">
+          <div class="schedule-card__headline">${escapeHtml(getDisplayValue(item.helperName, "担当未設定"))}</div>
+          <div class="schedule-card__line">
+            <span class="schedule-card__icon" aria-hidden="true">👤</span>
+            <span class="schedule-card__value is-strong">: ${escapeHtml(getDisplayValue(item.userName, "利用者未設定"))}</span>
+          </div>
+          <div class="schedule-card__line">
+            <span class="schedule-card__icon" aria-hidden="true">🕒</span>
+            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(formatTimeRange(item), "時間未設定"))}</span>
+          </div>
+          <div class="schedule-card__line">
+            <span class="schedule-card__icon" aria-hidden="true">🚗</span>
+            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.haisha, "—"))}</span>
+          </div>
+          <div class="schedule-card__line">
+            <span class="schedule-card__icon" aria-hidden="true">📝</span>
+            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.task, "—"))}</span>
+          </div>
+          <div class="schedule-card__line is-summary">
+            <span class="schedule-card__icon" aria-hidden="true">⚠️</span>
+            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.summary, "概要なし"))}</span>
+          </div>
         </article>
       `;
     })

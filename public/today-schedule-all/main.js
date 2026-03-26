@@ -1,10 +1,8 @@
-import { getSavedHelperEmail } from "../lib/helperEmail.js";
-
-const TODAY_SCHEDULE_ENDPOINT = "/api/today-schedule";
+const TODAY_SCHEDULE_ALL_ENDPOINT = "/api/today-schedule-all";
 
 const state = {
-  helperEmail: "",
   date: "",
+  count: 0,
   items: [],
   status: "loading",
   message: "読み込み中...",
@@ -21,7 +19,7 @@ function getRequiredElement(id) {
 }
 
 const scheduleDateElement = getRequiredElement("schedule-date");
-const helperEmailElement = getRequiredElement("helper-email");
+const scheduleCountElement = getRequiredElement("schedule-count");
 const statusCardElement = getRequiredElement("status-card");
 const emptyCardElement = getRequiredElement("empty-card");
 const scheduleListElement = getRequiredElement("schedule-list");
@@ -43,17 +41,6 @@ function getDisplayValue(value, fallback = "—") {
   return String(value);
 }
 
-function getHelperEmailFromQuery() {
-  const searchParams = new URLSearchParams(window.location.search);
-  return searchParams.get("helper_email")?.trim() ?? "";
-}
-
-function buildApiUrl(helperEmail) {
-  const url = new URL(TODAY_SCHEDULE_ENDPOINT, window.location.origin);
-  url.searchParams.set("helper_email", helperEmail);
-  return url.toString();
-}
-
 function formatTimeRange(item) {
   const startTime = getDisplayValue(item.startTime, "");
   const endTime = getDisplayValue(item.endTime, "");
@@ -72,7 +59,6 @@ function setStatus(status, message) {
 
 function renderStatus() {
   const shouldShowStatus = state.status === "loading" || state.status === "error";
-
   statusCardElement.classList.toggle("is-visible", shouldShowStatus);
   statusCardElement.classList.toggle("is-error", state.status === "error");
   statusCardElement.textContent = state.message;
@@ -80,7 +66,7 @@ function renderStatus() {
 
 function renderMeta() {
   scheduleDateElement.textContent = state.date || "-";
-  helperEmailElement.textContent = state.helperEmail || "-";
+  scheduleCountElement.textContent = String(state.count || 0);
 }
 
 function renderEmpty() {
@@ -129,8 +115,8 @@ function render() {
   renderItems();
 }
 
-async function fetchTodaySchedule(helperEmail) {
-  const response = await fetch(buildApiUrl(helperEmail), {
+async function fetchTodayScheduleAll() {
+  const response = await fetch(TODAY_SCHEDULE_ALL_ENDPOINT, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -149,35 +135,20 @@ async function fetchTodaySchedule(helperEmail) {
 }
 
 async function initializePage() {
-  state.helperEmail = getHelperEmailFromQuery();
-
-  if (!state.helperEmail) {
-    state.helperEmail = getSavedHelperEmail();
-  }
-
-  render();
-
-  if (!state.helperEmail) {
-    setStatus("error", "helper_email が指定されていません");
-    render();
-    return;
-  }
-
-  helperEmailElement.textContent = state.helperEmail;
-
   try {
     setStatus("loading", "読み込み中...");
     render();
 
-    const result = await fetchTodaySchedule(state.helperEmail);
+    const result = await fetchTodayScheduleAll();
     state.date = result.date || "";
-    state.helperEmail = result.helperEmail || state.helperEmail;
     state.items = Array.isArray(result.items) ? result.items : [];
+    state.count = Number(result.count) || state.items.length;
     setStatus("success", "");
     render();
   } catch (error) {
-    console.error("[today-schedule] fetch error:", error);
+    console.error("[today-schedule-all] fetch error:", error);
     state.items = [];
+    state.count = 0;
     setStatus("error", "予定の取得に失敗しました");
     render();
   }

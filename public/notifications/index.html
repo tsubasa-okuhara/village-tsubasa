@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>通知一覧</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8f4ef;
+        --panel: rgba(255, 255, 255, 0.94);
+        --panel-strong: rgba(255, 253, 250, 0.98);
+        --line: rgba(223, 207, 196, 0.92);
+        --text: #463830;
+        --muted: #7b6c63;
+        --pink: #f5d9dd;
+        --beige: #f4e7d8;
+        --danger: #ba4b59;
+        --accent: #7a5d63;
+        --shadow: 0 20px 42px rgba(144, 113, 98, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(245, 217, 221, 0.62), transparent 26%),
+          radial-gradient(circle at top right, rgba(244, 231, 216, 0.88), transparent 30%),
+          linear-gradient(180deg, #fcfaf7 0%, var(--bg) 100%);
+      }
+
+      .page {
+        width: min(760px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 24px 0 40px;
+      }
+
+      .surface {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 24px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(245, 217, 221, 0.85), rgba(244, 231, 216, 0.9));
+        color: var(--accent);
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 14px 0 0;
+        font-size: clamp(2rem, 5vw, 2.7rem);
+        line-height: 1.1;
+      }
+
+      .lead {
+        margin: 12px 0 0;
+        color: var(--muted);
+        line-height: 1.75;
+      }
+
+      .hero-meta {
+        display: grid;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .meta-card,
+      .status-card,
+      .empty-card,
+      .notification-card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.76);
+      }
+
+      .meta-card,
+      .status-card,
+      .empty-card {
+        padding: 16px 18px;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .meta-label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .meta-value {
+        margin-top: 6px;
+        font-size: 1rem;
+        font-weight: 800;
+        word-break: break-word;
+      }
+
+      .status-card {
+        display: none;
+        min-height: 60px;
+        align-items: center;
+      }
+
+      .status-card.is-visible {
+        display: flex;
+      }
+
+      .status-card.is-error {
+        color: var(--danger);
+        background: rgba(255, 245, 246, 0.95);
+        border-color: rgba(219, 157, 166, 0.88);
+      }
+
+      .empty-card {
+        display: none;
+        color: var(--muted);
+      }
+
+      .empty-card.is-visible {
+        display: block;
+      }
+
+      .list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .notification-card {
+        display: block;
+        padding: 18px;
+        color: inherit;
+        text-decoration: none;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      .notification-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 26px rgba(144, 113, 98, 0.12);
+      }
+
+      .notification-card.is-unread {
+        border-color: rgba(232, 185, 193, 0.84);
+        background:
+          radial-gradient(circle at top right, rgba(245, 217, 221, 0.26), transparent 34%),
+          rgba(255, 252, 251, 0.92);
+      }
+
+      .notification-card.is-disabled {
+        cursor: default;
+      }
+
+      .notification-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .notification-type {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(245, 217, 221, 0.72);
+        color: var(--accent);
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      .notification-read {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(244, 231, 216, 0.7);
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      .notification-card.is-unread .notification-read {
+        background: rgba(232, 185, 193, 0.2);
+        color: var(--danger);
+      }
+
+      .notification-title {
+        margin: 14px 0 0;
+        font-size: 1.08rem;
+        font-weight: 800;
+      }
+
+      .notification-body {
+        margin: 10px 0 0;
+        color: var(--muted);
+        line-height: 1.7;
+        white-space: pre-wrap;
+      }
+
+      .notification-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .notification-link {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          width: min(100%, calc(100% - 16px));
+          padding: 16px 0 28px;
+        }
+
+        .hero {
+          padding: 18px;
+        }
+
+        .meta-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .notification-card {
+          padding: 16px;
+        }
+
+        .notification-foot {
+          flex-direction: column;
+          align-items: start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="surface hero">
+        <div class="eyebrow">Village Tsubasa</div>
+        <h1>通知一覧</h1>
+        <p class="lead">アプリ内で受け取った通知を確認できます。未読通知は開いたタイミングで既読になります。</p>
+
+        <div class="hero-meta">
+          <section class="meta-card">
+            <div class="meta-grid">
+              <div>
+                <span class="meta-label">helper_email</span>
+                <div id="helper-email" class="meta-value">-</div>
+              </div>
+              <div>
+                <span class="meta-label">未読件数</span>
+                <div id="unread-count" class="meta-value">-</div>
+              </div>
+            </div>
+          </section>
+
+          <section id="status-card" class="status-card is-visible" aria-live="polite">読み込み中...</section>
+          <section id="empty-card" class="empty-card" aria-live="polite">通知はありません</section>
+          <section id="notification-list" class="list" aria-live="polite"></section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
