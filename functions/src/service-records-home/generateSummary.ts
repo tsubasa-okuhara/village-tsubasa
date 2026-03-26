@@ -111,7 +111,6 @@ export async function handleGenerateHomeSummary(
   res: Response<HomeSummarySuccessResponse | HomeSummaryErrorResponse>,
 ): Promise<void> {
   loadEnvIfNeeded();
-  console.log("OPENAI_API_KEY exists:", Boolean(process.env.OPENAI_API_KEY));
 
   if (!isObject(req.body)) {
     res.status(400).json({
