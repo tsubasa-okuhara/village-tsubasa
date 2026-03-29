@@ -98,6 +98,20 @@ function getDisplayValue(value, fallback) {
   return String(value);
 }
 
+function getHelperLabel(item) {
+  const helperNames = Array.isArray(item.helperNames)
+    ? item.helperNames
+    : String(item.helperName || "").trim()
+        ? [String(item.helperName || "").trim()]
+        : [];
+
+  if (helperNames.length === 0) {
+    return "担当未設定";
+  }
+
+  return `担当：${helperNames.join("・")}`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -300,18 +314,84 @@ function groupSchedulesByDate(items) {
   }, {});
 }
 
+function getGroupKeyPart(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function buildScheduleGroupKey(item) {
+  return [
+    getGroupKeyPart(item.date),
+    getGroupKeyPart(item.userName),
+    getGroupKeyPart(item.startTime),
+  ].join("\u0001");
+}
+
+function groupScheduleItems(items) {
+  const groupedItems = [];
+  const groupedMap = new Map();
+
+  (Array.isArray(items) ? items : []).forEach(function (item) {
+    const key = buildScheduleGroupKey(item);
+    const helperName = String(item.helperName || "").trim();
+    const existing = groupedMap.get(key);
+
+    if (!existing) {
+      const nextItem = {
+        ...item,
+        helperNames: helperName ? [helperName] : [],
+      };
+
+      groupedMap.set(key, nextItem);
+      groupedItems.push(nextItem);
+      return;
+    }
+
+    if (helperName && !existing.helperNames.includes(helperName)) {
+      existing.helperNames.push(helperName);
+    }
+
+    if (!existing.task && item.task) {
+      existing.task = item.task;
+    }
+
+    if (!existing.endTime && item.endTime) {
+      existing.endTime = item.endTime;
+    }
+
+    if (!existing.haisha && item.haisha) {
+      existing.haisha = item.haisha;
+    }
+  });
+
+  return groupedItems.map(function (item) {
+    return {
+      ...item,
+      helperName: item.helperNames.join("・"),
+    };
+  });
+}
+
 function applyFilters(data) {
   const keyword = state.searchKeyword.trim();
   const selectedHelper = state.selectedHelper.trim();
-  const items = Array.isArray(data.items) ? data.items : [];
+  const items = groupScheduleItems(data.items);
 
   return {
     year: data.year,
     month: data.month,
     items: items.filter(function (item) {
-      const helperName = String(item.helperName || "").trim();
-      const matchesSelect = !selectedHelper || helperName === selectedHelper;
-      const matchesSearch = !keyword || helperName.includes(keyword);
+      const helperNames = Array.isArray(item.helperNames) ? item.helperNames : [];
+      const matchesSelect =
+        !selectedHelper || helperNames.includes(selectedHelper);
+      const matchesSearch =
+        !keyword ||
+        helperNames.some(function (helperName) {
+          return helperName.includes(keyword);
+        });
       return matchesSelect && matchesSearch;
     }),
   };
@@ -367,7 +447,7 @@ function renderDayModal(date, items) {
     .map(function (item) {
       return `
         <article class="schedule-card schedule-card--modal">
-          <div class="schedule-card__headline">${escapeHtml(getDisplayValue(item.helperName, "担当未設定"))}</div>
+          <div class="schedule-card__headline">${escapeHtml(getHelperLabel(item))}</div>
           <div class="schedule-card__line">
             <span class="schedule-card__icon" aria-hidden="true">👤</span>
             <span class="schedule-card__value is-strong">: ${escapeHtml(getDisplayValue(item.userName, "利用者未設定"))}</span>
@@ -489,7 +569,7 @@ function renderCalendar(data) {
                 .map(function (item) {
                   return `
                     <div class="calendar-preview-item">
-                      <div class="calendar-preview-helper">${escapeHtml(getDisplayValue(item.helperName, "担当未設定"))}</div>
+                      <div class="calendar-preview-helper">${escapeHtml(getHelperLabel(item))}</div>
                       <div class="calendar-preview-user">👤 : ${escapeHtml(getDisplayValue(item.userName, "利用者未設定"))}</div>
                       <div class="calendar-preview-line">🕒 : ${escapeHtml(getDisplayValue(formatTimeRange(item), "時間未設定"))}</div>
                       <div class="calendar-preview-line">🚗 : ${escapeHtml(getDisplayValue(item.haisha, "—"))}</div>
@@ -553,7 +633,7 @@ function renderScheduleColumns(data) {
                               <div class="schedule-card__date">${escapeHtml(item.date || "")}</div>
                               <div class="schedule-card__time">${escapeHtml(formatTimeRange(item))}</div>
                               <div class="schedule-card__user">利用者: ${escapeHtml(item.userName || "利用者未設定")}</div>
-                              <div class="schedule-card__helper">ヘルパー: ${escapeHtml(item.helperName || "担当未設定")}</div>
+                              <div class="schedule-card__helper">${escapeHtml(getHelperLabel(item))}</div>
                               <div class="schedule-card__meta">配車: ${escapeHtml(item.haisha || "-")}</div>
                               <div class="schedule-card__meta">内容: ${escapeHtml(item.task || "-")}</div>
                             </article>
