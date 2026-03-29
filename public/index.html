@@ -3,547 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#d8c0a0" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="./home.css" />
     <title>ビレッジひろば</title>
-    <style>
-      :root {
-        --bg: #fffdfa;
-        --panel: rgba(255, 255, 255, 0.92);
-        --panel-soft: rgba(255, 248, 243, 0.94);
-        --line: rgba(226, 207, 196, 0.88);
-        --text: #5b4a43;
-        --muted: #8a766d;
-        --pink: #f5d9dd;
-        --pink-strong: #e8b9c1;
-        --beige: #f4e7d8;
-        --mint: #dcebe2;
-        --shadow: 0 22px 48px rgba(160, 123, 110, 0.14);
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(circle at top left, rgba(245, 217, 221, 0.72), transparent 30%),
-          radial-gradient(circle at top right, rgba(244, 231, 216, 0.88), transparent 34%),
-          linear-gradient(180deg, #fffdfa 0%, #fff8f4 100%);
-      }
-
-      .page {
-        width: min(1160px, calc(100% - 32px));
-        margin: 0 auto;
-        padding: 34px 0 56px;
-      }
-
-      .hero {
-        position: relative;
-        overflow: hidden;
-        padding: 30px 30px 28px;
-        border: 1px solid rgba(232, 185, 193, 0.46);
-        border-radius: 32px;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(255, 247, 242, 0.96));
-        box-shadow: var(--shadow);
-      }
-
-      .hero::after {
-        content: "";
-        position: absolute;
-        right: -60px;
-        top: -80px;
-        width: 240px;
-        height: 240px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(245, 217, 221, 0.54), transparent 62%);
-      }
-
-      .hero__eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, rgba(245, 217, 221, 0.9), rgba(244, 231, 216, 0.9));
-        color: #7b5c62;
-        font-size: 0.92rem;
-        font-weight: 700;
-      }
-
-      h1 {
-        margin: 18px 0 10px;
-        font-size: clamp(2rem, 4vw, 3.35rem);
-        line-height: 1.1;
-        letter-spacing: 0.03em;
-      }
-
-      .hero__subtitle {
-        margin: 0;
-        max-width: 620px;
-        font-size: clamp(1rem, 2vw, 1.15rem);
-        line-height: 1.8;
-        color: var(--muted);
-      }
-
-      .helper-email-panel {
-        display: grid;
-        gap: 10px;
-        margin-top: 20px;
-        padding: 18px 20px;
-        max-width: 620px;
-        border: 1px solid rgba(226, 207, 196, 0.84);
-        border-radius: 22px;
-        background: rgba(255, 255, 255, 0.72);
-      }
-
-      .helper-email-status {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: fit-content;
-        padding: 8px 12px;
-        border-radius: 999px;
-        background: rgba(245, 217, 221, 0.72);
-        color: #7d5e66;
-        font-size: 0.84rem;
-        font-weight: 800;
-      }
-
-      .helper-email-text,
-      .helper-email-current {
-        margin: 0;
-        color: var(--muted);
-        line-height: 1.7;
-      }
-
-      .helper-email-current strong {
-        color: var(--text);
-      }
-
-      .helper-email-form {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto auto;
-        gap: 10px;
-      }
-
-      .helper-email-input {
-        width: 100%;
-        padding: 13px 14px;
-        border: 1px solid rgba(226, 207, 196, 0.88);
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.92);
-        color: var(--text);
-        font: inherit;
-      }
-
-      .helper-email-button,
-      .helper-email-clear {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 12px 16px;
-        border: 0;
-        border-radius: 14px;
-        background: linear-gradient(135deg, var(--pink-strong), #e9cfc0);
-        color: #5c4741;
-        font: inherit;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-      .helper-email-clear {
-        background: rgba(255, 255, 255, 0.86);
-        border: 1px solid rgba(226, 207, 196, 0.88);
-      }
-
-      .helper-email-message {
-        margin: 0;
-        color: var(--muted);
-        line-height: 1.7;
-      }
-
-      .helper-email-message[data-tone="error"] {
-        color: #ba4b59;
-      }
-
-      .helper-email-message[data-tone="success"] {
-        color: #5f8367;
-      }
-
-      .section-head {
-        display: flex;
-        align-items: end;
-        justify-content: space-between;
-        gap: 16px;
-        margin-top: 28px;
-      }
-
-      .notice {
-        margin-top: 20px;
-      }
-
-      .notice__head {
-        display: flex;
-        align-items: end;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
-      .notice__head h2 {
-        margin: 0;
-        font-size: 1.35rem;
-      }
-
-      .notice__head p {
-        margin: 6px 0 0;
-        color: var(--muted);
-      }
-
-      .notice-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 18px;
-        margin-top: 16px;
-      }
-
-      .notice-card {
-        display: grid;
-        gap: 16px;
-        padding: 24px;
-        border: 1px solid rgba(232, 185, 193, 0.44);
-        border-radius: 28px;
-        background:
-          radial-gradient(circle at top right, rgba(245, 217, 221, 0.24), transparent 32%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 240, 0.96));
-        box-shadow: 0 16px 32px rgba(160, 123, 110, 0.12);
-      }
-
-      .notice-card.is-error {
-        border-color: rgba(221, 166, 175, 0.88);
-        background:
-          radial-gradient(circle at top right, rgba(245, 217, 221, 0.16), transparent 34%),
-          linear-gradient(180deg, rgba(255, 251, 251, 0.98), rgba(255, 245, 246, 0.96));
-      }
-
-      .notice-card.is-empty {
-        border-color: rgba(221, 208, 198, 0.9);
-        background:
-          radial-gradient(circle at top right, rgba(244, 231, 216, 0.3), transparent 34%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 247, 243, 0.96));
-      }
-
-      .notice-card__top {
-        display: flex;
-        align-items: start;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
-      .notice-card__eyebrow {
-        display: inline-block;
-        padding: 6px 12px;
-        border-radius: 999px;
-        background: rgba(245, 217, 221, 0.72);
-        color: #7d5e66;
-        font-size: 0.82rem;
-        font-weight: 700;
-      }
-
-      .notice-card h3 {
-        margin: 12px 0 0;
-        font-size: 1.28rem;
-      }
-
-      .notice-status {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 8px 12px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.82);
-        color: #7d5e66;
-        font-size: 0.85rem;
-        font-weight: 800;
-        border: 1px solid rgba(226, 207, 196, 0.78);
-      }
-
-      .notice-card__stats {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-      }
-
-      .notice-metric {
-        padding: 14px 16px;
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.74);
-        border: 1px solid rgba(226, 207, 196, 0.72);
-      }
-
-      .notice-metric__label {
-        display: block;
-        color: var(--muted);
-        font-size: 0.82rem;
-        font-weight: 700;
-      }
-
-      .notice-metric__value {
-        margin-top: 8px;
-        font-size: 1.8rem;
-        font-weight: 800;
-        line-height: 1;
-      }
-
-      .notice-metric__unit {
-        margin-left: 4px;
-        font-size: 0.92rem;
-      }
-
-      .notice-card__note {
-        margin: 0;
-        color: var(--muted);
-        line-height: 1.75;
-      }
-
-      .notice-card__action {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: fit-content;
-        padding: 12px 18px;
-        border-radius: 14px;
-        background: linear-gradient(135deg, var(--pink-strong), #e9cfc0);
-        color: #5c4741;
-        text-decoration: none;
-        font-weight: 700;
-        box-shadow: 0 12px 22px rgba(174, 137, 128, 0.16);
-      }
-
-      .notice-card__action.is-secondary {
-        background: rgba(255, 255, 255, 0.86);
-        border: 1px solid rgba(226, 207, 196, 0.88);
-        box-shadow: none;
-      }
-
-      .notice-card__action.is-disabled {
-        opacity: 0.5;
-        pointer-events: none;
-      }
-
-      .notification-shortcut {
-        margin-top: 20px;
-      }
-
-      .notification-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 28px;
-        height: 28px;
-        padding: 0 10px;
-        border-radius: 999px;
-        background: rgba(232, 185, 193, 0.24);
-        color: #a24655;
-        font-size: 0.84rem;
-        font-weight: 800;
-      }
-
-      .notification-badge.is-muted {
-        background: rgba(244, 231, 216, 0.72);
-        color: var(--muted);
-      }
-
-      .notice-card.has-unread {
-        border-color: rgba(215, 92, 108, 0.48);
-        background:
-          radial-gradient(circle at top right, rgba(229, 112, 126, 0.2), transparent 32%),
-          linear-gradient(180deg, rgba(255, 251, 251, 0.99), rgba(255, 243, 244, 0.96));
-        box-shadow:
-          0 18px 34px rgba(174, 94, 105, 0.16),
-          0 0 0 1px rgba(215, 92, 108, 0.08);
-      }
-
-      .notice-card.has-unread .notice-status {
-        border-color: rgba(215, 92, 108, 0.26);
-        background: rgba(255, 239, 241, 0.92);
-        color: #a43c4d;
-      }
-
-      .notice-card.has-unread .notice-card__eyebrow {
-        background: rgba(244, 191, 199, 0.9);
-        color: #93404f;
-      }
-
-      .notice-card__action.has-badge {
-        position: relative;
-        gap: 10px;
-        padding-right: 16px;
-      }
-
-      .notification-action-badge {
-        display: none;
-        align-items: center;
-        justify-content: center;
-        min-width: 28px;
-        height: 28px;
-        padding: 0 8px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #d85f70, #be4758);
-        color: #fffaf8;
-        font-size: 0.8rem;
-        font-weight: 800;
-        line-height: 1;
-        box-shadow: 0 10px 18px rgba(186, 75, 89, 0.26);
-      }
-
-      .notification-action-badge.is-visible {
-        display: inline-flex;
-      }
-
-      .section-head h2 {
-        margin: 0;
-        font-size: 1.35rem;
-      }
-
-      .section-head p {
-        margin: 4px 0 0;
-        color: var(--muted);
-      }
-
-      .cards {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 22px;
-        margin-top: 18px;
-      }
-
-      .card {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        min-height: 268px;
-        padding: 28px;
-        border: 1px solid var(--line);
-        border-radius: 30px;
-        background: linear-gradient(180deg, var(--panel) 0%, var(--panel-soft) 100%);
-        box-shadow: 0 18px 34px rgba(143, 112, 96, 0.1);
-      }
-
-      .card[data-tone="schedule"] {
-        background:
-          radial-gradient(circle at top right, rgba(232, 185, 193, 0.24), transparent 30%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 240, 0.96));
-      }
-
-      .card[data-tone="training"] {
-        background:
-          radial-gradient(circle at top right, rgba(220, 235, 226, 0.44), transparent 32%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 247, 0.96));
-      }
-
-      .card__number {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 66px;
-        height: 66px;
-        border-radius: 20px;
-        background: linear-gradient(135deg, rgba(245, 217, 221, 0.98), rgba(244, 231, 216, 0.96));
-        color: #7d5e66;
-        font-size: 1.35rem;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-      }
-
-      .card__label {
-        display: inline-block;
-        align-self: flex-start;
-        margin-top: 16px;
-        padding: 6px 12px;
-        border-radius: 999px;
-        background: rgba(245, 217, 221, 0.72);
-        color: #7d5e66;
-        font-size: 0.85rem;
-        font-weight: 700;
-      }
-
-      .card h3 {
-        margin: 16px 0 10px;
-        font-size: 1.48rem;
-        line-height: 1.35;
-      }
-
-      .card p {
-        margin: 0;
-        color: var(--muted);
-        line-height: 1.8;
-        flex: 1;
-      }
-
-      .card a {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: fit-content;
-        margin-top: 24px;
-        padding: 14px 22px;
-        border-radius: 16px;
-        background: linear-gradient(135deg, var(--pink-strong), #e9cfc0);
-        color: #5c4741;
-        text-decoration: none;
-        font-weight: 700;
-        box-shadow: 0 12px 22px rgba(174, 137, 128, 0.16);
-      }
-
-      .footer {
-        margin-top: 20px;
-        text-align: center;
-        color: #a08b82;
-        font-size: 0.92rem;
-      }
-
-      @media (max-width: 860px) {
-        .page {
-          width: min(100% - 24px, 760px);
-          padding-top: 24px;
-          padding-bottom: 40px;
-        }
-
-        .cards {
-          grid-template-columns: 1fr;
-          gap: 16px;
-        }
-
-        .hero,
-        .card {
-          border-radius: 24px;
-        }
-
-        .notice-grid,
-        .notice-card__stats,
-        .helper-email-form {
-          grid-template-columns: 1fr;
-        }
-
-        .card {
-          min-height: auto;
-          padding: 22px;
-        }
-
-        .notice-card__action {
-          width: fit-content;
-        }
-
-        .notice-card__action.has-badge {
-          width: fit-content;
-          max-width: 100%;
-          justify-content: space-between;
-        }
-      }
-    </style>
   </head>
   <body>
     <main class="page">
@@ -551,163 +16,284 @@
         <div class="hero__eyebrow">ビレッジ翼</div>
         <h1>ビレッジひろば</h1>
         <p class="hero__subtitle">
-          日々の業務をやわらかく整理するための入口です。必要なメニューを選んで、スケジュール確認や各種報告へ進めます。
+          まず今日の予定と自分への連絡を確認できる、ヘルパーさん向けのホーム画面です。
         </p>
-        <section class="helper-email-panel" aria-live="polite">
-          <span id="helper-email-status" class="helper-email-status">未保存</span>
-          <p id="helper-email-note" class="helper-email-text">
-            メールアドレスを保存すると、自分の予定リンクが使えるようになります。
-          </p>
-          <p class="helper-email-current">保存済みメール: <strong id="helper-email-current">未設定</strong></p>
-          <div class="helper-email-form">
-            <input
-              id="helper-email-input"
-              class="helper-email-input"
-              type="email"
-              inputmode="email"
-              autocomplete="email"
-              placeholder="helper@example.com"
-            />
-            <button id="helper-email-save" class="helper-email-button" type="button">保存</button>
-            <button id="helper-email-clear" class="helper-email-clear" type="button">クリア</button>
-          </div>
-          <p id="helper-email-message" class="helper-email-message" data-tone="default">
-            全体表示はそのまま使えます。自分用の表示だけメールアドレス保存が必要です。
-          </p>
-        </section>
+        <p class="hero__note">
+          自分の予定と連絡を見るには、下の「自分用表示の設定」でメールアドレスを保存してください。
+        </p>
       </section>
 
-      <section class="notification-shortcut" aria-label="アプリ内通知">
-        <div class="notice__head">
+      <section class="priority-section" aria-label="今日やること">
+        <div class="section-head section-head--compact">
           <div>
-            <h2>アプリ内通知</h2>
-            <p>保存済みの helper_email があれば、自分向け通知をこのアプリ内で確認できます。</p>
+            <h2>今日やること</h2>
+            <p>朝いちで確認する情報を、上から順番にまとめています。</p>
           </div>
         </div>
 
-        <div class="notice-grid">
-          <article id="notifications-summary" class="notice-card is-loading">
-            <div class="notice-card__top">
+        <div class="priority-grid">
+          <article id="today-summary" class="summary-card summary-card--featured is-loading">
+            <div class="summary-card__top">
               <div>
-                <span class="notice-card__eyebrow">通知</span>
-                <h3>自分の通知一覧</h3>
+                <span class="summary-card__eyebrow">今日の予定</span>
+                <h3>今日の動き</h3>
               </div>
-              <span id="notifications-status" class="notice-status">確認中</span>
+              <span id="today-status" class="summary-status">確認中</span>
             </div>
 
-            <div class="notice-card__stats">
-              <div class="notice-metric">
-                <span class="notice-metric__label">未読件数</span>
-                <div class="notice-metric__value"><span id="notifications-unread-count">—</span><span class="notice-metric__unit">件</span></div>
+            <div class="summary-card__stats">
+              <div class="summary-metric">
+                <span class="summary-metric__label">予定件数</span>
+                <div class="summary-metric__value">
+                  <span id="today-count-value">—</span><span class="summary-metric__unit">件</span>
+                </div>
               </div>
-              <div class="notice-metric">
-                <span class="notice-metric__label">状態</span>
-                <div id="notifications-badge" class="notification-badge is-muted">未設定</div>
+              <div class="summary-metric">
+                <span class="summary-metric__label">最初の予定</span>
+                <div id="today-time" class="summary-metric__value">—</div>
               </div>
             </div>
 
-            <p id="notifications-note" class="notice-card__note">保存済みメールを確認しています。</p>
-            <a id="notifications-action" class="notice-card__action has-badge" href="/notifications/">
-              <span>通知を見る</span>
-              <span id="notifications-action-badge" class="notification-action-badge" aria-hidden="true">1</span>
-            </a>
+            <p id="today-note" class="summary-card__note">今日の予定を確認しています。</p>
+
+            <div class="summary-card__actions">
+              <a id="today-personal-action" class="summary-action summary-action--primary" href="/today-schedule/">
+                自分の今日の予定を見る
+              </a>
+              <a id="today-action" class="summary-action summary-action--secondary" href="/today-schedule-all/">
+                今日の予定を確認する
+              </a>
+            </div>
+          </article>
+          <article id="tomorrow-summary" class="summary-card summary-card--wide is-loading">
+            <div class="summary-card__top">
+              <div>
+                <span class="summary-card__eyebrow">明日の予定</span>
+                <h3>明日の準備</h3>
+              </div>
+              <span id="tomorrow-status" class="summary-status">確認中</span>
+            </div>
+
+            <div class="summary-card__stats">
+              <div class="summary-metric">
+                <span class="summary-metric__label">予定件数</span>
+                <div class="summary-metric__value">
+                  <span id="tomorrow-count-value">—</span><span class="summary-metric__unit">件</span>
+                </div>
+              </div>
+              <div class="summary-metric">
+                <span class="summary-metric__label">最初の予定</span>
+                <div id="tomorrow-time" class="summary-metric__value">—</div>
+              </div>
+            </div>
+
+            <p id="tomorrow-note" class="summary-card__note">明日の予定を確認しています。</p>
+
+            <div class="summary-card__actions">
+              <a id="tomorrow-personal-action" class="summary-action summary-action--primary" href="/tomorrow-schedule/">
+                明日の予定を見る
+              </a>
+              <a id="tomorrow-action" class="summary-action summary-action--secondary" href="/tomorrow-schedule-all/">
+                全体の予定を確認する
+              </a>
+            </div>
           </article>
         </div>
       </section>
 
-      <section class="notice" aria-label="予定通知">
-        <div class="notice__head">
-          <div>
-            <h2>予定通知</h2>
-            <p>本日と明日の予定があるヘルパー数を、トップからすぐ確認できます。</p>
-          </div>
-        </div>
-
-        <div class="notice-grid">
-          <article id="today-summary" class="notice-card is-loading">
-            <div class="notice-card__top">
+      <section class="priority-section" aria-label="次の予定と連絡">
+        <div class="priority-grid">
+          <article id="next-summary" class="summary-card is-loading">
+            <div class="summary-card__top">
               <div>
-                <span class="notice-card__eyebrow">本日</span>
-                <h3>今日の予定</h3>
+                <span class="summary-card__eyebrow">次の予定</span>
+                <h3>次に入る予定</h3>
               </div>
-              <span id="today-status" class="notice-status">確認中</span>
+              <span id="next-status" class="summary-status">確認中</span>
             </div>
 
-            <div class="notice-card__stats">
-              <div class="notice-metric">
-                <span class="notice-metric__label">予定があるヘルパー</span>
-                <div class="notice-metric__value"><span id="today-count-value">—</span><span class="notice-metric__unit">名</span></div>
+            <div class="summary-card__stats">
+              <div class="summary-metric">
+                <span class="summary-metric__label">予定日</span>
+                <div id="next-date" class="summary-metric__value">—</div>
               </div>
-              <div class="notice-metric">
-                <span class="notice-metric__label">最初の予定時刻</span>
-                <div id="today-time" class="notice-metric__value">—</div>
+              <div class="summary-metric">
+                <span class="summary-metric__label">時間</span>
+                <div id="next-time" class="summary-metric__value">—</div>
               </div>
             </div>
 
-            <p id="today-note" class="notice-card__note">予定の有無を確認しています。</p>
-            <a id="today-action" class="notice-card__action is-secondary" href="/today-schedule-all/">全体の今日の予定を見る</a>
-            <a id="today-personal-action" class="notice-card__action" href="/today-schedule/">自分の今日の予定を見る</a>
+            <div class="summary-card__meta summary-detail-list">
+              <p class="summary-detail-item">
+                <span class="summary-detail-item__label">利用者</span>
+                <span id="next-user" class="summary-detail-item__value">—</span>
+              </p>
+              <p class="summary-detail-item">
+                <span class="summary-detail-item__label">内容</span>
+                <span id="next-task" class="summary-detail-item__value">—</span>
+              </p>
+              <p id="next-helper-row" class="summary-detail-item" hidden>
+                <span class="summary-detail-item__label">担当</span>
+                <span id="next-helper" class="summary-detail-item__value">—</span>
+              </p>
+            </div>
+
+            <p id="next-note" class="summary-card__note">次の予定を確認しています。</p>
+
+            <div class="summary-card__actions">
+              <a id="next-action" class="summary-action summary-action--primary" href="/schedule-sync/">
+                月の予定を確認する
+              </a>
+            </div>
           </article>
 
-          <article id="tomorrow-summary" class="notice-card is-loading">
-            <div class="notice-card__top">
+          <article id="notifications-summary" class="summary-card is-loading">
+            <div class="summary-card__top">
               <div>
-                <span class="notice-card__eyebrow">明日</span>
-                <h3>明日の予定</h3>
+                <span class="summary-card__eyebrow">自分への連絡</span>
+                <h3>連絡の確認</h3>
               </div>
-              <span id="tomorrow-status" class="notice-status">確認中</span>
+              <span id="notifications-status" class="summary-status">確認中</span>
             </div>
 
-            <div class="notice-card__stats">
-              <div class="notice-metric">
-                <span class="notice-metric__label">予定があるヘルパー</span>
-                <div class="notice-metric__value"><span id="tomorrow-count-value">—</span><span class="notice-metric__unit">名</span></div>
+            <div class="summary-card__stats">
+              <div class="summary-metric">
+                <span class="summary-metric__label">連絡件数</span>
+                <div class="summary-metric__value">
+                  <span id="notifications-count">—</span><span class="summary-metric__unit">件</span>
+                </div>
               </div>
-              <div class="notice-metric">
-                <span class="notice-metric__label">最初の予定時刻</span>
-                <div id="tomorrow-time" class="notice-metric__value">—</div>
+              <div class="summary-metric">
+                <span class="summary-metric__label">未読件数</span>
+                <div class="summary-metric__value">
+                  <span id="notifications-unread-count">—</span><span class="summary-metric__unit">件</span>
+                </div>
               </div>
             </div>
 
-            <p id="tomorrow-note" class="notice-card__note">予定の有無を確認しています。</p>
-            <a id="tomorrow-action" class="notice-card__action is-secondary" href="/tomorrow-schedule-all/">全体の明日の予定を見る</a>
-            <a id="tomorrow-personal-action" class="notice-card__action" href="/tomorrow-schedule/">自分の明日の予定を見る</a>
+            <div class="summary-card__meta">
+              <div id="notifications-badge" class="notification-badge is-muted">未設定</div>
+            </div>
+
+            <p id="notifications-note" class="summary-card__note">自分への連絡を確認しています。</p>
+
+            <div class="summary-card__actions">
+              <a id="notifications-action" class="summary-action summary-action--primary has-badge" href="/notifications/">
+                <span>通知を見る</span>
+                <span id="notifications-action-badge" class="notification-action-badge" aria-hidden="true">1</span>
+              </a>
+            </div>
           </article>
         </div>
       </section>
 
-      <section aria-label="業務メニュー">
+      <section class="menu-section" aria-label="業務メニュー">
         <div class="section-head">
           <div>
             <h2>業務メニュー</h2>
-            <p>まず使うことの多い入口を大きめのカードでまとめています。</p>
+            <p>予定確認のあとに使う機能を、分かりやすく整理しています。</p>
           </div>
         </div>
 
-        <div class="cards">
-          <article class="card" data-tone="schedule">
-            <div class="card__number">01</div>
-            <span class="card__label">業務メニュー 01</span>
-            <h3>スケジュール反映</h3>
-            <p>
-              月間スケジュールを確認しながら、移動支援予定や居宅介護予定の反映を進めるための画面です。
-            </p>
+        <div class="menu-grid">
+          <article class="menu-card menu-card--primary">
+            <span class="menu-card__label">よく使う</span>
+            <h3>スケジュール確認</h3>
+            <p>月の予定を見ながら、担当や日付を確認できます。</p>
             <a href="/schedule-sync/">開く</a>
           </article>
 
-          <article class="card" data-tone="training">
-            <div class="card__number">04</div>
-            <span class="card__label">業務メニュー 04</span>
+          <article class="menu-card">
+            <span class="menu-card__label">記録</span>
+            <h3>サービス記録</h3>
+            <p>居宅介護の記録を入力して保存します。</p>
+            <a href="/service-records-home/">開く</a>
+          </article>
+
+          <article class="menu-card">
+            <span class="menu-card__label">記録</span>
+            <h3>移動支援記録</h3>
+            <p>移動支援の記録を入力し、未記入予定も確認できます。</p>
+            <a href="/service-records-move/">開く</a>
+          </article>
+
+          <article class="menu-card">
+            <span class="menu-card__label">そのほか</span>
             <h3>研修報告</h3>
-            <p>
-              研修の実施内容や学びを整理して記録するための入口です。画面は順次整備していく前提で先に導線を置いています。
-            </p>
+            <p>研修内容や気づきをまとめる入口です。</p>
             <a href="/training-reports/">開く</a>
           </article>
         </div>
       </section>
 
-      <p class="footer">必要な業務を選んでご利用ください。</p>
+      <section class="settings-section" aria-label="使い始めの設定">
+        <div class="section-head">
+          <div>
+            <h2>使い始めの設定</h2>
+            <p>自分用の表示や端末通知を使うときだけ設定してください。</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <section class="setting-card helper-email-panel" aria-live="polite">
+            <div class="setting-card__head">
+              <div>
+                <h3>自分用表示の設定</h3>
+                <p id="helper-email-note" class="setting-card__copy">
+                  メールアドレスを保存すると、自分の予定リンクが使えるようになります。
+                </p>
+              </div>
+              <span id="helper-email-status" class="helper-email-status">未保存</span>
+            </div>
+
+            <p class="helper-email-current">保存済みメール: <strong id="helper-email-current">未設定</strong></p>
+
+            <div class="helper-email-form">
+              <input
+                id="helper-email-input"
+                class="helper-email-input"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                placeholder="helper@example.com"
+              />
+              <button id="helper-email-save" class="helper-email-button" type="button">保存</button>
+              <button id="helper-email-clear" class="helper-email-clear" type="button">クリア</button>
+            </div>
+
+            <p id="helper-email-message" class="helper-email-message" data-tone="default">
+              全体の予定確認だけなら、保存しなくても使えます。
+            </p>
+          </section>
+
+          <section class="setting-card push-panel" aria-live="polite">
+            <div class="setting-card__head">
+              <div>
+                <h3>端末通知</h3>
+                <p class="setting-card__copy">
+                  通知を許可すると、アプリを開いていないときも端末で連絡を受け取れます。
+                </p>
+              </div>
+              <span id="push-status" class="push-status">確認中</span>
+            </div>
+
+            <div class="push-actions">
+              <button id="push-enable" class="push-button" data-tone="primary" type="button">通知を受け取る</button>
+              <button id="push-disable" class="push-button" data-tone="danger" type="button">通知を止める</button>
+              <button id="push-test" class="push-button" type="button">テスト通知</button>
+            </div>
+
+            <p id="push-message" class="push-message" data-tone="default">
+              メールアドレスを保存してから、端末通知を登録してください。
+            </p>
+            <p class="push-note">
+              iPhone はホーム画面に追加した状態で通知許可を行う想定です。
+            </p>
+          </section>
+        </div>
+      </section>
+
+      <p class="footer">上から順に確認すると、その日の動きがつかみやすくなります。</p>
     </main>
     <script type="module" src="./index.js"></script>
   </body>

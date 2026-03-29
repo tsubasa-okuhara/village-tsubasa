@@ -61,23 +61,33 @@ export async function fetchScheduleList(
   month: number
 ): Promise<ScheduleListItem[]> {
   const supabase = getSupabaseClient();
+  const pageSize = 1000;
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const nextMonthDate = new Date(year, month, 1);
   const endDate = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+  const rows: ScheduleRow[] = [];
 
-  const { data, error } = await supabase
-    .from("schedule")
-    .select("id, date, name, client, start_time, end_time, haisha, task, summary")
-    .gte("date", startDate)
-    .lt("date", endDate)
-    .order("date", { ascending: true })
-    .order("start_time", { ascending: true });
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from("schedule_web_v")
+      .select("id, date, name, client, start_time, end_time, haisha, task, summary")
+      .gte("date", startDate)
+      .lt("date", endDate)
+      .order("date", { ascending: true })
+      .order("start_time", { ascending: true })
+      .range(offset, offset + pageSize - 1);
 
-  if (error) {
-    throw error;
+    if (error) {
+      throw error;
+    }
+
+    const pageRows = (data ?? []) as ScheduleRow[];
+    rows.push(...pageRows);
+
+    if (pageRows.length < pageSize) {
+      break;
+    }
   }
-
-  const rows = (data ?? []) as ScheduleRow[];
 
   return rows.map(function (row) {
     return {

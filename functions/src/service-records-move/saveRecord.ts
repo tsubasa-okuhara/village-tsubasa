@@ -18,6 +18,7 @@ type MoveSaveRequestBody = {
 
 type MoveSaveSuccessResponse = {
   ok: true;
+  recordId: string;
   taskId: string;
   message: string;
 };
@@ -79,10 +80,20 @@ export async function handleServiceRecordsMoveSave(
       created_at: new Date().toISOString(),
     };
 
-    const { error: insertError } = await supabase.from("service_notes_move").insert(insertPayload);
+    const { data: insertedRecord, error: insertError } = await supabase
+      .from("service_notes_move")
+      .insert(insertPayload)
+      .select("id")
+      .single();
 
     if (insertError) {
       throw insertError;
+    }
+
+    const recordId = String(insertedRecord?.id ?? "").trim();
+
+    if (!recordId) {
+      throw new Error("failed to resolve inserted move note id");
     }
 
     const { data: updatedRows, error: updateError } = await supabase
@@ -110,6 +121,7 @@ export async function handleServiceRecordsMoveSave(
 
     res.status(200).json({
       ok: true,
+      recordId,
       taskId,
       message: "move service record saved",
     });

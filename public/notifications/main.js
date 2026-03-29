@@ -11,6 +11,27 @@ const state = {
   message: "読み込み中...",
 };
 
+async function updateAppBadge(count) {
+  try {
+    if (typeof navigator === "undefined") {
+      return;
+    }
+
+    if (!count || count <= 0) {
+      if (typeof navigator.clearAppBadge === "function") {
+        await navigator.clearAppBadge();
+      }
+      return;
+    }
+
+    if (typeof navigator.setAppBadge === "function") {
+      await navigator.setAppBadge(count);
+    }
+  } catch (error) {
+    console.error("[badge] update error:", error);
+  }
+}
+
 function getRequiredElement(id) {
   const element = document.getElementById(id);
 
@@ -108,6 +129,7 @@ function renderStatus() {
 function renderMeta() {
   helperEmailElement.textContent = state.helperEmail || "-";
   unreadCountElement.textContent = `${state.unreadCount}件`;
+  updateAppBadge(state.unreadCount);
 }
 
 function renderEmpty() {

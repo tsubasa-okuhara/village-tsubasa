@@ -6,6 +6,7 @@ const state = {
   currentMonth: 0,
   activeWeekIndex: -1,
   searchKeyword: "",
+  selectedHelper: "",
   rawData: null,
   filteredData: null,
 };
@@ -24,8 +25,10 @@ const pageTitleElement = getRequiredElement("page-title");
 const monthLabelElement = getRequiredElement("month-label");
 const weekSummaryElement = getRequiredElement("week-summary");
 const searchInputElement = getRequiredElement("search-helper");
+const helperSelectElement = getRequiredElement("helper-select");
 const prevMonthButton = getRequiredElement("prev-month");
 const nextMonthButton = getRequiredElement("next-month");
+const reloadButtonElement = getRequiredElement("reload-button");
 const scheduleCalendarElement = getRequiredElement("schedule-calendar");
 const scheduleColumnsElement = getRequiredElement("schedule-columns");
 const weekButtonsElement = getRequiredElement("week-buttons");
@@ -41,6 +44,7 @@ function getCurrentViewState() {
     month: state.currentMonth,
     activeWeekIndex: state.activeWeekIndex,
     searchKeyword: state.searchKeyword,
+    selectedHelper: state.selectedHelper,
   };
 }
 
@@ -72,11 +76,18 @@ function formatMonthLabel(year, month) {
 }
 
 function formatTimeRange(item) {
-  if (item.startTime && item.endTime) {
-    return `${item.startTime}〜${item.endTime}`;
+  const start = item.startTime || "";
+  const end = item.endTime || "";
+
+  if (start && end) {
+    return `${start}〜${end}`;
   }
 
-  return item.time || "";
+  if (start) {
+    return start;
+  }
+
+  return "";
 }
 
 function getDisplayValue(value, fallback) {
@@ -291,23 +302,45 @@ function groupSchedulesByDate(items) {
 
 function applyFilters(data) {
   const keyword = state.searchKeyword.trim();
+  const selectedHelper = state.selectedHelper.trim();
   const items = Array.isArray(data.items) ? data.items : [];
-
-  if (!keyword) {
-    return {
-      year: data.year,
-      month: data.month,
-      items: items,
-    };
-  }
 
   return {
     year: data.year,
     month: data.month,
     items: items.filter(function (item) {
-      return String(item.helperName || "").trim() === keyword;
+      const helperName = String(item.helperName || "").trim();
+      const matchesSelect = !selectedHelper || helperName === selectedHelper;
+      const matchesSearch = !keyword || helperName.includes(keyword);
+      return matchesSelect && matchesSearch;
     }),
   };
+}
+
+function getHelperOptions(items) {
+  return Array.from(new Set(
+    (Array.isArray(items) ? items : [])
+      .map(function (item) {
+        return String(item.helperName || "").trim();
+      })
+      .filter(Boolean)
+  )).sort(function (a, b) {
+    return a.localeCompare(b, "ja");
+  });
+}
+
+function renderHelperOptions() {
+  const options = getHelperOptions(state.rawData?.items);
+  const currentValue = state.selectedHelper;
+
+  helperSelectElement.innerHTML = [
+    '<option value="">すべてのヘルパー</option>',
+  ]
+    .concat(options.map(function (helperName) {
+      const selected = helperName === currentValue ? ' selected' : "";
+      return `<option value="${escapeHtml(helperName)}"${selected}>${escapeHtml(helperName)}</option>`;
+    }))
+    .join("");
 }
 
 function getItemsByDate(date) {
@@ -350,10 +383,6 @@ function renderDayModal(date, items) {
           <div class="schedule-card__line">
             <span class="schedule-card__icon" aria-hidden="true">📝</span>
             <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.task, "—"))}</span>
-          </div>
-          <div class="schedule-card__line is-summary">
-            <span class="schedule-card__icon" aria-hidden="true">⚠️</span>
-            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.summary, "概要なし"))}</span>
           </div>
         </article>
       `;
@@ -465,7 +494,6 @@ function renderCalendar(data) {
                       <div class="calendar-preview-line">🕒 : ${escapeHtml(getDisplayValue(formatTimeRange(item), "時間未設定"))}</div>
                       <div class="calendar-preview-line">🚗 : ${escapeHtml(getDisplayValue(item.haisha, "—"))}</div>
                       <div class="calendar-preview-line">📝 : ${escapeHtml(getDisplayValue(item.task, "—"))}</div>
-                      <div class="calendar-preview-summary">⚠️ : ${escapeHtml(getDisplayValue(item.summary, "概要なし"))}</div>
                     </div>
                   `;
                 })
@@ -483,9 +511,11 @@ function renderCalendar(data) {
     .join("");
 
   scheduleCalendarElement.innerHTML = `
-    <div class="calendar-grid">
-      ${weekdayHeader}
-      ${cells}
+    <div class="month-scroll-wrap">
+      <div class="calendar-grid">
+        ${weekdayHeader}
+        ${cells}
+      </div>
     </div>
   `;
 
@@ -520,12 +550,12 @@ function renderScheduleColumns(data) {
                         .map(function (item) {
                           return `
                             <article class="schedule-card">
+                              <div class="schedule-card__date">${escapeHtml(item.date || "")}</div>
                               <div class="schedule-card__time">${escapeHtml(formatTimeRange(item))}</div>
-                              <div class="schedule-card__helper">${escapeHtml(item.helperName || "")}</div>
-                              <div class="schedule-card__user">${escapeHtml(item.userName || "")}</div>
+                              <div class="schedule-card__user">利用者: ${escapeHtml(item.userName || "利用者未設定")}</div>
+                              <div class="schedule-card__helper">ヘルパー: ${escapeHtml(item.helperName || "担当未設定")}</div>
                               <div class="schedule-card__meta">配車: ${escapeHtml(item.haisha || "-")}</div>
                               <div class="schedule-card__meta">内容: ${escapeHtml(item.task || "-")}</div>
-                              <div class="schedule-card__summary">${escapeHtml(item.summary || "")}</div>
                             </article>
                           `;
                         })
@@ -537,7 +567,7 @@ function renderScheduleColumns(data) {
         })
         .join("");
 
-      return `<div class="columns-grid">${columns}</div>`;
+      return `<div class="week-scroll-wrap"><div class="columns-grid">${columns}</div></div>`;
     })
     .join('<div style="height: 12px;"></div>');
 }
@@ -554,6 +584,7 @@ function renderScheduleView() {
   }
 
   updateMonthLabels(state.currentYear, state.currentMonth);
+  renderHelperOptions();
 
   const filteredData = applyFilters(state.rawData);
   state.filteredData = filteredData;
@@ -586,6 +617,15 @@ function bindEvents() {
   searchInputElement.addEventListener("input", function (event) {
     state.searchKeyword = event.target.value;
     renderScheduleView();
+  });
+
+  helperSelectElement.addEventListener("change", function (event) {
+    state.selectedHelper = event.target.value;
+    renderScheduleView();
+  });
+
+  reloadButtonElement.addEventListener("click", function () {
+    refreshScheduleView();
   });
 
   weekButtonsElement.addEventListener("click", function (event) {

@@ -77,6 +77,193 @@
               ></textarea>
             </label>
 
+            <details class="move-records-structured" open>
+              <summary class="move-records-structured__summary">
+                構造化ログ
+                <span>move専用の最小MVPです。本文保存とは別テーブルに保存されます。</span>
+              </summary>
+
+              <div class="move-records-structured__body">
+                <div class="move-records-grid move-records-grid--three">
+                  <label class="move-records-field">
+                    <span>physical_state</span>
+                    <select id="structured-physical-state" name="structuredPhysicalState">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>mental_state</span>
+                    <select id="structured-mental-state" name="structuredMentalState">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>assist_level</span>
+                    <select id="structured-assist-level" name="structuredAssistLevel">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="move-records-field">
+                  <span>risk_flags</span>
+                  <div id="structured-risk-flags" class="move-records-check-group"></div>
+                </div>
+
+                <div class="move-records-grid move-records-grid--three">
+                  <label class="move-records-field">
+                    <span>action_result</span>
+                    <select id="structured-action-result" name="structuredActionResult">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>difficulty</span>
+                    <select id="structured-difficulty" name="structuredDifficulty">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>time_of_day</span>
+                    <select id="structured-time-of-day" name="structuredTimeOfDay">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="move-records-grid move-records-grid--three">
+                  <label class="move-records-field">
+                    <span>action_type</span>
+                    <select id="structured-action-type" name="structuredActionType">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>action_detail</span>
+                    <select id="structured-action-detail" name="structuredActionDetail">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>action_detail_other</span>
+                    <input
+                      id="structured-action-detail-other"
+                      name="structuredActionDetailOther"
+                      type="text"
+                      placeholder="候補外のみ入力"
+                    />
+                  </label>
+                </div>
+
+                <div class="move-records-grid move-records-grid--four">
+                  <label class="move-records-field">
+                    <span>actor</span>
+                    <select id="structured-actor" name="structuredActor">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>target</span>
+                    <select id="structured-target" name="structuredTarget">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>行動開始</span>
+                    <input id="structured-action-start-time" name="structuredActionStartTime" type="time" />
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>行動終了</span>
+                    <input id="structured-action-end-time" name="structuredActionEndTime" type="time" />
+                  </label>
+                </div>
+
+                <div class="move-records-grid move-records-grid--three">
+                  <label class="move-records-field">
+                    <span>duration(分)</span>
+                    <input
+                      id="structured-duration"
+                      name="structuredDuration"
+                      type="number"
+                      inputmode="numeric"
+                      min="0"
+                      step="1"
+                      placeholder="例: 30"
+                    />
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>location</span>
+                    <select id="structured-location" name="structuredLocation">
+                      <option value="">選択してください</option>
+                    </select>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>temperature(任意)</span>
+                    <input
+                      id="structured-temperature"
+                      name="structuredTemperature"
+                      type="number"
+                      inputmode="decimal"
+                      step="0.1"
+                      placeholder="例: 22.5"
+                    />
+                  </label>
+                </div>
+
+                <div class="move-records-grid move-records-grid--two">
+                  <label class="move-records-field">
+                    <span>location_note</span>
+                    <input
+                      id="structured-location-note"
+                      name="structuredLocationNote"
+                      type="text"
+                      placeholder="必要な補足だけ入力"
+                    />
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>event_type</span>
+                    <select id="structured-event-type" name="structuredEventType">
+                      <option value="">なし</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="move-records-grid move-records-grid--two">
+                  <label class="move-records-field">
+                    <span>before_state</span>
+                    <textarea
+                      id="structured-before-state"
+                      name="structuredBeforeState"
+                      rows="3"
+                      placeholder="イレギュラー前の状態"
+                    ></textarea>
+                  </label>
+
+                  <label class="move-records-field">
+                    <span>after_action</span>
+                    <textarea
+                      id="structured-after-action"
+                      name="structuredAfterAction"
+                      rows="3"
+                      placeholder="対応内容"
+                    ></textarea>
+                  </label>
+                </div>
+              </div>
+            </details>
+
             <div class="move-records-button-row">
               <button id="move-generate-summary-button" class="move-records-button" type="button">
                 AI記録案を作成

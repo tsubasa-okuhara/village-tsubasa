@@ -1,17 +1,25 @@
 const HOME_UNWRITTEN_API = "/api/service-records-home/unwritten";
 const HOME_SUMMARY_API = "/api/service-records-home/summary";
 const HOME_SAVE_API = "/api/service-records-home/save";
-const HOME_CATEGORY_ITEMS = {
-  身体介護: [
-    "食事介助",
-    "排泄介助",
-    "更衣介助",
-    "服薬介助",
-    "移乗・移動介助",
-    "整容介助",
-    "入浴介助",
-    "見守り",
-  ],
+
+const HOME_BODY_CARE_PRIMARY_ITEMS = [
+  { label: "排泄介助", children: ["トイレ", "おむつ", "ポータブルトイレ利用"] },
+  { label: "食事介助", children: ["全量", "一部介助", "見守り"] },
+  { label: "清拭", children: ["全清拭", "上半身", "下半身", "陰部清浄"] },
+  { label: "入浴介助", children: ["全介助", "半介助", "シャワー浴", "全身浴", "部分浴", "手浴", "足浴", "洗髪"] },
+  { label: "洗面等", children: ["洗面", "歯磨き"] },
+  { label: "身体整容", children: ["爪切", "耳掃除", "髭の手入れ", "身だしなみ"] },
+  { label: "更衣介助", children: [] },
+  { label: "移乗介助", children: [] },
+  { label: "移動介助", children: [] },
+  { label: "起床介助", children: [] },
+  { label: "就寝介助", children: [] },
+  { label: "服薬介助", children: [] },
+  { label: "利用者とともに行う家事", children: ["掃除", "洗濯", "調理"] },
+  { label: "その他", children: [] },
+];
+
+const HOME_SIMPLE_CATEGORY_ITEMS = {
   家事援助: [
     "調理",
     "配膳・片付け",
@@ -173,8 +181,8 @@ function getDisplayValue(value, fallback) {
 }
 
 function formatTimeRange(item) {
-  const startTime = getDisplayValue(item.start_time, "");
-  const endTime = getDisplayValue(item.end_time, "");
+  const startTime = getDisplayValue(item?.start_time, "");
+  const endTime = getDisplayValue(item?.end_time, "");
 
   if (startTime && endTime) {
     return `${startTime}〜${endTime}`;
@@ -211,15 +219,110 @@ function inferCategory(taskName) {
   return "身体介護";
 }
 
-function getCheckedItems(checklistElement) {
-  return Array.from(checklistElement.querySelectorAll('input[type="checkbox"]:checked'))
+function isBodyCareCategory(category) {
+  return category === "身体介護";
+}
+
+function getSimpleCheckedItems(checklistElement) {
+  return Array.from(checklistElement.querySelectorAll('input[data-level="simple"]:checked'))
     .map(function (inputElement) {
       return String(inputElement.value || "").trim();
     })
     .filter(Boolean);
 }
 
-function buildMemoText(category, checkedItems, otherDetail, freeMemo) {
+function getBodyCarePrimaryItems(checklistElement) {
+  return Array.from(checklistElement.querySelectorAll('input[data-level="primary"]:checked'))
+    .map(function (inputElement) {
+      return String(inputElement.value || "").trim();
+    })
+    .filter(Boolean);
+}
+
+function getBodyCareSubItems(checklistElement) {
+  const result = {};
+
+  Array.from(checklistElement.querySelectorAll('input[data-level="child"]:checked')).forEach(function (inputElement) {
+    const parentLabel = String(inputElement.getAttribute("data-parent") || "").trim();
+    const childLabel = String(inputElement.value || "").trim();
+
+    if (!parentLabel || !childLabel) {
+      return;
+    }
+
+    if (!Array.isArray(result[parentLabel])) {
+      result[parentLabel] = [];
+    }
+
+    result[parentLabel].push(childLabel);
+  });
+
+  return result;
+}
+
+function getSelectedItems(checklistElement) {
+  if (isBodyCareCategory(state.selectedCategory)) {
+    return getBodyCarePrimaryItems(checklistElement);
+  }
+
+  return getSimpleCheckedItems(checklistElement);
+}
+
+function getBodyCareItemsForSummary(primaryItems, subItems, otherDetail) {
+  const itemTexts = primaryItems.map(function (primaryLabel) {
+    const childItems = Array.isArray(subItems[primaryLabel]) ? subItems[primaryLabel] : [];
+
+    if (childItems.length === 0) {
+      return primaryLabel;
+    }
+
+    return `${primaryLabel}(${childItems.join("、")})`;
+  });
+
+  const normalizedOtherDetail = normalizeOptionalText(otherDetail);
+
+  if (normalizedOtherDetail) {
+    itemTexts.push(`その他(${normalizedOtherDetail})`);
+  }
+
+  return itemTexts;
+}
+
+function buildMemoText(category, checkedItems, otherDetail, freeMemo, primaryItems, subItems) {
+  if (isBodyCareCategory(category)) {
+    const normalizedOtherDetail = normalizeOptionalText(otherDetail);
+    const normalizedFreeMemo = normalizeOptionalText(freeMemo);
+    const lines = [
+      `区分: ${category}`,
+      `主チェック: ${primaryItems.length > 0 ? primaryItems.join(", ") : "選択なし"}`,
+    ];
+
+    const childLines = primaryItems
+      .filter(function (primaryLabel) {
+        return Array.isArray(subItems[primaryLabel]) && subItems[primaryLabel].length > 0;
+      })
+      .map(function (primaryLabel) {
+        return `- ${primaryLabel}: ${subItems[primaryLabel].join(", ")}`;
+      });
+
+    if (childLines.length > 0) {
+      lines.push("子チェック:");
+      lines.push(...childLines);
+    }
+
+    if (normalizedOtherDetail) {
+      lines.push("その他:");
+      lines.push(`- その他詳細: ${normalizedOtherDetail}`);
+    }
+
+    if (normalizedFreeMemo) {
+      lines.push("補足:");
+      lines.push(`- ${normalizedFreeMemo}`);
+    }
+
+    return lines.join("\n");
+  }
+
   const lines = [];
   const itemTexts = checkedItems.slice();
   const normalizedOtherDetail = normalizeOptionalText(otherDetail);
@@ -230,9 +333,7 @@ function buildMemoText(category, checkedItems, otherDetail, freeMemo) {
   }
 
   lines.push(`区分: ${category}`);
-  lines.push(
-    `実施項目: ${itemTexts.length > 0 ? itemTexts.join("、") : "選択なし"}`
-  );
+  lines.push(`実施項目: ${itemTexts.length > 0 ? itemTexts.join("、") : "選択なし"}`);
 
   if (normalizedFreeMemo) {
     lines.push(`補足: ${normalizedFreeMemo}`);
@@ -241,15 +342,17 @@ function buildMemoText(category, checkedItems, otherDetail, freeMemo) {
   return lines.join("\n");
 }
 
-function buildFinalNoteText(task, category, checkedItems, otherDetail, freeMemo) {
+function buildFinalNoteText(task, category, checkedItems, otherDetail, freeMemo, primaryItems, subItems) {
   const userName = getDisplayValue(task?.user_name, "利用者");
   const serviceDate = getDisplayValue(task?.service_date, "本日");
   const timeRange = formatTimeRange(task);
   const normalizedOtherDetail = normalizeOptionalText(otherDetail);
   const normalizedFreeMemo = normalizeOptionalText(freeMemo);
-  const detailTexts = checkedItems.slice();
+  const detailTexts = isBodyCareCategory(category)
+    ? getBodyCareItemsForSummary(primaryItems, subItems, otherDetail)
+    : checkedItems.slice();
 
-  if (normalizedOtherDetail) {
+  if (normalizedOtherDetail && !isBodyCareCategory(category)) {
     detailTexts.push(normalizedOtherDetail);
   }
 
@@ -266,21 +369,105 @@ function buildFinalNoteText(task, category, checkedItems, otherDetail, freeMemo)
   return sentences.join("");
 }
 
-function renderChecklist(checklistElement) {
-  const items = HOME_CATEGORY_ITEMS[state.selectedCategory] || [];
+function renderChecklist(checklistElement, checklistHintElement, otherDetailFieldElement) {
+  if (isBodyCareCategory(state.selectedCategory)) {
+    checklistElement.className = "nested-checklist";
+    checklistElement.innerHTML = HOME_BODY_CARE_PRIMARY_ITEMS.map(function (item, index) {
+      const primaryId = `home-body-primary-${index}`;
+      const childrenHtml = item.children
+        .map(function (childLabel, childIndex) {
+          const childId = `home-body-child-${index}-${childIndex}`;
 
+          return `
+            <label class="nested-checklist__child" for="${escapeHtml(childId)}">
+              <input
+                id="${escapeHtml(childId)}"
+                type="checkbox"
+                value="${escapeHtml(childLabel)}"
+                data-level="child"
+                data-parent="${escapeHtml(item.label)}"
+              />
+              <span>${escapeHtml(childLabel)}</span>
+            </label>
+          `;
+        })
+        .join("");
+
+      return `
+        <div class="nested-checklist__group">
+          <label class="checkbox-item" for="${escapeHtml(primaryId)}">
+            <input
+              id="${escapeHtml(primaryId)}"
+              type="checkbox"
+              value="${escapeHtml(item.label)}"
+              data-level="primary"
+            />
+            <span>${escapeHtml(item.label)}</span>
+          </label>
+          ${
+            item.children.length > 0
+              ? `<div class="nested-checklist__children" data-subgroup-for="${escapeHtml(item.label)}">${childrenHtml}</div>`
+              : ""
+          }
+        </div>
+      `;
+    }).join("");
+
+    checklistHintElement.textContent = "主チェックを選ぶと必要な子チェックだけ表示します。";
+    otherDetailFieldElement.classList.add("is-hidden");
+    return;
+  }
+
+  const items = HOME_SIMPLE_CATEGORY_ITEMS[state.selectedCategory] || [];
+
+  checklistElement.className = "checkbox-grid";
   checklistElement.innerHTML = items
     .map(function (item, index) {
       const itemId = `home-check-item-${index}`;
 
       return `
         <label class="checkbox-item" for="${escapeHtml(itemId)}">
-          <input id="${escapeHtml(itemId)}" type="checkbox" value="${escapeHtml(item)}" />
+          <input
+            id="${escapeHtml(itemId)}"
+            type="checkbox"
+            value="${escapeHtml(item)}"
+            data-level="simple"
+          />
           <span>${escapeHtml(item)}</span>
         </label>
       `;
     })
     .join("");
+
+  checklistHintElement.textContent = "区分に応じた実施項目を選択します。";
+  otherDetailFieldElement.classList.remove("is-hidden");
+}
+
+function updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement) {
+  if (!isBodyCareCategory(state.selectedCategory)) {
+    otherDetailFieldElement.classList.remove("is-hidden");
+    return;
+  }
+
+  const primaryItems = getBodyCarePrimaryItems(checklistElement);
+
+  checklistElement.querySelectorAll("[data-subgroup-for]").forEach(function (groupElement) {
+    const groupName = String(groupElement.getAttribute("data-subgroup-for") || "");
+    const isVisible = primaryItems.includes(groupName);
+    groupElement.classList.toggle("is-visible", isVisible);
+
+    if (!isVisible) {
+      groupElement.querySelectorAll('input[type="checkbox"]').forEach(function (inputElement) {
+        inputElement.checked = false;
+      });
+    }
+  });
+
+  if (primaryItems.includes("その他")) {
+    otherDetailFieldElement.classList.remove("is-hidden");
+  } else {
+    otherDetailFieldElement.classList.add("is-hidden");
+  }
 }
 
 function renderTaskList(listElement, selectedSummaryElement, saveStatusElement) {
@@ -373,12 +560,20 @@ function resetEntryFields(memoElement, finalNoteElement, otherDetailElement, che
 function syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement) {
   taskElement.value = state.selectedTask ? state.selectedCategory : "";
 
-  const checkedItems = getCheckedItems(checklistElement);
+  const checkedItems = getSimpleCheckedItems(checklistElement);
+  const primaryItems = isBodyCareCategory(state.selectedCategory)
+    ? getBodyCarePrimaryItems(checklistElement)
+    : checkedItems;
+  const subItems = isBodyCareCategory(state.selectedCategory)
+    ? getBodyCareSubItems(checklistElement)
+    : {};
   const composedMemo = buildMemoText(
     state.selectedCategory,
     checkedItems,
     otherDetailElement.value,
-    memoElement.value
+    memoElement.value,
+    primaryItems,
+    subItems
   );
 
   if (!state.finalNoteTouched) {
@@ -387,21 +582,27 @@ function syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDeta
       state.selectedCategory,
       checkedItems,
       otherDetailElement.value,
-      memoElement.value
+      memoElement.value,
+      primaryItems,
+      subItems
     );
   }
 
-  return composedMemo;
+  return {
+    composedMemo,
+    checkedItems,
+    primaryItems,
+    subItems,
+  };
 }
 
-async function loadHomeTasks(
-  helperEmail,
-  options
-) {
+async function loadHomeTasks(helperEmail, options) {
   const {
     listStatusElement,
     saveStatusElement,
     checklistElement,
+    checklistHintElement,
+    otherDetailFieldElement,
     selectedSummaryElement,
     listElement,
     serviceDateElement,
@@ -418,7 +619,8 @@ async function loadHomeTasks(
   state.selectedTask = null;
   state.items = [];
   state.selectedCategory = inferCategory("");
-  renderChecklist(checklistElement);
+  renderChecklist(checklistElement, checklistHintElement, otherDetailFieldElement);
+  updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
   fillFormFromSelectedTask(serviceDateElement, helperNameElement, userNameElement, taskElement);
   resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
   renderSelectedTask(selectedSummaryElement, saveStatusElement);
@@ -460,6 +662,8 @@ function initializeHomeUi() {
   const taskElement = getRequiredElement("home-task");
   const categoryGroupElement = getRequiredElement("home-category-group");
   const checklistElement = getRequiredElement("home-checklist");
+  const checklistHintElement = getRequiredElement("home-checklist-hint");
+  const otherDetailFieldElement = getRequiredElement("home-other-detail-field");
   const otherDetailElement = getRequiredElement("home-other-detail");
   const memoElement = getRequiredElement("home-memo");
   const finalNoteElement = getRequiredElement("home-final-note");
@@ -467,7 +671,8 @@ function initializeHomeUi() {
   const clearButtonElement = getRequiredElement("home-clear-button");
   const saveStatusElement = getRequiredElement("home-records-save-status");
 
-  renderChecklist(checklistElement);
+  renderChecklist(checklistElement, checklistHintElement, otherDetailFieldElement);
+  updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
 
   filterFormElement.addEventListener("submit", async function (event) {
     event.preventDefault();
@@ -475,6 +680,8 @@ function initializeHomeUi() {
       listStatusElement,
       saveStatusElement,
       checklistElement,
+      checklistHintElement,
+      otherDetailFieldElement,
       selectedSummaryElement,
       listElement,
       serviceDateElement,
@@ -494,7 +701,8 @@ function initializeHomeUi() {
       .forEach(function (inputElement) {
         inputElement.checked = inputElement.value === state.selectedCategory;
       });
-    renderChecklist(checklistElement);
+    renderChecklist(checklistElement, checklistHintElement, otherDetailFieldElement);
+    updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
     fillFormFromSelectedTask(serviceDateElement, helperNameElement, userNameElement, taskElement);
     resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
     syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
@@ -502,6 +710,7 @@ function initializeHomeUi() {
 
   clearButtonElement.addEventListener("click", function () {
     resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
+    updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
     syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
     setStatus(saveStatusElement, "");
   });
@@ -509,13 +718,16 @@ function initializeHomeUi() {
   categoryGroupElement.querySelectorAll('input[name="homeCategory"]').forEach(function (inputElement) {
     inputElement.addEventListener("change", function () {
       state.selectedCategory = inputElement.value;
-      renderChecklist(checklistElement);
+      renderChecklist(checklistElement, checklistHintElement, otherDetailFieldElement);
+      updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
+      otherDetailElement.value = "";
       state.finalNoteTouched = false;
       syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
     });
   });
 
   checklistElement.addEventListener("change", function () {
+    updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
     syncDerivedFields(taskElement, memoElement, finalNoteElement, otherDetailElement, checklistElement);
   });
 
@@ -542,9 +754,15 @@ function initializeHomeUi() {
       return;
     }
 
-    const checkedItems = getCheckedItems(checklistElement);
+    const derived = syncDerivedFields(
+      taskElement,
+      memoElement,
+      finalNoteElement,
+      otherDetailElement,
+      checklistElement
+    );
 
-    if (checkedItems.length === 0) {
+    if (derived.primaryItems.length === 0) {
       setStatus(saveStatusElement, "実施項目を1件以上選択してください。", "is-error");
       return;
     }
@@ -564,7 +782,11 @@ function initializeHomeUi() {
         startTime: state.selectedTask.start_time,
         endTime: state.selectedTask.end_time,
         category: state.selectedCategory,
-        items: checkedItems,
+        items: isBodyCareCategory(state.selectedCategory)
+          ? getBodyCareItemsForSummary(derived.primaryItems, derived.subItems, otherDetailElement.value)
+          : derived.checkedItems,
+        primaryItems: derived.primaryItems,
+        subItems: derived.subItems,
         otherDetail: otherDetailElement.value,
         memo: memoElement.value,
       });
@@ -596,7 +818,13 @@ function initializeHomeUi() {
       return;
     }
 
-    const checkedItems = getCheckedItems(checklistElement);
+    const derived = syncDerivedFields(
+      taskElement,
+      memoElement,
+      finalNoteElement,
+      otherDetailElement,
+      checklistElement
+    );
     const finalNote = String(finalNoteElement.value || "").trim();
 
     if (!state.selectedCategory) {
@@ -604,7 +832,7 @@ function initializeHomeUi() {
       return;
     }
 
-    if (checkedItems.length === 0) {
+    if (derived.primaryItems.length === 0) {
       setStatus(saveStatusElement, "実施項目を1件以上選択してください。", "is-error");
       return;
     }
@@ -616,13 +844,6 @@ function initializeHomeUi() {
 
     try {
       setStatus(saveStatusElement, "保存しています...");
-      const composedMemo = syncDerivedFields(
-        taskElement,
-        memoElement,
-        finalNoteElement,
-        otherDetailElement,
-        checklistElement
-      );
 
       await saveHomeRecord({
         scheduleTaskId: state.selectedTask.id,
@@ -631,7 +852,7 @@ function initializeHomeUi() {
         helperEmail: state.selectedTask.helper_email,
         userName: state.selectedTask.user_name,
         task: state.selectedCategory,
-        memo: composedMemo,
+        memo: derived.composedMemo,
         aiSummary: null,
         finalNote,
       });
@@ -644,6 +865,7 @@ function initializeHomeUi() {
       state.selectedTask = null;
       fillFormFromSelectedTask(serviceDateElement, helperNameElement, userNameElement, taskElement);
       resetEntryFields(memoElement, finalNoteElement, otherDetailElement, checklistElement);
+      updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
       renderSelectedTask(selectedSummaryElement, saveStatusElement);
       renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
       setStatus(listStatusElement, `${state.items.length} 件の未記入予定があります。`, "is-success");
@@ -665,6 +887,8 @@ function initializeHomeUi() {
       listStatusElement,
       saveStatusElement,
       checklistElement,
+      checklistHintElement,
+      otherDetailFieldElement,
       selectedSummaryElement,
       listElement,
       serviceDateElement,
