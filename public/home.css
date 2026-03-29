@@ -67,7 +67,8 @@ input {
 .helper-email-status,
 .push-status,
 .summary-status,
-.notification-badge {
+.notification-badge,
+.section-status-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -81,7 +82,8 @@ input {
 .hero__eyebrow,
 .summary-card__eyebrow,
 .menu-card__label,
-.helper-email-status {
+.helper-email-status,
+.section-status-badge {
   background: linear-gradient(135deg, #efe1c8, #f6ecdd);
   color: #745f47;
 }
@@ -136,6 +138,11 @@ input {
 .section-head h2 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+.section-status-badge[hidden],
+.hero__note[hidden] {
+  display: none;
 }
 
 .priority-grid,
@@ -389,6 +396,28 @@ input {
   margin-top: 18px;
 }
 
+.menu-card__sub-links {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.menu-card__sub-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid rgba(216, 192, 160, 0.9);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #6a5647;
+  text-decoration: none;
+  font-weight: 700;
+  margin-top: 0;
+}
+
 .setting-card {
   padding: 20px;
 }
@@ -482,6 +511,17 @@ input {
 }
 
 @media (max-width: 640px) {
+  .page {
+    padding-top: 12px;
+    padding-bottom: 28px;
+  }
+
+  .priority-section,
+  .menu-section,
+  .settings-section {
+    margin-top: 14px;
+  }
+
   .hero,
   .summary-card,
   .menu-card,
@@ -516,6 +556,21 @@ input {
   .summary-metric {
     min-height: 88px;
     padding: 12px;
+  }
+
+  .hero h1 {
+    margin-top: 12px;
+    margin-bottom: 8px;
+  }
+
+  .hero__note {
+    margin-top: 10px;
+    padding: 10px 12px;
+  }
+
+  .summary-card__stats,
+  .summary-card__actions {
+    margin-top: 14px;
   }
 
   .summary-action,

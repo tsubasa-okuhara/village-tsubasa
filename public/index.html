@@ -6,6 +6,9 @@
     <meta name="theme-color" content="#d8c0a0" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="./home.css" />
     <title>ビレッジひろば</title>
@@ -18,7 +21,7 @@
         <p class="hero__subtitle">
           まず今日の予定と自分への連絡を確認できる、ヘルパーさん向けのホーム画面です。
         </p>
-        <p class="hero__note">
+        <p id="hero-helper-note" class="hero__note">
           自分の予定と連絡を見るには、下の「自分用表示の設定」でメールアドレスを保存してください。
         </p>
       </section>
@@ -103,6 +106,44 @@
 
       <section class="priority-section" aria-label="次の予定と連絡">
         <div class="priority-grid">
+          <article id="notifications-summary" class="summary-card is-loading">
+            <div class="summary-card__top">
+              <div>
+                <span class="summary-card__eyebrow">自分への連絡</span>
+                <h3>連絡の確認</h3>
+              </div>
+              <span id="notifications-status" class="summary-status">確認中</span>
+            </div>
+
+            <div class="summary-card__stats">
+              <div class="summary-metric">
+                <span class="summary-metric__label">連絡件数</span>
+                <div class="summary-metric__value">
+                  <span id="notifications-count">—</span><span class="summary-metric__unit">件</span>
+                </div>
+              </div>
+              <div class="summary-metric">
+                <span class="summary-metric__label">未読件数</span>
+                <div class="summary-metric__value">
+                  <span id="notifications-unread-count">—</span><span class="summary-metric__unit">件</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="summary-card__meta">
+              <div id="notifications-badge" class="notification-badge is-muted">未設定</div>
+            </div>
+
+            <p id="notifications-note" class="summary-card__note">自分への連絡を確認しています。</p>
+
+            <div class="summary-card__actions">
+              <a id="notifications-action" class="summary-action summary-action--secondary has-badge" href="/notifications/">
+                <span>通知を見る</span>
+                <span id="notifications-action-badge" class="notification-action-badge" aria-hidden="true">1</span>
+              </a>
+            </div>
+          </article>
+
           <article id="next-summary" class="summary-card is-loading">
             <div class="summary-card__top">
               <div>
@@ -146,44 +187,6 @@
               </a>
             </div>
           </article>
-
-          <article id="notifications-summary" class="summary-card is-loading">
-            <div class="summary-card__top">
-              <div>
-                <span class="summary-card__eyebrow">自分への連絡</span>
-                <h3>連絡の確認</h3>
-              </div>
-              <span id="notifications-status" class="summary-status">確認中</span>
-            </div>
-
-            <div class="summary-card__stats">
-              <div class="summary-metric">
-                <span class="summary-metric__label">連絡件数</span>
-                <div class="summary-metric__value">
-                  <span id="notifications-count">—</span><span class="summary-metric__unit">件</span>
-                </div>
-              </div>
-              <div class="summary-metric">
-                <span class="summary-metric__label">未読件数</span>
-                <div class="summary-metric__value">
-                  <span id="notifications-unread-count">—</span><span class="summary-metric__unit">件</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="summary-card__meta">
-              <div id="notifications-badge" class="notification-badge is-muted">未設定</div>
-            </div>
-
-            <p id="notifications-note" class="summary-card__note">自分への連絡を確認しています。</p>
-
-            <div class="summary-card__actions">
-              <a id="notifications-action" class="summary-action summary-action--primary has-badge" href="/notifications/">
-                <span>通知を見る</span>
-                <span id="notifications-action-badge" class="notification-action-badge" aria-hidden="true">1</span>
-              </a>
-            </div>
-          </article>
         </div>
       </section>
 
@@ -201,6 +204,24 @@
             <h3>スケジュール確認</h3>
             <p>月の予定を見ながら、担当や日付を確認できます。</p>
             <a href="/schedule-sync/">開く</a>
+            <div class="menu-card__sub-links">
+              <a
+                class="menu-card__sub-link"
+                href="https://ito0610.github.io/village-project/client-info-system/mock/%E5%88%A9%E7%94%A8%E8%80%85%E4%B8%80%E8%A6%A7.html"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                利用者情報
+              </a>
+              <a
+                class="menu-card__sub-link"
+                href="https://ito0610.github.io/shift-app-mock001/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                ヘルパーシフト
+              </a>
+            </div>
           </article>
 
           <article class="menu-card">
@@ -232,6 +253,9 @@
             <h2>使い始めの設定</h2>
             <p>自分用の表示や端末通知を使うときだけ設定してください。</p>
           </div>
+          <span id="settings-status-badge" class="section-status-badge" hidden>
+            自分用表示 未設定
+          </span>
         </div>
 
         <div class="settings-grid">
@@ -248,7 +272,7 @@
 
             <p class="helper-email-current">保存済みメール: <strong id="helper-email-current">未設定</strong></p>
 
-            <div class="helper-email-form">
+            <form id="helper-email-form" class="helper-email-form">
               <input
                 id="helper-email-input"
                 class="helper-email-input"
@@ -259,7 +283,7 @@
               />
               <button id="helper-email-save" class="helper-email-button" type="button">保存</button>
               <button id="helper-email-clear" class="helper-email-clear" type="button">クリア</button>
-            </div>
+            </form>
 
             <p id="helper-email-message" class="helper-email-message" data-tone="default">
               全体の予定確認だけなら、保存しなくても使えます。

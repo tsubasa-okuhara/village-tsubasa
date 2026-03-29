@@ -49,32 +49,6 @@ const state = {
   pushSupported: false,
 };
 
-async function forceTestAppBadge() {
-  // TEMP: iPhone PWA の Badging API 切り分け用。確認後はこの関数呼び出しごと外してください。
-  try {
-    if (!state.helperEmail) {
-      console.log("[badge:test] skipped: helper_email is not set");
-      return;
-    }
-
-    if (typeof navigator === "undefined") {
-      console.log("[badge:test] skipped: navigator is unavailable");
-      return;
-    }
-
-    if (typeof navigator.setAppBadge !== "function") {
-      console.log("[badge:test] skipped: setAppBadge is not supported");
-      return;
-    }
-
-    console.log("[badge:test] forcing app badge to 1");
-    await navigator.setAppBadge(1);
-    console.log("[badge:test] setAppBadge(1) completed");
-  } catch (error) {
-    console.error("[badge:test] force badge error:", error);
-  }
-}
-
 async function updateAppBadge(count) {
   try {
     if (typeof navigator === "undefined") {
@@ -200,6 +174,8 @@ function renderHelperEmailPanel() {
   const currentElement = getRequiredElement("helper-email-current");
   const noteElement = getRequiredElement("helper-email-note");
   const inputElement = getRequiredElement("helper-email-input");
+  const heroNoteElement = getRequiredElement("hero-helper-note");
+  const settingsBadgeElement = getRequiredElement("settings-status-badge");
 
   if (state.helperEmail) {
     statusElement.textContent = "保存済み";
@@ -207,12 +183,16 @@ function renderHelperEmailPanel() {
     noteElement.textContent =
       "このメールアドレスで、自分の予定と自分への連絡を表示します。";
     inputElement.value = state.helperEmail;
+    heroNoteElement.hidden = true;
+    settingsBadgeElement.hidden = true;
   } else {
     statusElement.textContent = "未保存";
     currentElement.textContent = "未設定";
     noteElement.textContent =
       "メールアドレスを保存すると、自分用の予定と連絡を開けるようになります。";
     inputElement.value = "";
+    heroNoteElement.hidden = false;
+    settingsBadgeElement.hidden = false;
   }
 
   updatePersonalActions();
@@ -408,13 +388,7 @@ async function subscribeCurrentDevice() {
   }
 
   const publicKey = await fetchPushPublicKey();
-  console.log("publicKey:", publicKey);
-  console.log("publicKey type:", typeof publicKey);
-  console.log("publicKey length:", publicKey.length);
-
   const convertedKey = urlBase64ToUint8Array(publicKey);
-  console.log("convertedKey:", convertedKey);
-  console.log("convertedKey length:", convertedKey.length);
 
   const existingSubscription =
     await state.pushRegistration.pushManager.getSubscription();
@@ -479,16 +453,17 @@ async function sendTestPush() {
 }
 
 function setupHelperEmailForm() {
+  const formElement = getRequiredElement("helper-email-form");
   const inputElement = getRequiredElement("helper-email-input");
   const saveButtonElement = getRequiredElement("helper-email-save");
   const clearButtonElement = getRequiredElement("helper-email-clear");
 
-  saveButtonElement.addEventListener("click", function () {
+  function saveCurrentEmail() {
     const nextEmail = inputElement.value.trim();
 
     if (!isValidEmail(nextEmail)) {
       setFormMessage("メールアドレスの形式を確認してください。", "error");
-      return;
+      return false;
     }
 
     state.helperEmail = saveHelperEmail(nextEmail);
@@ -503,6 +478,16 @@ function setupHelperEmailForm() {
       console.error("[push] sync after save error:", error);
     });
     setFormMessage("メールアドレスを保存しました。自分用の表示が使えます。", "success");
+    return true;
+  }
+
+  formElement.addEventListener("submit", function (event) {
+    event.preventDefault();
+    saveCurrentEmail();
+  });
+
+  saveButtonElement.addEventListener("click", function () {
+    saveCurrentEmail();
   });
 
   clearButtonElement.addEventListener("click", function () {
@@ -583,6 +568,7 @@ function renderNotificationsCard(payload) {
   const unreadCountElement = getRequiredElement("notifications-unread-count");
   const badgeElement = getRequiredElement("notifications-badge");
   const noteElement = getRequiredElement("notifications-note");
+  const actionElement = getRequiredElement("notifications-action");
   const actionBadgeElement = getRequiredElement("notifications-action-badge");
 
   function setActionBadge(count) {
@@ -596,6 +582,11 @@ function renderNotificationsCard(payload) {
     actionBadgeElement.classList.add("is-visible");
     actionBadgeElement.textContent = count >= 9 ? "9+" : String(count);
     actionBadgeElement.setAttribute("aria-hidden", "false");
+  }
+
+  function setActionTone(isPrimary) {
+    actionElement.classList.toggle("summary-action--primary", isPrimary);
+    actionElement.classList.toggle("summary-action--secondary", !isPrimary);
   }
 
   root.classList.remove(
@@ -615,6 +606,7 @@ function renderNotificationsCard(payload) {
     badgeElement.textContent = "未設定";
     badgeElement.classList.add("is-muted");
     setActionBadge(0);
+    setActionTone(false);
     updateAppBadge(0);
     noteElement.textContent =
       "メールアドレスを保存すると、自分への連絡を開けます。";
@@ -628,6 +620,7 @@ function renderNotificationsCard(payload) {
     unreadCountElement.textContent = "—";
     badgeElement.textContent = "確認中";
     setActionBadge(0);
+    setActionTone(false);
     noteElement.textContent = "自分への連絡を確認しています。";
     return;
   }
@@ -639,23 +632,38 @@ function renderNotificationsCard(payload) {
     unreadCountElement.textContent = "—";
     badgeElement.textContent = "エラー";
     setActionBadge(0);
+    setActionTone(false);
     noteElement.textContent = payload.message;
     return;
   }
 
-  root.classList.add(payload.unreadCount > 0 ? "is-ready" : "is-empty");
+  const hasNotifications = payload.count > 0;
+  const hasUnread = payload.unreadCount > 0;
+
+  root.classList.add(hasNotifications ? "is-ready" : "is-empty");
   root.classList.toggle("has-unread", payload.unreadCount > 0);
-  statusElement.textContent = payload.unreadCount > 0 ? "未読あり" : "確認済み";
+  statusElement.textContent = hasUnread
+    ? "未読あり"
+    : hasNotifications
+      ? "確認済み"
+      : "連絡なし";
   countElement.textContent = String(payload.count);
   unreadCountElement.textContent = String(payload.unreadCount);
-  badgeElement.textContent = payload.unreadCount > 0 ? "未読あり" : "未読なし";
-  badgeElement.classList.toggle("is-muted", payload.unreadCount === 0);
+  badgeElement.textContent = hasUnread
+    ? "未読あり"
+    : hasNotifications
+      ? "確認済み"
+      : "連絡なし";
+  badgeElement.classList.toggle("is-muted", !hasUnread);
   setActionBadge(payload.unreadCount);
+  setActionTone(hasUnread);
   updateAppBadge(payload.unreadCount);
   noteElement.textContent =
-    payload.unreadCount > 0
+    hasUnread
       ? `${payload.count}件の連絡のうち、${payload.unreadCount}件が未読です。`
-      : "未読の連絡はありません。";
+      : hasNotifications
+        ? "届いている連絡はすべて確認済みです。"
+        : "今のところ連絡はありません。";
 }
 
 function renderNextScheduleCard(payload) {
@@ -979,30 +987,12 @@ function setupPushControls() {
   });
 }
 
-function setupPushDebugListener() {
-  // TEMP: Service Worker 受信 payload 確認用。確認後はこの listener を外してください。
-  if (typeof navigator === "undefined" || !navigator.serviceWorker) {
-    return;
-  }
-
-  navigator.serviceWorker.addEventListener("message", function (event) {
-    if (event.data?.type !== "PUSH_DEBUG") {
-      return;
-    }
-
-    console.log("[page] PUSH_DEBUG rawText", event.data.rawText);
-    console.log("[page] PUSH_DEBUG payload", event.data.payload);
-  });
-}
-
 async function initializePage() {
   state.helperEmail = getSavedHelperEmail();
   setupHelperEmailForm();
   setupPushControls();
-  setupPushDebugListener();
   renderHelperEmailPanel();
   renderPushControls();
-  await forceTestAppBadge();
   await registerPushServiceWorker();
   await syncExistingSubscriptionIfNeeded();
   await Promise.all([
