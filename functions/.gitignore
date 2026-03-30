@@ -4,5 +4,3 @@ functions/.env
 functions/.env.*
 node_modules/
 functions/node_modules/
-lib/
-functions/lib/

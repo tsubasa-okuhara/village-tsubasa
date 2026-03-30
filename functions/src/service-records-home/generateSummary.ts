@@ -1,33 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
-import dotenv from "dotenv";
 import type { Request, Response } from "express";
 import OpenAI from "openai";
-
-let envLoaded = false;
-
-function loadEnvIfNeeded(): void {
-  if (envLoaded) {
-    return;
-  }
-
-  const candidatePaths = [
-    path.resolve(process.cwd(), ".env"),
-    path.resolve(process.cwd(), "../.env"),
-    path.resolve(__dirname, "../../../.env"),
-  ];
-
-  for (const candidatePath of candidatePaths) {
-    if (!fs.existsSync(candidatePath)) {
-      continue;
-    }
-
-    dotenv.config({ path: candidatePath });
-    break;
-  }
-
-  envLoaded = true;
-}
 
 type HomeSummaryRequestBody = {
   helperName?: unknown;
@@ -110,8 +82,6 @@ export async function handleGenerateHomeSummary(
   req: Request,
   res: Response<HomeSummarySuccessResponse | HomeSummaryErrorResponse>,
 ): Promise<void> {
-  loadEnvIfNeeded();
-
   if (!isObject(req.body)) {
     res.status(400).json({
       ok: false,
@@ -138,7 +108,6 @@ export async function handleGenerateHomeSummary(
 
   try {
     const apiKey = process.env.OPENAI_API_KEY;
-    console.log("[home summary] using ai path");
 
     if (!apiKey) {
       res.status(200).json({
