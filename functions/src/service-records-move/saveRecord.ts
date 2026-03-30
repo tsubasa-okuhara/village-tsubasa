@@ -50,6 +50,13 @@ export async function handleServiceRecordsMoveSave(
 
   const taskId = getStringValue(req.body.taskId);
   const helperEmail = getStringValue(req.body.helperEmail);
+  const helperName = getStringValue(req.body.helperName);
+  const userName = getStringValue(req.body.userName);
+  const serviceDate = getStringValue(req.body.serviceDate);
+  const startTime = getStringValue(req.body.startTime);
+  const endTime = getStringValue(req.body.endTime);
+  const task = getStringValue(req.body.task);
+  const haisha = getStringValue(req.body.haisha);
   const notes = getStringValue(req.body.notes);
   const summaryText = getStringValue(req.body.summaryText);
 
@@ -64,20 +71,18 @@ export async function handleServiceRecordsMoveSave(
   try {
     const supabase = getSupabaseClient();
 
-    // TODO: service_notes_move の実カラム名に合わせて調整する。
     const insertPayload = {
-      schedule_task_move_id: taskId,
+      schedule_task_id: taskId,
       helper_email: helperEmail,
-      helper_name: getStringValue(req.body.helperName),
-      user_name: getStringValue(req.body.userName),
-      service_date: getStringValue(req.body.serviceDate),
-      start_time: getStringValue(req.body.startTime),
-      end_time: getStringValue(req.body.endTime),
-      task: getStringValue(req.body.task),
-      haisha: getStringValue(req.body.haisha),
+      helper_name: helperName,
+      user_name: userName,
+      service_date: serviceDate,
+      start_time: startTime,
+      end_time: endTime,
+      task,
+      haisha,
       notes,
       summary_text: summaryText,
-      created_at: new Date().toISOString(),
     };
 
     const { data: insertedRecord, error: insertError } = await supabase
@@ -108,10 +113,30 @@ export async function handleServiceRecordsMoveSave(
       .select("id");
 
     if (updateError) {
+      // INSERT済みのレコードを削除して整合性を保つ
+      const { error: rollbackError } = await supabase
+        .from("service_notes_move")
+        .delete()
+        .eq("id", recordId);
+
+      if (rollbackError) {
+        console.error("[service-records-move/save] rollback failed:", rollbackError);
+      }
+
       throw updateError;
     }
 
     if (!updatedRows || updatedRows.length === 0) {
+      // タスクが更新されなかった（既にwritten等）のでINSERTを取り消す
+      const { error: rollbackError } = await supabase
+        .from("service_notes_move")
+        .delete()
+        .eq("id", recordId);
+
+      if (rollbackError) {
+        console.error("[service-records-move/save] rollback failed:", rollbackError);
+      }
+
       res.status(409).json({
         ok: false,
         message: "move task was already updated or not found",
