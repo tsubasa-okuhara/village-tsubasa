@@ -81,12 +81,17 @@ function normalizeRequiredText(value, fieldName) {
 }
 
 async function fetchHomeUnwritten(helperEmail) {
-  const url = new URL(HOME_UNWRITTEN_API, window.location.origin);
   const normalizedHelperEmail = normalizeOptionalText(helperEmail);
 
-  if (normalizedHelperEmail) {
-    url.searchParams.set("helper_email", normalizedHelperEmail);
+  if (!normalizedHelperEmail) {
+    return {
+      ok: true,
+      items: [],
+    };
   }
+
+  const url = new URL(HOME_UNWRITTEN_API, window.location.origin);
+  url.searchParams.set("helper_email", normalizedHelperEmail);
 
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -173,6 +178,7 @@ const state = {
   selectedTask: null,
   selectedCategory: "身体介護",
   finalNoteTouched: false,
+  summaryReady: false,
 };
 
 function getRequiredElement(id) {
@@ -217,6 +223,10 @@ function setStatus(element, message, type) {
   if (type) {
     element.classList.add(type);
   }
+}
+
+function setSaveEnabled(saveButtonElement, enabled) {
+  saveButtonElement.disabled = !enabled;
 }
 
 function getInitialHelperEmail() {
@@ -839,8 +849,9 @@ function resetEntryFields(
     .querySelectorAll('input[type="checkbox"]')
     .forEach(function (inputElement) {
       inputElement.checked = false;
-    });
+  });
   state.finalNoteTouched = false;
+  state.summaryReady = false;
 }
 
 function syncDerivedFields(
@@ -904,6 +915,7 @@ async function loadHomeTasks(helperEmail, options) {
     memoElement,
     finalNoteElement,
     otherDetailElement,
+    saveButtonElement,
   } = options;
 
   setStatus(listStatusElement, "一覧を取得しています...");
@@ -931,6 +943,7 @@ async function loadHomeTasks(helperEmail, options) {
   );
   renderSelectedTask(selectedSummaryElement, saveStatusElement);
   renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
+  setSaveEnabled(saveButtonElement, false);
 
   try {
     const data = await fetchHomeUnwritten(helperEmail);
@@ -986,6 +999,7 @@ function initializeHomeUi() {
   const generateSummaryButtonElement = getRequiredElement(
     "home-generate-summary-button",
   );
+  const saveButtonElement = getRequiredElement("home-save-button");
   const clearButtonElement = getRequiredElement("home-clear-button");
   const saveStatusElement = getRequiredElement("home-records-save-status");
 
@@ -995,6 +1009,7 @@ function initializeHomeUi() {
     otherDetailFieldElement,
   );
   updateBodyCareChecklistVisibility(checklistElement, otherDetailFieldElement);
+  setSaveEnabled(saveButtonElement, false);
 
   filterFormElement.addEventListener("submit", async function (event) {
     event.preventDefault();
@@ -1013,6 +1028,7 @@ function initializeHomeUi() {
       memoElement,
       finalNoteElement,
       otherDetailElement,
+      saveButtonElement,
     });
   });
 
@@ -1051,6 +1067,7 @@ function initializeHomeUi() {
       otherDetailElement,
       checklistElement,
     );
+    setSaveEnabled(saveButtonElement, false);
   });
 
   clearButtonElement.addEventListener("click", function () {
@@ -1072,6 +1089,7 @@ function initializeHomeUi() {
       checklistElement,
     );
     setStatus(saveStatusElement, "");
+    setSaveEnabled(saveButtonElement, false);
   });
 
   categoryGroupElement
@@ -1090,6 +1108,7 @@ function initializeHomeUi() {
         );
         otherDetailElement.value = "";
         state.finalNoteTouched = false;
+        state.summaryReady = false;
         syncDerivedFields(
           taskElement,
           memoElement,
@@ -1097,6 +1116,7 @@ function initializeHomeUi() {
           otherDetailElement,
           checklistElement,
         );
+        setSaveEnabled(saveButtonElement, false);
       });
     });
 
@@ -1105,6 +1125,7 @@ function initializeHomeUi() {
       checklistElement,
       otherDetailFieldElement,
     );
+    state.summaryReady = false;
     syncDerivedFields(
       taskElement,
       memoElement,
@@ -1112,9 +1133,11 @@ function initializeHomeUi() {
       otherDetailElement,
       checklistElement,
     );
+    setSaveEnabled(saveButtonElement, false);
   });
 
   otherDetailElement.addEventListener("input", function () {
+    state.summaryReady = false;
     syncDerivedFields(
       taskElement,
       memoElement,
@@ -1122,9 +1145,11 @@ function initializeHomeUi() {
       otherDetailElement,
       checklistElement,
     );
+    setSaveEnabled(saveButtonElement, false);
   });
 
   memoElement.addEventListener("input", function () {
+    state.summaryReady = false;
     syncDerivedFields(
       taskElement,
       memoElement,
@@ -1132,10 +1157,12 @@ function initializeHomeUi() {
       otherDetailElement,
       checklistElement,
     );
+    setSaveEnabled(saveButtonElement, false);
   });
 
   finalNoteElement.addEventListener("input", function () {
     state.finalNoteTouched = true;
+    setSaveEnabled(saveButtonElement, state.summaryReady);
   });
 
   generateSummaryButtonElement.addEventListener("click", async function () {
@@ -1204,6 +1231,8 @@ function initializeHomeUi() {
 
       finalNoteElement.value = data.summaryText || "";
       state.finalNoteTouched = false;
+      state.summaryReady = true;
+      setSaveEnabled(saveButtonElement, true);
       setStatus(
         saveStatusElement,
         data.source === "fallback"
@@ -1213,6 +1242,8 @@ function initializeHomeUi() {
       );
     } catch (error) {
       console.error("[service-records-home] summary error:", error);
+      state.summaryReady = false;
+      setSaveEnabled(saveButtonElement, false);
       setStatus(
         saveStatusElement,
         error instanceof Error ? error.message : "AI要約の作成に失敗しました。",
@@ -1272,11 +1303,6 @@ function initializeHomeUi() {
         memoElement.value,
       );
 
-      console.log("DEBUG category:", state.selectedCategory);
-      console.log("DEBUG primaryItems:", derived.primaryItems);
-      console.log("DEBUG subItems:", derived.subItems);
-      console.log("DEBUG structuredLog:", structuredLog);
-
       await saveHomeRecord({
         scheduleTaskId: state.selectedTask.id,
         serviceDate: state.selectedTask.service_date,
@@ -1319,6 +1345,7 @@ function initializeHomeUi() {
         `${state.items.length} 件の未記入予定があります。`,
         "is-success",
       );
+      setSaveEnabled(saveButtonElement, false);
     } catch (error) {
       console.error("[service-records-home] save error:", error);
       setStatus(
@@ -1348,6 +1375,7 @@ function initializeHomeUi() {
       memoElement,
       finalNoteElement,
       otherDetailElement,
+      saveButtonElement,
     });
   }
 }

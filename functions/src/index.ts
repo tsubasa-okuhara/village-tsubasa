@@ -11,6 +11,7 @@ import { handleNextHelperSchedule } from "./nextHelperSchedule";
 import { handleTodayHelperSummary } from "./todayHelperSummary";
 import { handleTomorrowHelperSummary } from "./tomorrowHelperSummary";
 
+import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
 import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
 import { handleSaveHomeRecord } from "./service-records-home/saveRecord";
 
@@ -65,6 +66,8 @@ app.get("/api/tomorrow-helper-summary", handleTomorrowHelperSummary);
 app.get("/next-helper-schedule", handleNextHelperSchedule);
 app.get("/api/next-helper-schedule", handleNextHelperSchedule);
 
+app.post("/service-records-home/summary", handleGenerateHomeSummary);
+app.post("/api/service-records-home/summary", handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
 app.post("/service-records-home/save", handleSaveHomeRecord);
