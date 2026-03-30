@@ -52,6 +52,7 @@ const state = {
   items: [],
   selectedTask: null,
   structuredOptions: FALLBACK_STRUCTURED_OPTIONS,
+  pendingStructuredSourceNoteId: null,
 };
 
 function getRequiredElement(id) {
@@ -112,6 +113,10 @@ const generateSummaryButtonElement = getRequiredElement(
   "move-generate-summary-button",
 );
 const saveStatusElement = getRequiredElement("move-records-save-status");
+const saveRetryAreaElement = getRequiredElement("move-save-retry-area");
+const retrySaveButtonElement = getRequiredElement("move-retry-save-button");
+const structuredRetryAreaElement = getRequiredElement("move-structured-retry-area");
+const retryStructuredButtonElement = getRequiredElement("move-retry-structured-button");
 const physicalStateElement = getRequiredElement("structured-physical-state");
 const mentalStateElement = getRequiredElement("structured-mental-state");
 const riskFlagsElement = getRequiredElement("structured-risk-flags");
@@ -219,6 +224,11 @@ function normalizeOptionalNumber(value) {
   return Number.isFinite(parsedValue) ? parsedValue : null;
 }
 
+function normalizeOptionalText(value) {
+  const normalizedValue = String(value ?? "").trim();
+  return normalizedValue || null;
+}
+
 function resetStructuredForm() {
   physicalStateElement.value = "";
   mentalStateElement.value = "";
@@ -251,8 +261,8 @@ function resetStructuredForm() {
 }
 
 function buildStructuredPayload(sourceNoteId) {
-  const actionType = String(actionTypeElement.value || "").trim();
-  const eventType = String(eventTypeElement.value || "").trim();
+  const actionType = normalizeOptionalText(actionTypeElement.value);
+  const eventType = normalizeOptionalText(eventTypeElement.value);
   const riskFlags = getCheckedValues(riskFlagsElement);
 
   const payload = {
@@ -265,16 +275,16 @@ function buildStructuredPayload(sourceNoteId) {
     serviceDate: state.selectedTask ? state.selectedTask.serviceDate : null,
     startTime: state.selectedTask ? state.selectedTask.startTime : null,
     endTime: state.selectedTask ? state.selectedTask.endTime : null,
-    location: String(locationElement.value || "").trim() || null,
-    locationNote: String(locationNoteElement.value || "").trim() || null,
-    timeOfDay: String(timeOfDayElement.value || "").trim() || null,
+    location: normalizeOptionalText(locationElement.value),
+    locationNote: normalizeOptionalText(locationNoteElement.value),
+    timeOfDay: normalizeOptionalText(timeOfDayElement.value),
     temperature: normalizeOptionalNumber(temperatureElement.value),
-    physicalState: String(physicalStateElement.value || "").trim() || null,
-    mentalState: String(mentalStateElement.value || "").trim() || null,
+    physicalState: normalizeOptionalText(physicalStateElement.value),
+    mentalState: normalizeOptionalText(mentalStateElement.value),
     riskFlags,
-    actionResult: String(actionResultElement.value || "").trim() || null,
-    difficulty: String(difficultyElement.value || "").trim() || null,
-    assistLevel: String(assistLevelElement.value || "").trim() || null,
+    actionResult: normalizeOptionalText(actionResultElement.value),
+    difficulty: normalizeOptionalText(difficultyElement.value),
+    assistLevel: normalizeOptionalText(assistLevelElement.value),
     actions: [],
     irregularEvents: [],
   };
@@ -282,12 +292,12 @@ function buildStructuredPayload(sourceNoteId) {
   if (actionType) {
     payload.actions.push({
       actionType,
-      actionDetail: String(actionDetailElement.value || "").trim() || null,
-      actionDetailOther: String(actionDetailOtherElement.value || "").trim() || null,
-      actor: String(actorElement.value || "").trim() || "helper",
-      target: String(targetElement.value || "").trim() || "利用者",
-      startTime: String(actionStartTimeElement.value || "").trim() || null,
-      endTime: String(actionEndTimeElement.value || "").trim() || null,
+      actionDetail: normalizeOptionalText(actionDetailElement.value),
+      actionDetailOther: normalizeOptionalText(actionDetailOtherElement.value),
+      actor: normalizeOptionalText(actorElement.value) || "helper",
+      target: normalizeOptionalText(targetElement.value) || "利用者",
+      startTime: normalizeOptionalText(actionStartTimeElement.value),
+      endTime: normalizeOptionalText(actionEndTimeElement.value),
       duration: normalizeOptionalNumber(durationElement.value),
       actionResult: payload.actionResult,
       difficulty: payload.difficulty,
@@ -298,8 +308,8 @@ function buildStructuredPayload(sourceNoteId) {
   if (eventType) {
     payload.irregularEvents.push({
       eventType,
-      beforeState: String(beforeStateElement.value || "").trim() || null,
-      afterAction: String(afterActionElement.value || "").trim() || null,
+      beforeState: normalizeOptionalText(beforeStateElement.value),
+      afterAction: normalizeOptionalText(afterActionElement.value),
     });
   }
 
@@ -307,23 +317,32 @@ function buildStructuredPayload(sourceNoteId) {
 }
 
 function hasStructuredInput() {
+  const actionStartTime = normalizeOptionalText(actionStartTimeElement.value);
+  const actionEndTime = normalizeOptionalText(actionEndTimeElement.value);
+  const duration = normalizeOptionalNumber(durationElement.value);
+  const checkedRiskFlags = getCheckedValues(riskFlagsElement);
+
   return Boolean(
-    physicalStateElement.value ||
-      mentalStateElement.value ||
-      assistLevelElement.value ||
-      actionResultElement.value ||
-      difficultyElement.value ||
-      timeOfDayElement.value ||
-      actionTypeElement.value ||
-      actionDetailElement.value ||
-      String(actionDetailOtherElement.value || "").trim() ||
-      locationElement.value ||
-      String(locationNoteElement.value || "").trim() ||
-      String(temperatureElement.value || "").trim() ||
-      eventTypeElement.value ||
-      String(beforeStateElement.value || "").trim() ||
-      String(afterActionElement.value || "").trim() ||
-      getCheckedValues(riskFlagsElement).length > 0
+    normalizeOptionalText(physicalStateElement.value) ||
+      normalizeOptionalText(mentalStateElement.value) ||
+      normalizeOptionalText(assistLevelElement.value) ||
+      normalizeOptionalText(actionResultElement.value) ||
+      normalizeOptionalText(difficultyElement.value) ||
+      normalizeOptionalText(timeOfDayElement.value) ||
+      normalizeOptionalText(actionTypeElement.value) ||
+      normalizeOptionalText(actionDetailElement.value) ||
+      normalizeOptionalText(actionDetailOtherElement.value) ||
+      normalizeOptionalText(locationElement.value) ||
+      normalizeOptionalText(locationNoteElement.value) ||
+      normalizeOptionalNumber(temperatureElement.value) !== null ||
+      normalizeOptionalText(eventTypeElement.value) ||
+      normalizeOptionalText(beforeStateElement.value) ||
+      normalizeOptionalText(afterActionElement.value) ||
+      actionStartTime ||
+      actionEndTime ||
+      duration !== null ||
+      String(actorElement.value || "").trim() === "user" ||
+      checkedRiskFlags.length > 0
   );
 }
 
@@ -476,9 +495,23 @@ async function generateSummary() {
   }
 }
 
-async function saveRecord(event) {
-  event.preventDefault();
+async function saveStructuredRecord(sourceNoteId) {
+  const structuredResponse = await fetch(STRUCTURED_SAVE_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(buildStructuredPayload(sourceNoteId)),
+  });
 
+  const structuredData = await structuredResponse.json();
+
+  if (!structuredResponse.ok || !structuredData.ok) {
+    throw new Error(structuredData.message || "failed to save structured record");
+  }
+}
+
+async function doSaveRecord() {
   if (!state.selectedTask) {
     setStatus(
       saveStatusElement,
@@ -500,6 +533,7 @@ async function saveRecord(event) {
     return;
   }
 
+  saveRetryAreaElement.hidden = true;
   setStatus(saveStatusElement, "保存しています...");
 
   const payload = {
@@ -531,49 +565,46 @@ async function saveRecord(event) {
       throw new Error(data.message || "failed to save move record");
     }
 
+    const sourceNoteId = String(data.recordId || "").trim();
     let structuredSaveFailed = false;
 
     if (hasStructuredInput()) {
       try {
-        const sourceNoteId = String(data.recordId || "").trim();
-
         if (!sourceNoteId) {
           throw new Error("missing move record id");
         }
 
-        const structuredResponse = await fetch(STRUCTURED_SAVE_ENDPOINT, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(buildStructuredPayload(sourceNoteId)),
-        });
-
-        const structuredData = await structuredResponse.json();
-
-        if (!structuredResponse.ok || !structuredData.ok) {
-          throw new Error(structuredData.message || "failed to save structured record");
-        }
+        await saveStructuredRecord(sourceNoteId);
       } catch (error) {
         structuredSaveFailed = true;
         console.error("[service-records-move] structured save error:", error);
       }
     }
 
-    setStatus(
-      saveStatusElement,
-      structuredSaveFailed
-        ? "記録本文は保存しました。構造化ログの保存に失敗したため、必要なら再入力してください。"
-        : "保存しました。未記入予定一覧を再読み込みします。",
-      structuredSaveFailed ? "is-error" : "is-success",
-    );
     notesElement.value = "";
     summaryTextElement.value = "";
-    resetStructuredForm();
-    state.selectedTask = null;
+
+    if (structuredSaveFailed) {
+      state.pendingStructuredSourceNoteId = sourceNoteId;
+      structuredRetryAreaElement.hidden = false;
+      setStatus(
+        saveStatusElement,
+        "記録本文は保存しました。構造化ログの保存に失敗しました。内容を確認して再保存してください。",
+        "is-error",
+      );
+    } else {
+      structuredRetryAreaElement.hidden = true;
+      state.pendingStructuredSourceNoteId = null;
+      resetStructuredForm();
+      state.selectedTask = null;
+      setStatus(saveStatusElement, "保存しました。未記入予定一覧を再読み込みします。", "is-success");
+    }
+
     state.items = await fetchUnwrittenTasks(state.helperEmail);
     renderTaskList();
-    renderSelectedTask();
+    if (!structuredSaveFailed) {
+      renderSelectedTask();
+    }
     setStatus(
       listStatusElement,
       `${state.items.length}件の未記入予定を表示しています。helper_email: ${state.helperEmail}`,
@@ -581,7 +612,36 @@ async function saveRecord(event) {
     );
   } catch (error) {
     console.error("[service-records-move] save error:", error);
-    setStatus(saveStatusElement, "保存に失敗しました。", "is-error");
+    setStatus(saveStatusElement, "保存に失敗しました。時間をおいて再試行してください。", "is-error");
+    saveRetryAreaElement.hidden = false;
+  }
+}
+
+async function retryStructuredRecord() {
+  const sourceNoteId = state.pendingStructuredSourceNoteId;
+
+  if (!sourceNoteId) {
+    setStatus(saveStatusElement, "再保存に必要な情報がありません。", "is-error");
+    return;
+  }
+
+  retryStructuredButtonElement.disabled = true;
+  setStatus(saveStatusElement, "構造化ログを再保存しています...");
+
+  try {
+    await saveStructuredRecord(sourceNoteId);
+
+    structuredRetryAreaElement.hidden = true;
+    state.pendingStructuredSourceNoteId = null;
+    resetStructuredForm();
+    state.selectedTask = null;
+    renderSelectedTask();
+    setStatus(saveStatusElement, "構造化ログを保存しました。", "is-success");
+  } catch (error) {
+    console.error("[service-records-move] structured retry error:", error);
+    setStatus(saveStatusElement, "構造化ログの再保存に失敗しました。再度お試しください。", "is-error");
+  } finally {
+    retryStructuredButtonElement.disabled = false;
   }
 }
 
@@ -627,6 +687,11 @@ filterFormElement.addEventListener("submit", async function (event) {
 
 actionTypeElement.addEventListener("change", renderActionDetailOptions);
 generateSummaryButtonElement.addEventListener("click", generateSummary);
-entryFormElement.addEventListener("submit", saveRecord);
+entryFormElement.addEventListener("submit", function (event) {
+  event.preventDefault();
+  doSaveRecord();
+});
+retrySaveButtonElement.addEventListener("click", doSaveRecord);
+retryStructuredButtonElement.addEventListener("click", retryStructuredRecord);
 loadStructuredOptions();
 resetStructuredForm();
