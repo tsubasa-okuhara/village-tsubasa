@@ -11,6 +11,9 @@ import { handleNextHelperSchedule } from "./nextHelperSchedule";
 import { handleTodayHelperSummary } from "./todayHelperSummary";
 import { handleTomorrowHelperSummary } from "./tomorrowHelperSummary";
 
+import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
+import { handleSaveHomeRecord } from "./service-records-home/saveRecord";
+
 import {
   handleGetPushPublicKey,
   handleSendTestPush,
@@ -62,6 +65,11 @@ app.get("/api/tomorrow-helper-summary", handleTomorrowHelperSummary);
 app.get("/next-helper-schedule", handleNextHelperSchedule);
 app.get("/api/next-helper-schedule", handleNextHelperSchedule);
 
+app.get("/service-records-home/unwritten", handleListUnwrittenHome);
+app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
+app.post("/service-records-home/save", handleSaveHomeRecord);
+app.post("/api/service-records-home/save", handleSaveHomeRecord);
+
 export const api = onRequest(
   {
     region: "asia-northeast1",
@@ -94,8 +102,6 @@ export const api = onRequest(
 // import { handleScheduleList } from "./scheduleList";
 // import { handleScheduleSync } from "./scheduleSync";
 // import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
-// import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
-// import { handleSaveHomeRecord } from "./service-records-home/saveRecord";
 // import { serviceRecordsMoveRouter } from "./service-records-move/routes";
 // import { serviceRecordsStructuredRouter } from "./service-records-structured/routes";
 // import { handleTodayHelperSummary } from "./todayHelperSummary";
@@ -153,10 +159,6 @@ export const api = onRequest(
 // app.all("/api/schedule-sync", handleScheduleSync);
 // app.post("/service-records-home/summary", handleGenerateHomeSummary);
 // app.post("/api/service-records-home/summary", handleGenerateHomeSummary);
-// app.get("/service-records-home/unwritten", handleListUnwrittenHome);
-// app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
-// app.post("/service-records-home/save", handleSaveHomeRecord);
-// app.post("/api/service-records-home/save", handleSaveHomeRecord);
 // app.use("/api/move-check", moveCheckRouter);
 // app.use("/service-records-move", serviceRecordsMoveRouter);
 // app.use("/api/service-records-move", serviceRecordsMoveRouter);

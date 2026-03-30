@@ -12,6 +12,18 @@ type SaveHomeRecordRequestBody = {
   memo?: string | null;
   aiSummary?: string | null;
   finalNote: string;
+  structuredLog?: StructuredLogInput | null;
+};
+
+type StructuredLogInput = {
+  actionType?: string | null;
+  actionDetail?: string | null;
+  assistLevel?: string | null;
+  physicalState?: string | null;
+  mentalState?: string | null;
+  riskFlag?: string | null;
+  actionResult?: string | null;
+  difficulty?: string | null;
 };
 
 type ServiceNoteHomeInsertRow = {
@@ -24,6 +36,21 @@ type ServiceNoteHomeInsertRow = {
   memo: string | null;
   ai_summary: string | null;
   final_note: string;
+};
+
+type ServiceActionLogHomeInsertRow = {
+  service_note_id: string;
+  schedule_task_id: string;
+  action_type: string | null;
+  action_detail: string | null;
+  actor: string;
+  target: string;
+  assist_level: string | null;
+  physical_state: string | null;
+  mental_state: string | null;
+  risk_flag: string | null;
+  action_result: string | null;
+  difficulty: string | null;
 };
 
 type ServiceNoteHomeInsertedRow = {
@@ -64,7 +91,26 @@ function normalizeRequiredText(value: unknown): string | null {
   return trimmedValue === "" ? null : trimmedValue;
 }
 
-function parseSaveHomeRecordBody(body: unknown): SaveHomeRecordRequestBody | null {
+function parseStructuredLog(value: unknown): StructuredLogInput | null {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  return {
+    actionType: normalizeOptionalText(value.actionType),
+    actionDetail: normalizeOptionalText(value.actionDetail),
+    assistLevel: normalizeOptionalText(value.assistLevel),
+    physicalState: normalizeOptionalText(value.physicalState),
+    mentalState: normalizeOptionalText(value.mentalState),
+    riskFlag: normalizeOptionalText(value.riskFlag),
+    actionResult: normalizeOptionalText(value.actionResult),
+    difficulty: normalizeOptionalText(value.difficulty),
+  };
+}
+
+function parseSaveHomeRecordBody(
+  body: unknown,
+): SaveHomeRecordRequestBody | null {
   if (!isObject(body)) {
     return null;
   }
@@ -78,8 +124,15 @@ function parseSaveHomeRecordBody(body: unknown): SaveHomeRecordRequestBody | nul
   const memo = normalizeOptionalText(body.memo);
   const aiSummary = normalizeOptionalText(body.aiSummary);
   const finalNote = normalizeRequiredText(body.finalNote);
+  const structuredLog = parseStructuredLog(body.structuredLog);
 
-  if (!scheduleTaskId || !serviceDate || !helperName || !userName || !finalNote) {
+  if (
+    !scheduleTaskId ||
+    !serviceDate ||
+    !helperName ||
+    !userName ||
+    !finalNote
+  ) {
     return null;
   }
 
@@ -93,21 +146,42 @@ function parseSaveHomeRecordBody(body: unknown): SaveHomeRecordRequestBody | nul
     memo,
     aiSummary,
     finalNote,
+    structuredLog,
   };
 }
 
 async function rollbackInsertedHomeRecord(recordId: string): Promise<void> {
   const supabase = getSupabaseClient();
-  const { error } = await supabase.from("service_notes_home").delete().eq("id", recordId);
+  const { error } = await supabase
+    .from("service_notes_home")
+    .delete()
+    .eq("id", recordId);
 
   if (error) {
     console.error("[service-records-home/save] rollback error:", error);
   }
 }
 
+async function rollbackInsertedHomeStructuredLog(
+  serviceNoteId: string,
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from("service_action_logs_home")
+    .delete()
+    .eq("service_note_id", serviceNoteId);
+
+  if (error) {
+    console.error(
+      "[service-records-home/save] structured log rollback error:",
+      error,
+    );
+  }
+}
+
 export async function handleSaveHomeRecord(
   req: Request,
-  res: Response<SaveHomeRecordSuccessResponse | SaveHomeRecordErrorResponse>
+  res: Response<SaveHomeRecordSuccessResponse | SaveHomeRecordErrorResponse>,
 ): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({
@@ -153,6 +227,32 @@ export async function handleSaveHomeRecord(
 
     const insertedRecordId = (insertedRecord as ServiceNoteHomeInsertedRow).id;
 
+    if (parsedBody.structuredLog) {
+      const structuredLogPayload: ServiceActionLogHomeInsertRow = {
+        service_note_id: insertedRecordId,
+        schedule_task_id: parsedBody.scheduleTaskId,
+        action_type: parsedBody.structuredLog.actionType ?? null,
+        action_detail: parsedBody.structuredLog.actionDetail ?? null,
+        actor: "helper",
+        target: parsedBody.userName,
+        assist_level: parsedBody.structuredLog.assistLevel ?? null,
+        physical_state: parsedBody.structuredLog.physicalState ?? null,
+        mental_state: parsedBody.structuredLog.mentalState ?? null,
+        risk_flag: parsedBody.structuredLog.riskFlag ?? null,
+        action_result: parsedBody.structuredLog.actionResult ?? null,
+        difficulty: parsedBody.structuredLog.difficulty ?? null,
+      };
+
+      const { error: structuredLogError } = await supabase
+        .from("service_action_logs_home")
+        .insert(structuredLogPayload);
+
+      if (structuredLogError) {
+        await rollbackInsertedHomeRecord(insertedRecordId);
+        throw structuredLogError;
+      }
+    }
+
     const { data: updatedTask, error: updateError } = await supabase
       .from("home_schedule_tasks")
       .update({ status: "written" })
@@ -162,11 +262,17 @@ export async function handleSaveHomeRecord(
       .maybeSingle();
 
     if (updateError) {
+      if (parsedBody.structuredLog) {
+        await rollbackInsertedHomeStructuredLog(insertedRecordId);
+      }
       await rollbackInsertedHomeRecord(insertedRecordId);
       throw updateError;
     }
 
     if (!updatedTask) {
+      if (parsedBody.structuredLog) {
+        await rollbackInsertedHomeStructuredLog(insertedRecordId);
+      }
       await rollbackInsertedHomeRecord(insertedRecordId);
       res.status(409).json({
         ok: false,
