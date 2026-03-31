@@ -44,10 +44,6 @@ self.addEventListener("push", function (event) {
     };
   }
 
-  // TEMP: Push payload 確認用。確認後はこのログを外してください。
-  console.log("[sw] raw push payload", rawText);
-  console.log("[sw] parsed push payload", payload);
-
   const title = typeof payload.title === "string" && payload.title ? payload.title : "通知";
   const body = typeof payload.body === "string" ? payload.body : "";
   const icon = typeof payload.icon === "string" && payload.icon ? payload.icon : "/icons/app-icon.svg";
