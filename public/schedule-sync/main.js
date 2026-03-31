@@ -37,6 +37,7 @@ const dayModalCloseElement = getRequiredElement("day-modal-close");
 const dayModalTitleElement = getRequiredElement("day-modal-title");
 const dayModalMetaElement = getRequiredElement("day-modal-meta");
 const dayModalBodyElement = getRequiredElement("day-modal-body");
+const fetchErrorBannerElement = getRequiredElement("fetch-error-banner");
 
 function getCurrentViewState() {
   return {
@@ -142,6 +143,7 @@ function setCurrentMonth(year, month) {
 function getMockScheduleData(year, month) {
   return {
     ok: true,
+    isMock: true,
     year: year,
     month: month,
     items: [
@@ -663,6 +665,7 @@ function renderScheduleView() {
     return;
   }
 
+  fetchErrorBannerElement.hidden = !state.rawData.isMock;
   updateMonthLabels(state.currentYear, state.currentMonth);
   renderHelperOptions();
 
