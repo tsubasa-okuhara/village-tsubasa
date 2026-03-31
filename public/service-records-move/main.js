@@ -92,7 +92,7 @@ function formatTimeRange(item) {
 
 function setStatus(element, message, type) {
   element.textContent = message;
-  element.classList.remove("is-error", "is-success");
+  element.classList.remove("is-error", "is-success", "is-warning");
 
   if (type) {
     element.classList.add(type);
@@ -482,13 +482,19 @@ async function generateSummary() {
     }
 
     summaryTextElement.value = data.summaryText || "";
-    setStatus(
-      saveStatusElement,
-      data.source === "fallback"
-        ? "フォールバックの記録案を表示しました。内容を確認して保存してください。"
-        : "AI 記録案を表示しました。内容を確認して保存してください。",
-      "is-success",
-    );
+    if (data.source === "fallback") {
+      setStatus(
+        saveStatusElement,
+        "AI 要約の生成に失敗しました。テンプレートを表示しています。内容を確認して保存してください。",
+        "is-warning",
+      );
+    } else {
+      setStatus(
+        saveStatusElement,
+        "AI 記録案を表示しました。内容を確認して保存してください。",
+        "is-success",
+      );
+    }
   } catch (error) {
     console.error("[service-records-move] summary error:", error);
     setStatus(saveStatusElement, "AI 記録案の作成に失敗しました。", "is-error");

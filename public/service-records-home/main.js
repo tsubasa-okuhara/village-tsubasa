@@ -218,7 +218,7 @@ function formatTimeRange(item) {
 
 function setStatus(element, message, type) {
   element.textContent = message || "";
-  element.classList.remove("is-error", "is-success");
+  element.classList.remove("is-error", "is-success", "is-warning");
 
   if (type) {
     element.classList.add(type);
@@ -1233,13 +1233,19 @@ function initializeHomeUi() {
       state.finalNoteTouched = false;
       state.summaryReady = true;
       setSaveEnabled(saveButtonElement, true);
-      setStatus(
-        saveStatusElement,
-        data.source === "fallback"
-          ? "フォールバックの記録文を反映しました。"
-          : "AI要約を記録本文に反映しました。",
-        "is-success",
-      );
+      if (data.source === "fallback") {
+        setStatus(
+          saveStatusElement,
+          "AI 要約の生成に失敗しました。テンプレートを表示しています。内容を確認して保存してください。",
+          "is-warning",
+        );
+      } else {
+        setStatus(
+          saveStatusElement,
+          "AI要約を記録本文に反映しました。内容を確認して保存してください。",
+          "is-success",
+        );
+      }
     } catch (error) {
       console.error("[service-records-home] summary error:", error);
       state.summaryReady = false;
