@@ -6,18 +6,6 @@ self.addEventListener("activate", function (event) {
   event.waitUntil(self.clients.claim());
 });
 
-async function broadcastPushDebugMessage(message) {
-  // TEMP: Push payload 確認用。確認後はこの関数呼び出しを外してください。
-  const clients = await self.clients.matchAll({
-    type: "window",
-    includeUncontrolled: true,
-  });
-
-  for (const client of clients) {
-    client.postMessage(message);
-  }
-}
-
 async function updateAppBadge(count) {
   try {
     if (!self.navigator) {
@@ -76,11 +64,6 @@ self.addEventListener("push", function (event) {
 
   event.waitUntil(
     Promise.all([
-      broadcastPushDebugMessage({
-        type: "PUSH_DEBUG",
-        rawText,
-        payload,
-      }),
       hasUnreadCount ? updateAppBadge(unreadCount) : Promise.resolve(),
       self.registration.showNotification(title, {
         body,
