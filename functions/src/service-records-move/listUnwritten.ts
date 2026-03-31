@@ -6,14 +6,16 @@ type MoveUnwrittenRow = {
   id: string;
   helper_email: string | null;
   status: string | null;
-  date: string | null;
+  service_date: string | null;
   start_time: string | null;
   end_time: string | null;
   user_name: string | null;
   helper_name: string | null;
-  haisha: string | null;
   task: string | null;
   summary: string | null;
+  summary_text: string | null;
+  haisha: string | null;
+  beneficiary_number: string | null;
   [key: string]: unknown;
 };
 
@@ -28,6 +30,8 @@ type MoveUnwrittenItem = {
   haisha: string;
   task: string;
   summary: string;
+  summaryText: string;
+  beneficiaryNumber: string;
   raw: MoveUnwrittenRow;
 };
 
@@ -54,7 +58,7 @@ function toItem(row: MoveUnwrittenRow): MoveUnwrittenItem {
   return {
     taskId: String(row.id ?? ""),
     helperEmail: String(row.helper_email ?? ""),
-    serviceDate: String(row.date ?? ""),
+    serviceDate: String(row.service_date ?? ""),
     startTime: String(row.start_time ?? ""),
     endTime: String(row.end_time ?? ""),
     userName: String(row.user_name ?? ""),
@@ -62,6 +66,8 @@ function toItem(row: MoveUnwrittenRow): MoveUnwrittenItem {
     haisha: String(row.haisha ?? ""),
     task: String(row.task ?? ""),
     summary: String(row.summary ?? ""),
+    summaryText: String(row.summary_text ?? ""),
+    beneficiaryNumber: String(row.beneficiary_number ?? ""),
     raw: row,
   };
 }
@@ -85,21 +91,30 @@ export async function handleServiceRecordsMoveListUnwritten(
   });
 
   try {
-    let supabase;
-
-    try {
-      supabase = getSupabaseClient();
-    } catch (error) {
-      console.error("[service-records-move/unwritten] supabase init error:", error);
-      throw error;
-    }
+    const supabase = getSupabaseClient();
 
     const { data, error } = await supabase
       .from("schedule_tasks_move")
-      .select("*")
+      .select(
+        `
+          id,
+          helper_email,
+          status,
+          service_date,
+          start_time,
+          end_time,
+          user_name,
+          helper_name,
+          task,
+          summary,
+          summary_text,
+          haisha,
+          beneficiary_number
+        `,
+      )
       .eq("helper_email", helperEmail)
       .eq("status", "unwritten")
-      .order("date", { ascending: true })
+      .order("service_date", { ascending: true })
       .order("start_time", { ascending: true });
 
     if (error) {
