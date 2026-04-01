@@ -582,3 +582,37 @@ input {
     min-height: 50px;
   }
 }
+
+/* ---- 移動支援シフトカレンダーリンク ---- */
+.shift-calendar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 16px 20px;
+  background: #fffbf2;
+  border: 1.5px solid #e8d5a3;
+  border-radius: 16px;
+  text-decoration: none;
+  color: #5a4a2a;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.shift-calendar-link:hover,
+.shift-calendar-link:active {
+  background: #fef3d0;
+  box-shadow: 0 2px 8px rgba(180,140,60,.15);
+}
+.shift-calendar-link__icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+.shift-calendar-link__text {
+  flex: 1;
+}
+.shift-calendar-link__arrow {
+  font-size: 1rem;
+  color: #b8860b;
+  flex-shrink: 0;
+}
