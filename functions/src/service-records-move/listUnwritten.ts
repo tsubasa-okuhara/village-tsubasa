@@ -14,7 +14,6 @@ type MoveUnwrittenRow = {
   task: string | null;
   summary: string | null;
   summary_text: string | null;
-  haisha: string | null;
   beneficiary_number: string | null;
   [key: string]: unknown;
 };
@@ -27,7 +26,6 @@ type MoveUnwrittenItem = {
   endTime: string;
   userName: string;
   helperName: string;
-  haisha: string;
   task: string;
   summary: string;
   summaryText: string;
@@ -63,7 +61,6 @@ function toItem(row: MoveUnwrittenRow): MoveUnwrittenItem {
     endTime: String(row.end_time ?? ""),
     userName: String(row.user_name ?? ""),
     helperName: String(row.helper_name ?? ""),
-    haisha: String(row.haisha ?? ""),
     task: String(row.task ?? ""),
     summary: String(row.summary ?? ""),
     summaryText: String(row.summary_text ?? ""),
@@ -108,7 +105,6 @@ export async function handleServiceRecordsMoveListUnwritten(
           task,
           summary,
           summary_text,
-          haisha,
           beneficiary_number
         `,
       )
