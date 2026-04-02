@@ -400,13 +400,16 @@ function applyFilters(data) {
 }
 
 function getHelperOptions(items) {
-  return Array.from(new Set(
-    (Array.isArray(items) ? items : [])
-      .map(function (item) {
-        return String(item.helperName || "").trim();
-      })
-      .filter(Boolean)
-  )).sort(function (a, b) {
+  const names = [];
+  (Array.isArray(items) ? items : []).forEach(function (item) {
+    const raw = String(item.helperName || "").trim();
+    // 全角・半角スペースで分割して個別名を抽出
+    raw.split(/[\s\u3000]+/).forEach(function (name) {
+      const n = name.trim();
+      if (n) names.push(n);
+    });
+  });
+  return Array.from(new Set(names)).sort(function (a, b) {
     return a.localeCompare(b, "ja");
   });
 }
