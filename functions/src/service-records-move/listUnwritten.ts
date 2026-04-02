@@ -108,7 +108,7 @@ export async function handleServiceRecordsMoveListUnwritten(
           beneficiary_number
         `,
       )
-      .eq("helper_email", helperEmail)
+      .ilike("helper_email", helperEmail)
       .eq("status", "unwritten")
       .order("service_date", { ascending: true })
       .order("start_time", { ascending: true });

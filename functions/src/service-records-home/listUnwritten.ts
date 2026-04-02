@@ -67,7 +67,7 @@ export async function handleListUnwrittenHome(
       .order("helper_name", { ascending: true });
 
     if (helperEmailFilter) {
-      query = query.eq("helper_email", helperEmailFilter);
+      query = query.ilike("helper_email", helperEmailFilter);
     }
 
     const { data, error } = await query;
