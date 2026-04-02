@@ -399,6 +399,13 @@ function applyFilters(data) {
   };
 }
 
+// 人名でないキーワードパターン（休み・点検・研修など）
+var NON_HELPER_PATTERN = /休|点検|研修|フリード|確認|行事|会議|ミーティング|お知らせ/;
+
+function isHelperName(name) {
+  return !NON_HELPER_PATTERN.test(name);
+}
+
 function getHelperOptions(items) {
   const names = [];
   (Array.isArray(items) ? items : []).forEach(function (item) {
@@ -409,23 +416,29 @@ function getHelperOptions(items) {
       if (n) names.push(n);
     });
   });
-  return Array.from(new Set(names)).sort(function (a, b) {
-    return a.localeCompare(b, "ja");
-  });
+  const unique = Array.from(new Set(names));
+  const helpers = unique.filter(isHelperName).sort(function (a, b) { return a.localeCompare(b, "ja"); });
+  const others  = unique.filter(function (n) { return !isHelperName(n); }).sort(function (a, b) { return a.localeCompare(b, "ja"); });
+  return { helpers: helpers, others: others };
 }
 
 function renderHelperOptions() {
-  const options = getHelperOptions(state.rawData?.items);
+  const { helpers, others } = getHelperOptions(state.rawData?.items);
   const currentValue = state.selectedHelper;
 
-  helperSelectElement.innerHTML = [
-    '<option value="">すべてのヘルパー</option>',
-  ]
-    .concat(options.map(function (helperName) {
-      const selected = helperName === currentValue ? ' selected' : "";
-      return `<option value="${escapeHtml(helperName)}"${selected}>${escapeHtml(helperName)}</option>`;
-    }))
-    .join("");
+  function toOption(name) {
+    const selected = name === currentValue ? ' selected' : "";
+    return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name)}</option>`;
+  }
+
+  let html = '<option value="">すべてのヘルパー</option>';
+  html += helpers.map(toOption).join("");
+  if (others.length > 0) {
+    html += `<optgroup label="─── その他 ───">`;
+    html += others.map(toOption).join("");
+    html += `</optgroup>`;
+  }
+  helperSelectElement.innerHTML = html;
 }
 
 function getItemsByDate(date) {
