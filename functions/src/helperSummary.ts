@@ -100,7 +100,7 @@ export async function fetchHelperSummaryByDate(
 ): Promise<HelperSummaryItem[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
-    .from("schedule")
+    .from("schedule_web_v")
     .select("date, name, helper_email, start_time")
     .eq("date", date)
     .not("helper_email", "is", null)
