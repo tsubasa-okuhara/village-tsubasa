@@ -229,9 +229,31 @@ function setSaveEnabled(saveButtonElement, enabled) {
   saveButtonElement.disabled = !enabled;
 }
 
+const HELPER_EMAIL_STORAGE_KEY = "helper_email";
+
+function getSavedHelperEmail() {
+  try {
+    return normalizeOptionalText(window.localStorage.getItem(HELPER_EMAIL_STORAGE_KEY) ?? "");
+  } catch (_error) {
+    return "";
+  }
+}
+
+function saveHelperEmailToStorage(helperEmail) {
+  const normalized = normalizeOptionalText(helperEmail);
+  if (!normalized) return;
+  try {
+    window.localStorage.setItem(HELPER_EMAIL_STORAGE_KEY, normalized);
+  } catch (_error) {
+    // localStorage unavailable — silently ignore
+  }
+}
+
 function getInitialHelperEmail() {
   const searchParams = new URLSearchParams(window.location.search);
-  return normalizeOptionalText(searchParams.get("helper_email"));
+  const fromUrl = normalizeOptionalText(searchParams.get("helper_email"));
+  if (fromUrl) return fromUrl;
+  return getSavedHelperEmail();
 }
 
 function inferCategory(taskName) {
@@ -1013,6 +1035,7 @@ function initializeHomeUi() {
 
   filterFormElement.addEventListener("submit", async function (event) {
     event.preventDefault();
+    saveHelperEmailToStorage(helperEmailElement.value);
     await loadHomeTasks(helperEmailElement.value, {
       listStatusElement,
       saveStatusElement,

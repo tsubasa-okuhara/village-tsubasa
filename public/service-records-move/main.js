@@ -47,6 +47,27 @@ const FALLBACK_STRUCTURED_OPTIONS = {
   timeOfDay: ["朝", "昼", "夕"],
 };
 
+const HELPER_EMAIL_STORAGE_KEY = "helper_email";
+
+function getSavedHelperEmail() {
+  try {
+    const saved = window.localStorage.getItem(HELPER_EMAIL_STORAGE_KEY);
+    return saved ? saved.trim() : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function saveHelperEmailToStorage(helperEmail) {
+  const normalized = String(helperEmail || "").trim();
+  if (!normalized) return;
+  try {
+    window.localStorage.setItem(HELPER_EMAIL_STORAGE_KEY, normalized);
+  } catch (_error) {
+    // localStorage unavailable — silently ignore
+  }
+}
+
 const state = {
   helperEmail: "",
   items: [],
@@ -665,6 +686,7 @@ filterFormElement.addEventListener("submit", async function (event) {
     return;
   }
 
+  saveHelperEmailToStorage(helperEmail);
   state.helperEmail = helperEmail;
   state.selectedTask = null;
   setStatus(listStatusElement, "未記入予定を取得しています...");
@@ -701,3 +723,13 @@ retrySaveButtonElement.addEventListener("click", doSaveRecord);
 retryStructuredButtonElement.addEventListener("click", retryStructuredRecord);
 loadStructuredOptions();
 resetStructuredForm();
+
+// Restore saved helper email from localStorage on page load
+(function restoreHelperEmail() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const fromUrl = urlParams.get("helper_email");
+  const email = fromUrl ? fromUrl.trim() : getSavedHelperEmail();
+  if (email) {
+    helperEmailElement.value = email;
+  }
+})();
