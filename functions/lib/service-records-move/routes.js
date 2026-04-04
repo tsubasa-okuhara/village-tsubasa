@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.serviceRecordsMoveRouter = void 0;
+const express_1 = require("express");
+const generateSummary_1 = require("./generateSummary");
+const listUnwritten_1 = require("./listUnwritten");
+const saveRecord_1 = require("./saveRecord");
+exports.serviceRecordsMoveRouter = (0, express_1.Router)();
+exports.serviceRecordsMoveRouter.get("/unwritten", listUnwritten_1.handleServiceRecordsMoveListUnwritten);
+exports.serviceRecordsMoveRouter.post("/summary", generateSummary_1.handleServiceRecordsMoveGenerateSummary);
+exports.serviceRecordsMoveRouter.post("/save", saveRecord_1.handleServiceRecordsMoveSave);

@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.serviceRecordsStructuredRouter = void 0;
+const express_1 = require("express");
+const detail_1 = require("./detail");
+const getRecord_1 = require("./getRecord");
+const list_1 = require("./list");
+const options_1 = require("./options");
+const save_1 = require("./save");
+exports.serviceRecordsStructuredRouter = (0, express_1.Router)();
+exports.serviceRecordsStructuredRouter.get("/options", options_1.handleServiceRecordsStructuredOptions);
+exports.serviceRecordsStructuredRouter.get("/list", list_1.handleServiceRecordsStructuredList);
+exports.serviceRecordsStructuredRouter.get("/by-source/:sourceNoteId", getRecord_1.handleServiceRecordsStructuredGet);
+exports.serviceRecordsStructuredRouter.post("/save", save_1.handleServiceRecordsStructuredSave);
+exports.serviceRecordsStructuredRouter.get("/:id", detail_1.handleServiceRecordsStructuredDetail);
