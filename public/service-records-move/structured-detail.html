@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>移動支援 構造化ログ詳細</title>
+    <link rel="stylesheet" href="./structured-view.css" />
+  </head>
+  <body>
+    <main class="structured-page">
+      <div class="structured-topbar">
+        <a class="structured-link" href="/service-records-move/structured-list.html">構造化ログ一覧へ戻る</a>
+        <a class="structured-link" href="/service-records-move/">移動記録入力へ戻る</a>
+      </div>
+
+      <section class="structured-surface structured-hero">
+        <p class="structured-eyebrow">Move Structured Detail</p>
+        <h1>構造化ログ詳細</h1>
+        <p class="structured-copy">
+          保存済みの構造化ログのヘッダ、状態、環境、行動ログ、イレギュラーを確認できます。
+        </p>
+      </section>
+
+      <section class="structured-surface structured-panel">
+        <p id="structured-detail-status" class="structured-status" aria-live="polite">
+          詳細を読み込んでいます。
+        </p>
+        <div id="structured-detail-container" class="structured-detail-layout"></div>
+      </section>
+    </main>
+
+    <script src="./structured-detail.js" defer></script>
+  </body>
+</html>

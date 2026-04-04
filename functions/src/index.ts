@@ -11,6 +11,11 @@ import {
 import { handleNextHelperSchedule } from "./nextHelperSchedule";
 import { handleTodayHelperSummary } from "./todayHelperSummary";
 import { handleTomorrowHelperSummary } from "./tomorrowHelperSummary";
+import { handleTodaySchedule } from "./todaySchedule";
+import { handleTomorrowSchedule } from "./tomorrowSchedule";
+import { handleTodayScheduleAll } from "./todayScheduleAll";
+import { handleTomorrowScheduleAll } from "./tomorrowScheduleAll";
+import { handleScheduleSync } from "./scheduleSync";
 
 import { serviceRecordsMoveRouter } from "./service-records-move/routes";
 import { serviceRecordsStructuredRouter } from "./service-records-structured/routes";
@@ -75,6 +80,21 @@ app.get("/api/tomorrow-helper-summary", handleTomorrowHelperSummary);
 
 app.get("/next-helper-schedule", handleNextHelperSchedule);
 app.get("/api/next-helper-schedule", handleNextHelperSchedule);
+
+app.get("/today-schedule", handleTodaySchedule);
+app.get("/api/today-schedule", handleTodaySchedule);
+
+app.get("/tomorrow-schedule", handleTomorrowSchedule);
+app.get("/api/tomorrow-schedule", handleTomorrowSchedule);
+
+app.get("/today-schedule-all", handleTodayScheduleAll);
+app.get("/api/today-schedule-all", handleTodayScheduleAll);
+
+app.get("/tomorrow-schedule-all", handleTomorrowScheduleAll);
+app.get("/api/tomorrow-schedule-all", handleTomorrowScheduleAll);
+
+app.post("/schedule-sync", handleScheduleSync);
+app.post("/api/schedule-sync", handleScheduleSync);
 
 app.post("/service-records-home/summary", handleGenerateHomeSummary);
 app.post("/api/service-records-home/summary", handleGenerateHomeSummary);

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>移動支援 構造化ログ一覧</title>
+    <link rel="stylesheet" href="./structured-view.css" />
+  </head>
+  <body>
+    <main class="structured-page">
+      <div class="structured-topbar">
+        <a class="structured-link" href="/service-records-move/">移動記録入力へ戻る</a>
+        <a class="structured-link" href="/">ビレッジひろばへ戻る</a>
+      </div>
+
+      <section class="structured-surface structured-hero">
+        <p class="structured-eyebrow">Move Structured Logs</p>
+        <h1>構造化ログ一覧</h1>
+        <p class="structured-copy">
+          保存済みの move 構造化ログを確認できます。利用者名、helper_email、日付で絞り込みできます。
+        </p>
+      </section>
+
+      <section class="structured-surface structured-panel">
+        <form id="structured-list-filter-form" class="structured-filter-form">
+          <label class="structured-field">
+            <span>利用者名</span>
+            <input id="structured-list-user-name" name="user_name" type="text" placeholder="例: 山田" />
+          </label>
+
+          <label class="structured-field">
+            <span>helper_email</span>
+            <input id="structured-list-helper-email" name="helper_email" type="email" placeholder="helper@example.com" />
+          </label>
+
+          <label class="structured-field">
+            <span>サービス日</span>
+            <input id="structured-list-service-date" name="service_date" type="date" />
+          </label>
+
+          <button class="structured-button" type="submit">一覧取得</button>
+        </form>
+
+        <p id="structured-list-status" class="structured-status" aria-live="polite">
+          条件を指定して一覧取得してください。
+        </p>
+
+        <div id="structured-list-container" class="structured-list"></div>
+      </section>
+    </main>
+
+    <script src="./structured-list.js" defer></script>
+  </body>
+</html>
