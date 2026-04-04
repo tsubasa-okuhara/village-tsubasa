@@ -67,7 +67,7 @@ async function fetchUpcomingScheduleOnDate(
   const { data, error } = await supabase
     .from("schedule_web_v")
     .select("id, date, name, helper_email, client, start_time, end_time, task")
-    .eq("helper_email", helperEmail)
+    .ilike("helper_email", helperEmail)
     .eq("date", date)
     .gte("start_time", currentTime)
     .order("start_time", { ascending: true })
@@ -89,7 +89,7 @@ async function fetchFutureSchedule(
   const { data, error } = await supabase
     .from("schedule_web_v")
     .select("id, date, name, helper_email, client, start_time, end_time, task")
-    .eq("helper_email", helperEmail)
+    .ilike("helper_email", helperEmail)
     .gt("date", date)
     .order("date", { ascending: true })
     .order("start_time", { ascending: true })

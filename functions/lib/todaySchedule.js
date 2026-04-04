@@ -19,7 +19,7 @@ async function fetchTodayScheduleByHelperEmail(helperEmail, date) {
         .from("schedule_web_v")
         .select("id, date, name, helper_email, client, start_time, end_time, haisha, task, summary")
         .eq("date", date)
-        .eq("helper_email", helperEmail)
+        .ilike("helper_email", helperEmail)
         .order("start_time", { ascending: true });
     if (error) {
         throw error;
