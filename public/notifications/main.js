@@ -152,6 +152,7 @@ function renderItems() {
         href="${escapeHtml(href || "#")}"
         data-notification-id="${escapeHtml(item.id)}"
         data-link-url="${escapeHtml(item.linkUrl || "")}"
+        data-type="${escapeHtml(item.notificationType || "default")}"
       >
         <div class="notification-head">
           <span class="notification-type">${escapeHtml(getNotificationTypeLabel(item.notificationType))}</span>

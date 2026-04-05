@@ -162,9 +162,34 @@
 
       .notification-card.is-unread {
         border-color: rgba(232, 185, 193, 0.84);
+        border-left: 4px solid rgba(200, 180, 180, 0.6);
         background:
           radial-gradient(circle at top right, rgba(245, 217, 221, 0.26), transparent 34%),
           rgba(255, 252, 251, 0.92);
+      }
+
+      .notification-card.is-unread[data-type="today"] {
+        border-left-color: #c85a64;
+        border-color: rgba(219, 157, 166, 0.7);
+        background:
+          radial-gradient(circle at top right, rgba(245, 200, 210, 0.22), transparent 34%),
+          rgba(255, 251, 252, 0.94);
+      }
+
+      .notification-card.is-unread[data-type="tomorrow"] {
+        border-left-color: #c89040;
+        border-color: rgba(219, 190, 150, 0.7);
+        background:
+          radial-gradient(circle at top right, rgba(245, 225, 195, 0.22), transparent 34%),
+          rgba(255, 253, 249, 0.94);
+      }
+
+      .notification-card.is-unread[data-type="admin"] {
+        border-left-color: #4a7ec8;
+        border-color: rgba(150, 180, 219, 0.7);
+        background:
+          radial-gradient(circle at top right, rgba(200, 220, 245, 0.22), transparent 34%),
+          rgba(249, 252, 255, 0.94);
       }
 
       .notification-card.is-disabled {
@@ -183,10 +208,25 @@
         align-items: center;
         padding: 6px 10px;
         border-radius: 999px;
-        background: rgba(245, 217, 221, 0.72);
-        color: var(--accent);
+        background: rgba(220, 220, 220, 0.5);
+        color: #666;
         font-size: 0.78rem;
         font-weight: 700;
+      }
+
+      .notification-card[data-type="today"] .notification-type {
+        background: rgba(219, 130, 140, 0.22);
+        color: #a83a46;
+      }
+
+      .notification-card[data-type="tomorrow"] .notification-type {
+        background: rgba(230, 170, 100, 0.22);
+        color: #9a6830;
+      }
+
+      .notification-card[data-type="admin"] .notification-type {
+        background: rgba(100, 150, 220, 0.2);
+        color: #3a6aa8;
       }
 
       .notification-read {
