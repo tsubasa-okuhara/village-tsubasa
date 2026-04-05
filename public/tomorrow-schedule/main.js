@@ -117,10 +117,6 @@ function renderItems() {
             <div class="schedule-label">📝 内容</div>
             <div class="schedule-value">${escapeHtml(getDisplayValue(item.task))}</div>
           </div>
-          <div class="schedule-row">
-            <div class="schedule-label">⚠️ 概要</div>
-            <div class="schedule-value is-danger">${escapeHtml(getDisplayValue(item.summary))}</div>
-          </div>
         </div>
       </article>
     `;
