@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { SUPABASE_SERVICE_ROLE_KEY } from "./lib/supabase";
 import { OPENAI_API_KEY } from "./lib/openai";
 import { handleScheduleList } from "./scheduleList";
@@ -16,6 +17,12 @@ import { handleTomorrowSchedule } from "./tomorrowSchedule";
 import { handleTodayScheduleAll } from "./todayScheduleAll";
 import { handleTomorrowScheduleAll } from "./tomorrowScheduleAll";
 import { handleScheduleSync } from "./scheduleSync";
+import {
+  handleNotifyTodaySchedule,
+  handleNotifyTomorrowSchedule,
+  runNotifyToday,
+  runNotifyTomorrow,
+} from "./scheduledNotifications";
 
 import { serviceRecordsMoveRouter } from "./service-records-move/routes";
 import { serviceRecordsStructuredRouter } from "./service-records-structured/routes";
@@ -96,12 +103,53 @@ app.get("/api/tomorrow-schedule-all", handleTomorrowScheduleAll);
 app.post("/schedule-sync", handleScheduleSync);
 app.post("/api/schedule-sync", handleScheduleSync);
 
+app.post("/notify-today", handleNotifyTodaySchedule);
+app.post("/api/notify-today", handleNotifyTodaySchedule);
+app.post("/notify-tomorrow", handleNotifyTomorrowSchedule);
+app.post("/api/notify-tomorrow", handleNotifyTomorrowSchedule);
+
 app.post("/service-records-home/summary", handleGenerateHomeSummary);
 app.post("/api/service-records-home/summary", handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
 app.post("/service-records-home/save", handleSaveHomeRecord);
 app.post("/api/service-records-home/save", handleSaveHomeRecord);
+
+// 毎朝7時（JST）に今日の予定を通知
+export const notifyTodaySchedule = onSchedule(
+  {
+    schedule: "0 22 * * *",  // UTC 22:00 = JST 07:00
+    timeZone: "Asia/Tokyo",
+    region: "asia-northeast1",
+    secrets: [
+      SUPABASE_SERVICE_ROLE_KEY,
+      WEB_PUSH_VAPID_PUBLIC_KEY,
+      WEB_PUSH_VAPID_PRIVATE_KEY,
+      WEB_PUSH_SUBJECT,
+    ],
+  },
+  async () => {
+    await runNotifyToday();
+  },
+);
+
+// 毎晩20時（JST）に明日の予定を通知
+export const notifyTomorrowSchedule = onSchedule(
+  {
+    schedule: "0 11 * * *",  // UTC 11:00 = JST 20:00
+    timeZone: "Asia/Tokyo",
+    region: "asia-northeast1",
+    secrets: [
+      SUPABASE_SERVICE_ROLE_KEY,
+      WEB_PUSH_VAPID_PUBLIC_KEY,
+      WEB_PUSH_VAPID_PRIVATE_KEY,
+      WEB_PUSH_SUBJECT,
+    ],
+  },
+  async () => {
+    await runNotifyTomorrow();
+  },
+);
 
 export const api = onRequest(
   {

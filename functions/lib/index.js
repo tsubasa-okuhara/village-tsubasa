@@ -3,10 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.api = void 0;
+exports.api = exports.notifyTomorrowSchedule = exports.notifyTodaySchedule = void 0;
 const cors_1 = __importDefault(require("cors"));
 const express_1 = __importDefault(require("express"));
 const https_1 = require("firebase-functions/v2/https");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
 const supabase_1 = require("./lib/supabase");
 const openai_1 = require("./lib/openai");
 const scheduleList_1 = require("./scheduleList");
@@ -19,6 +20,7 @@ const tomorrowSchedule_1 = require("./tomorrowSchedule");
 const todayScheduleAll_1 = require("./todayScheduleAll");
 const tomorrowScheduleAll_1 = require("./tomorrowScheduleAll");
 const scheduleSync_1 = require("./scheduleSync");
+const scheduledNotifications_1 = require("./scheduledNotifications");
 const routes_1 = require("./service-records-move/routes");
 const routes_2 = require("./service-records-structured/routes");
 const generateSummary_1 = require("./service-records-home/generateSummary");
@@ -69,12 +71,44 @@ app.get("/tomorrow-schedule-all", tomorrowScheduleAll_1.handleTomorrowScheduleAl
 app.get("/api/tomorrow-schedule-all", tomorrowScheduleAll_1.handleTomorrowScheduleAll);
 app.post("/schedule-sync", scheduleSync_1.handleScheduleSync);
 app.post("/api/schedule-sync", scheduleSync_1.handleScheduleSync);
+app.post("/notify-today", scheduledNotifications_1.handleNotifyTodaySchedule);
+app.post("/api/notify-today", scheduledNotifications_1.handleNotifyTodaySchedule);
+app.post("/notify-tomorrow", scheduledNotifications_1.handleNotifyTomorrowSchedule);
+app.post("/api/notify-tomorrow", scheduledNotifications_1.handleNotifyTomorrowSchedule);
 app.post("/service-records-home/summary", generateSummary_1.handleGenerateHomeSummary);
 app.post("/api/service-records-home/summary", generateSummary_1.handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHome);
 app.post("/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
 app.post("/api/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
+// 毎朝7時（JST）に今日の予定を通知
+exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
+    schedule: "0 22 * * *", // UTC 22:00 = JST 07:00
+    timeZone: "Asia/Tokyo",
+    region: "asia-northeast1",
+    secrets: [
+        supabase_1.SUPABASE_SERVICE_ROLE_KEY,
+        push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
+        push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
+        push_1.WEB_PUSH_SUBJECT,
+    ],
+}, async () => {
+    await (0, scheduledNotifications_1.runNotifyToday)();
+});
+// 毎晩20時（JST）に明日の予定を通知
+exports.notifyTomorrowSchedule = (0, scheduler_1.onSchedule)({
+    schedule: "0 11 * * *", // UTC 11:00 = JST 20:00
+    timeZone: "Asia/Tokyo",
+    region: "asia-northeast1",
+    secrets: [
+        supabase_1.SUPABASE_SERVICE_ROLE_KEY,
+        push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
+        push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
+        push_1.WEB_PUSH_SUBJECT,
+    ],
+}, async () => {
+    await (0, scheduledNotifications_1.runNotifyTomorrow)();
+});
 exports.api = (0, https_1.onRequest)({
     region: "asia-northeast1",
     secrets: [

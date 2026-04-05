@@ -95,13 +95,13 @@ export async function handleGetNotifications(
       supabase
         .from("notifications")
         .select("id, target_email, title, body, link_url, notification_type, is_read, created_at")
-        .eq("target_email", helperEmail)
+        .ilike("target_email", helperEmail)
         .order("created_at", { ascending: false })
         .limit(limit),
       supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
-        .eq("target_email", helperEmail)
+        .ilike("target_email", helperEmail)
         .eq("is_read", false),
     ]);
 
@@ -160,7 +160,7 @@ export async function handleReadNotification(
       .from("notifications")
       .update({ is_read: true })
       .eq("id", id)
-      .eq("target_email", helperEmail)
+      .ilike("target_email", helperEmail)
       .select("id")
       .maybeSingle();
 
