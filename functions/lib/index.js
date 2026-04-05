@@ -83,7 +83,7 @@ app.post("/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
 app.post("/api/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
 // 毎朝7時（JST）に今日の予定を通知
 exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
-    schedule: "0 22 * * *", // UTC 22:00 = JST 07:00
+    schedule: "0 7 * * *", // JST 07:00
     timeZone: "Asia/Tokyo",
     region: "asia-northeast1",
     secrets: [
@@ -97,7 +97,7 @@ exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
 });
 // 毎晩20時（JST）に明日の予定を通知
 exports.notifyTomorrowSchedule = (0, scheduler_1.onSchedule)({
-    schedule: "0 11 * * *", // UTC 11:00 = JST 20:00
+    schedule: "0 20 * * *", // JST 20:00
     timeZone: "Asia/Tokyo",
     region: "asia-northeast1",
     secrets: [

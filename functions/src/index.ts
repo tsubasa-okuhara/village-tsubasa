@@ -118,7 +118,7 @@ app.post("/api/service-records-home/save", handleSaveHomeRecord);
 // 毎朝7時（JST）に今日の予定を通知
 export const notifyTodaySchedule = onSchedule(
   {
-    schedule: "0 22 * * *",  // UTC 22:00 = JST 07:00
+    schedule: "0 7 * * *",  // JST 07:00
     timeZone: "Asia/Tokyo",
     region: "asia-northeast1",
     secrets: [
@@ -136,7 +136,7 @@ export const notifyTodaySchedule = onSchedule(
 // 毎晩20時（JST）に明日の予定を通知
 export const notifyTomorrowSchedule = onSchedule(
   {
-    schedule: "0 11 * * *",  // UTC 11:00 = JST 20:00
+    schedule: "0 20 * * *",  // JST 20:00
     timeZone: "Asia/Tokyo",
     region: "asia-northeast1",
     secrets: [
