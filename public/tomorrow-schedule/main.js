@@ -93,13 +93,123 @@ function renderEmpty() {
   emptyCardElement.classList.toggle("is-visible", shouldShowEmpty);
 }
 
+function padTwo(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toIcsDatetime(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+  const d = dateStr.replace(/-/g, "");
+  const t = timeStr.replace(/:/g, "").slice(0, 4) + "00";
+  return d + "T" + t;
+}
+
+function generateIcs(item, dateStr) {
+  const start = toIcsDatetime(dateStr, item.startTime);
+  const end = toIcsDatetime(dateStr, item.endTime);
+  if (!start) return null;
+
+  const summary = [
+    getDisplayValue(item.task, "予定"),
+    getDisplayValue(item.userName, ""),
+  ].filter(Boolean).join(" - ");
+
+  const description = [
+    item.userName ? `利用者: ${item.userName}` : "",
+    item.helperName ? `担当: ${item.helperName}` : "",
+    item.haisha ? `配車: ${item.haisha}` : "",
+    item.task ? `内容: ${item.task}` : "",
+  ].filter(Boolean).join("\\n");
+
+  const uid = `${start}-${(item.id || Math.random().toString(36).slice(2))}@village-tsubasa`;
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${padTwo(now.getMonth() + 1)}${padTwo(now.getDate())}T${padTwo(now.getHours())}${padTwo(now.getMinutes())}${padTwo(now.getSeconds())}`;
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Village Tsubasa//Hiroba//JA",
+    "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;TZID=Asia/Tokyo:${start}`,
+  ];
+
+  if (end) {
+    lines.push(`DTEND;TZID=Asia/Tokyo:${end}`);
+  }
+
+  lines.push(
+    `SUMMARY:${summary}`,
+    `DESCRIPTION:${description}`,
+    "BEGIN:VALARM",
+    "TRIGGER:-PT60M",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:1時間後に予定があります",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR"
+  );
+
+  return lines.join("\r\n");
+}
+
+function downloadIcs(item, dateStr) {
+  const ics = generateIcs(item, dateStr);
+  if (!ics) {
+    alert("時間情報がないためカレンダーに追加できません");
+    return;
+  }
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `schedule-${dateStr}-${(item.startTime || "").replace(/:/g, "")}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function openGoogleCalendar(item, dateStr) {
+  const start = toIcsDatetime(dateStr, item.startTime);
+  const end = toIcsDatetime(dateStr, item.endTime);
+  if (!start) {
+    alert("時間情報がないためカレンダーに追加できません");
+    return;
+  }
+
+  const title = [
+    getDisplayValue(item.task, "予定"),
+    getDisplayValue(item.userName, ""),
+  ].filter(Boolean).join(" - ");
+
+  const details = [
+    item.userName ? `利用者: ${item.userName}` : "",
+    item.helperName ? `担当: ${item.helperName}` : "",
+    item.haisha ? `配車: ${item.haisha}` : "",
+    item.task ? `内容: ${item.task}` : "",
+  ].filter(Boolean).join("\n");
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title,
+    dates: `${start}/${end || start}`,
+    details: details,
+    ctz: "Asia/Tokyo",
+  });
+
+  window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, "_blank");
+}
+
 function renderItems() {
   if (state.status !== "success" || state.items.length === 0) {
     scheduleListElement.innerHTML = "";
     return;
   }
 
-  scheduleListElement.innerHTML = state.items.map(function (item) {
+  scheduleListElement.innerHTML = state.items.map(function (item, index) {
     return `
       <article class="schedule-card">
         <div class="schedule-time">${escapeHtml(formatTimeRange(item))}</div>
@@ -118,15 +228,109 @@ function renderItems() {
             <div class="schedule-value">${escapeHtml(getDisplayValue(item.task))}</div>
           </div>
         </div>
+        <div class="cal-buttons">
+          <button class="cal-btn cal-btn--google" data-index="${index}" data-cal="google">Googleカレンダーに追加</button>
+          <button class="cal-btn cal-btn--apple" data-index="${index}" data-cal="apple">iPhoneカレンダー</button>
+        </div>
       </article>
     `;
   }).join("");
+
+  scheduleListElement.querySelectorAll(".cal-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const idx = parseInt(btn.dataset.index, 10);
+      const item = state.items[idx];
+      if (!item) return;
+      if (btn.dataset.cal === "google") {
+        openGoogleCalendar(item, state.date);
+      } else {
+        downloadIcs(item, state.date);
+      }
+    });
+  });
+}
+
+function generateBulkIcs(items, dateStr) {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${padTwo(now.getMonth() + 1)}${padTwo(now.getDate())}T${padTwo(now.getHours())}${padTwo(now.getMinutes())}${padTwo(now.getSeconds())}`;
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Village Tsubasa//Hiroba//JA",
+    "CALSCALE:GREGORIAN",
+  ];
+
+  items.forEach(function (item) {
+    const start = toIcsDatetime(dateStr, item.startTime);
+    const end = toIcsDatetime(dateStr, item.endTime);
+    if (!start) return;
+
+    const summary = [
+      getDisplayValue(item.task, "予定"),
+      getDisplayValue(item.userName, ""),
+    ].filter(Boolean).join(" - ");
+
+    const description = [
+      item.userName ? `利用者: ${item.userName}` : "",
+      item.helperName ? `担当: ${item.helperName}` : "",
+      item.haisha ? `配車: ${item.haisha}` : "",
+      item.task ? `内容: ${item.task}` : "",
+    ].filter(Boolean).join("\\n");
+
+    const uid = `${start}-${(item.id || Math.random().toString(36).slice(2))}@village-tsubasa`;
+
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${uid}`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=Asia/Tokyo:${start}`,
+    );
+    if (end) lines.push(`DTEND;TZID=Asia/Tokyo:${end}`);
+    lines.push(
+      `SUMMARY:${summary}`,
+      `DESCRIPTION:${description}`,
+      "BEGIN:VALARM",
+      "TRIGGER:-PT60M",
+      "ACTION:DISPLAY",
+      "DESCRIPTION:1時間後に予定があります",
+      "END:VALARM",
+      "END:VEVENT"
+    );
+  });
+
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
+function downloadBulkIcs(items, dateStr) {
+  if (!items || items.length === 0) return;
+  const ics = generateBulkIcs(items, dateStr);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `schedule-${dateStr}-all.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+const calBulkBtn = document.getElementById("cal-bulk-btn");
+calBulkBtn.addEventListener("click", function () {
+  downloadBulkIcs(state.items, state.date);
+});
+
+function renderBulkButton() {
+  calBulkBtn.classList.toggle("is-visible", state.status === "success" && state.items.length > 1);
 }
 
 function render() {
   renderMeta();
   renderStatus();
   renderEmpty();
+  renderBulkButton();
   renderItems();
 }
 

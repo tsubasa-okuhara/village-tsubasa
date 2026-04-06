@@ -192,6 +192,64 @@
         font-weight: 700;
       }
 
+      .cal-buttons {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+      }
+      .cal-btn {
+        display: inline-block;
+        color: #fff;
+        font-weight: 600;
+        text-decoration: none;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+      .cal-btn--google {
+        padding: 10px 20px;
+        font-size: 0.95rem;
+        background: #4285f4;
+        box-shadow: 0 2px 8px rgba(66, 133, 244, 0.22);
+      }
+      .cal-btn--google:hover { background: #3367d6; }
+      .cal-btn--google:active { background: #2a56c6; }
+      .cal-btn--apple {
+        padding: 7px 14px;
+        font-size: 0.8rem;
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        box-shadow: none;
+      }
+      .cal-btn--apple:hover { background: rgba(0,0,0,0.04); }
+      .cal-btn--apple:active { background: rgba(0,0,0,0.08); }
+
+      .cal-bulk {
+        display: none;
+        margin-top: 16px;
+        padding: 14px 24px;
+        width: 100%;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, #4285f4, #3367d6);
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        box-shadow: 0 3px 10px rgba(66, 133, 244, 0.25);
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+      .cal-bulk.is-visible { display: block; }
+      .cal-bulk:hover {
+        background: linear-gradient(135deg, #3367d6, #2a56c6);
+        box-shadow: 0 4px 14px rgba(66, 133, 244, 0.35);
+      }
+      .cal-bulk:active { background: #2a56c6; }
+
       @media (max-width: 640px) {
         .page {
           width: min(100%, calc(100% - 16px));
@@ -263,6 +321,7 @@
             本日の予定はありません
           </section>
 
+          <button id="cal-bulk-btn" class="cal-bulk">全件まとめてGoogleカレンダーに追加</button>
           <section id="schedule-list" class="list" aria-live="polite"></section>
         </div>
       </section>
