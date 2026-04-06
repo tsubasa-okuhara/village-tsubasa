@@ -39,12 +39,25 @@
       }
 
       .back-link {
-        display: inline-flex;
-        align-items: center;
+        display: inline-block;
         margin-bottom: 16px;
-        color: var(--muted);
+        padding: 10px 20px;
+        background: #6b4c3b;
+        color: #fff;
+        font-size: 0.95rem;
+        font-weight: 600;
         text-decoration: none;
-        font-weight: 700;
+        border-radius: 12px;
+        border: 2px solid #5a3e2f;
+        box-shadow: 0 2px 8px rgba(107, 76, 59, 0.18);
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+      .back-link:hover {
+        background: #5a3e2f;
+        box-shadow: 0 4px 12px rgba(107, 76, 59, 0.28);
+      }
+      .back-link:active {
+        background: #4a3025;
       }
 
       .panel {
@@ -357,7 +370,7 @@
   </head>
   <body>
     <main class="page">
-      <a class="back-link" href="/">ビレッジひろばへ戻る</a>
+      <a class="back-link" href="/">← ビレッジひろばに戻る</a>
 
       <section class="panel">
         <header class="hero">
