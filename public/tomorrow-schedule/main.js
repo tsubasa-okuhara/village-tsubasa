@@ -1,6 +1,36 @@
 import { getSavedHelperEmail } from "../lib/helperEmail.js";
 
 const TOMORROW_SCHEDULE_ENDPOINT = "/api/tomorrow-schedule";
+const CAL_STORAGE_KEY = "village_cal_added";
+
+function getCalAdded() {
+  try {
+    return JSON.parse(localStorage.getItem(CAL_STORAGE_KEY) || "{}");
+  } catch { return {}; }
+}
+
+function markCalAdded(dateStr, index, type) {
+  const data = getCalAdded();
+  const key = `${dateStr}_${index}_${type}`;
+  data[key] = Date.now();
+  localStorage.setItem(CAL_STORAGE_KEY, JSON.stringify(data));
+}
+
+function isCalAdded(dateStr, index, type) {
+  const data = getCalAdded();
+  return !!data[`${dateStr}_${index}_${type}`];
+}
+
+function markBulkAdded(dateStr) {
+  const data = getCalAdded();
+  data[`${dateStr}_bulk`] = Date.now();
+  localStorage.setItem(CAL_STORAGE_KEY, JSON.stringify(data));
+}
+
+function isBulkAdded(dateStr) {
+  const data = getCalAdded();
+  return !!data[`${dateStr}_bulk`];
+}
 
 const state = {
   helperEmail: "",
@@ -210,6 +240,9 @@ function renderItems() {
   }
 
   scheduleListElement.innerHTML = state.items.map(function (item, index) {
+    const googleAdded = isCalAdded(state.date, index, "google");
+    const appleAdded = isCalAdded(state.date, index, "apple");
+
     return `
       <article class="schedule-card">
         <div class="schedule-time">${escapeHtml(formatTimeRange(item))}</div>
@@ -229,8 +262,8 @@ function renderItems() {
           </div>
         </div>
         <div class="cal-buttons">
-          <button class="cal-btn cal-btn--google" data-index="${index}" data-cal="google">Googleカレンダーに追加</button>
-          <button class="cal-btn cal-btn--apple" data-index="${index}" data-cal="apple">iPhoneカレンダー</button>
+          <button class="cal-btn ${googleAdded ? "cal-btn--added" : "cal-btn--google"}" data-index="${index}" data-cal="google">${googleAdded ? "Google追加済み" : "Googleカレンダーに追加"}</button>
+          <button class="cal-btn ${appleAdded ? "cal-btn--added" : "cal-btn--apple"}" data-index="${index}" data-cal="apple">${appleAdded ? "iPhone追加済み" : "iPhoneカレンダー"}</button>
         </div>
       </article>
     `;
@@ -239,13 +272,27 @@ function renderItems() {
   scheduleListElement.querySelectorAll(".cal-btn").forEach(function (btn) {
     btn.addEventListener("click", function () {
       const idx = parseInt(btn.dataset.index, 10);
+      const calType = btn.dataset.cal;
       const item = state.items[idx];
       if (!item) return;
-      if (btn.dataset.cal === "google") {
+
+      const alreadyAdded = isCalAdded(state.date, idx, calType);
+      if (alreadyAdded) {
+        if (!confirm("この予定はすでにカレンダーに追加済みです。もう一度追加しますか？")) {
+          return;
+        }
+      }
+
+      if (calType === "google") {
         openGoogleCalendar(item, state.date);
       } else {
         downloadIcs(item, state.date);
       }
+
+      markCalAdded(state.date, idx, calType);
+      btn.textContent = calType === "google" ? "Google追加済み" : "iPhone追加済み";
+      btn.classList.remove("cal-btn--google", "cal-btn--apple");
+      btn.classList.add("cal-btn--added");
     });
   });
 }
@@ -319,11 +366,25 @@ function downloadBulkIcs(items, dateStr) {
 
 const calBulkBtn = document.getElementById("cal-bulk-btn");
 calBulkBtn.addEventListener("click", function () {
+  const alreadyBulk = isBulkAdded(state.date);
+  if (alreadyBulk) {
+    if (!confirm("この日の予定はすでに一括追加済みです。もう一度追加しますか？")) {
+      return;
+    }
+  }
   downloadBulkIcs(state.items, state.date);
+  markBulkAdded(state.date);
+  calBulkBtn.textContent = "全件追加済み";
+  calBulkBtn.classList.add("is-added");
 });
 
 function renderBulkButton() {
-  calBulkBtn.classList.toggle("is-visible", state.status === "success" && state.items.length > 1);
+  const show = state.status === "success" && state.items.length > 1;
+  calBulkBtn.classList.toggle("is-visible", show);
+  if (show && isBulkAdded(state.date)) {
+    calBulkBtn.textContent = "全件追加済み";
+    calBulkBtn.classList.add("is-added");
+  }
 }
 
 function render() {
