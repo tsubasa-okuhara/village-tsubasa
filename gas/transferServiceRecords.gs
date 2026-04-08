@@ -190,6 +190,9 @@ function transferServiceRecords() {
 
     var isHome = isHomeService(task, bgColor);
 
+    // 日付がない行はスキップ（Supabaseのdate型に空文字は入れられない）
+    if (!serviceDate) continue;
+
     if (isHome) {
       homeRecords.push({
         helper_name: helperName,
@@ -210,10 +213,9 @@ function transferServiceRecords() {
         user_name: userName,
         start_time: startTime || null,
         end_time: endTime || null,
-        haisha: haisha || null,
         task: task || null,
         summary: summary || null,
-        service_date: serviceDate,
+        service_date: serviceDate || null,
         beneficiary_number: beneficiaryNumber || null,
         status: "unwritten"
       });
