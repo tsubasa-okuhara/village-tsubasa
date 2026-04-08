@@ -16,8 +16,8 @@
 // ─── 設定 ───────────────────────────────────────────────
 var TARGET_SPREADSHEET_ID = "1mwKCznD2T_tM2Jwq2r-_ZXc6knQnYHD3mRjgFKRoiFQ";
 var SHEET_NAME = "サービス記録転送";
-var HEADER_ROW = 3; // ヘッダー行
-var DATA_START_ROW = 4; // データ開始行
+var HEADER_ROW = 4; // ヘッダー行
+var DATA_START_ROW = 5; // データ開始行
 
 // 居宅判定キーワード（F列の内容）
 var HOME_KEYWORDS = ["居宅", "身体", "家事", "通院"];
@@ -154,6 +154,14 @@ function transferServiceRecords() {
     throw new Error("シート「" + SHEET_NAME + "」が見つかりません");
   }
 
+  // A2セルから日付を取得（例: "4/7(火)" → "2026-04-07"）
+  var rawDateCell = sheet.getRange("A2").getValue();
+  var serviceDate = formatDate(rawDateCell);
+  if (!serviceDate) {
+    throw new Error("A2セルに日付が設定されていません");
+  }
+  Logger.log("日付: " + serviceDate);
+
   var lastRow = sheet.getLastRow();
   if (lastRow < DATA_START_ROW) {
     Logger.log("転送対象のデータがありません");
@@ -178,7 +186,7 @@ function transferServiceRecords() {
     var haisha = trim(row[4]);       // E: 配車
     var task = trim(row[5]);         // F: 内容
     var summary = trim(row[6]);      // G: 概要
-    var serviceDate = formatDate(row[7]); // H: 日付
+    // H列は使わない（日付はA2セルから取得済み）
     var purposeCode = trim(row[8]);  // I: 目的コード
     var twoPerson = trim(row[9]);    // J: 2人付フラグ
     var billing = trim(row[10]);     // K: 請求
@@ -309,11 +317,21 @@ function formatDate(value) {
     var d = ("0" + value.getDate()).slice(-2);
     return y + "-" + m + "-" + d;
   }
-  // "2026-04-07" 形式ならそのまま
   var str = String(value).trim();
+  // "2026-04-07" 形式ならそのまま
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  // "4/7" 等の場合、今年として処理
-  var parsed = new Date(str);
+  // "4/7(火)" や "4/7" → 曜日部分を除去してパース
+  var cleaned = str.replace(/\(.*?\)/g, "").trim();
+  // "4/7" 形式 → 今年の日付として処理
+  var slashMatch = cleaned.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (slashMatch) {
+    var year = new Date().getFullYear();
+    var mon = ("0" + slashMatch[1]).slice(-2);
+    var day = ("0" + slashMatch[2]).slice(-2);
+    return year + "-" + mon + "-" + day;
+  }
+  // その他の形式
+  var parsed = new Date(cleaned);
   if (!isNaN(parsed.getTime())) {
     var y = parsed.getFullYear();
     var m = ("0" + (parsed.getMonth() + 1)).slice(-2);
