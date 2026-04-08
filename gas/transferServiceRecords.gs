@@ -244,16 +244,12 @@ function transferServiceRecords() {
 // ─── 居宅判定 ───────────────────────────────────────────
 
 function isHomeService(task, bgColor) {
-  // 背景色が #ff9900（オレンジ）なら居宅
-  if (bgColor && bgColor.toLowerCase() === HOME_BG_COLOR) {
-    return true;
-  }
-
-  // F列にキーワードが含まれていたら居宅
+  // F列に居宅キーワード（居宅・身体・家事・通院）が含まれていたら居宅
+  // それ以外は全て移動支援
   if (task) {
-    var taskLower = task.toString().toLowerCase();
+    var taskStr = task.toString();
     for (var i = 0; i < HOME_KEYWORDS.length; i++) {
-      if (taskLower.indexOf(HOME_KEYWORDS[i]) >= 0) {
+      if (taskStr.indexOf(HOME_KEYWORDS[i]) >= 0) {
         return true;
       }
     }
