@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Streamlit secrets（APIキー等の機密情報）
+.streamlit/secrets.toml
+
+# データベースファイル（ローカル開発用）
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+receipt_database.db
+
+# 画像ファイル（ユーザーデータ）
+images/
+uploads/
+
+# 環境変数
+.env
+.env.local
+.env.*.local
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ログ
+*.log
+logs/
+
+# エクスポートファイル
+*.xlsx
+*.csv
+exports/
+
+# EasyOCRモデルキャッシュ
+.EasyOCR/
