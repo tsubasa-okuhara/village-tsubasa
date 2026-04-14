@@ -987,6 +987,33 @@ function setupPushControls() {
   });
 }
 
+async function initializeCalmChecks() {
+  if (!state.helperEmail) return;
+
+  const alertEl = document.getElementById("calm-check-alert");
+  const countEl = document.getElementById("calm-check-count");
+  if (!alertEl || !countEl) return;
+
+  try {
+    const url = new URL("/api/calm-checks/pending", window.location.origin);
+    url.searchParams.set("helper_email", state.helperEmail);
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (data?.ok && data.count > 0) {
+      countEl.textContent = String(data.count);
+      alertEl.style.display = "block";
+    }
+  } catch (error) {
+    console.error("[calm-checks] fetch error:", error);
+  }
+}
+
 async function initializePage() {
   state.helperEmail = getSavedHelperEmail();
   setupHelperEmailForm();
@@ -999,10 +1026,54 @@ async function initializePage() {
     initializeNotifications(),
     initializeSummaries(),
     initializeNextSchedule(),
+    initializeCalmChecks(),
   ]);
 }
 
+function setupCacheClear() {
+  const btn = document.getElementById("cache-clear-btn");
+  const msg = document.getElementById("cache-clear-message");
+  if (!btn) return;
+
+  btn.addEventListener("click", async function () {
+    btn.disabled = true;
+    msg.textContent = "キャッシュをクリアしています...";
+    msg.dataset.tone = "default";
+
+    try {
+      // Service Workerのキャッシュを削除
+      if ("caches" in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map(function (name) {
+          return caches.delete(name);
+        }));
+      }
+
+      // Service Workerを再登録
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(function (reg) {
+          return reg.update();
+        }));
+      }
+
+      msg.textContent = "クリア完了。ページを再読み込みします...";
+      msg.dataset.tone = "success";
+
+      setTimeout(function () {
+        window.location.reload();
+      }, 500);
+    } catch (error) {
+      console.error("[cache-clear] error:", error);
+      msg.textContent = "クリアに失敗しました。ページを手動で再読み込みしてください。";
+      msg.dataset.tone = "error";
+      btn.disabled = false;
+    }
+  });
+}
+
 window.addEventListener("DOMContentLoaded", function () {
+  setupCacheClear();
   initializePage().catch(function (error) {
     console.error("[index] initialize error:", error);
   });

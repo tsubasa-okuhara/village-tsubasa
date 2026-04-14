@@ -26,7 +26,10 @@ const routes_2 = require("./service-records-structured/routes");
 const generateSummary_1 = require("./service-records-home/generateSummary");
 const listUnwritten_1 = require("./service-records-home/listUnwritten");
 const saveRecord_1 = require("./service-records-home/saveRecord");
+const feedback_1 = require("./feedback");
+const trainingReport_1 = require("./trainingReport");
 const push_1 = require("./push");
+const calmCheck_1 = require("./calmCheck");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: true,
@@ -81,6 +84,39 @@ app.get("/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHo
 app.get("/api/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHome);
 app.post("/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
 app.post("/api/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
+// 匿名フィードバック
+app.post("/feedback", feedback_1.handleSubmitFeedback);
+app.post("/api/feedback", feedback_1.handleSubmitFeedback);
+app.get("/feedback", feedback_1.handleGetFeedback);
+app.get("/api/feedback", feedback_1.handleGetFeedback);
+app.post("/feedback/update-status", feedback_1.handleUpdateFeedbackStatus);
+app.post("/api/feedback/update-status", feedback_1.handleUpdateFeedbackStatus);
+app.get("/feedback/resolved", feedback_1.handleGetResolvedFeedback);
+app.get("/api/feedback/resolved", feedback_1.handleGetResolvedFeedback);
+// 研修報告
+app.post("/training-reports", trainingReport_1.handleSubmitTrainingReport);
+app.post("/api/training-reports", trainingReport_1.handleSubmitTrainingReport);
+app.get("/training-reports", trainingReport_1.handleGetTrainingReports);
+app.get("/api/training-reports", trainingReport_1.handleGetTrainingReports);
+app.post("/training-reports/notice", trainingReport_1.handleSubmitTrainingNotice);
+app.post("/api/training-reports/notice", trainingReport_1.handleSubmitTrainingNotice);
+app.post("/training-reports/update-status", trainingReport_1.handleUpdateTrainingReportStatus);
+app.post("/api/training-reports/update-status", trainingReport_1.handleUpdateTrainingReportStatus);
+// 落ち着き確認
+app.get("/calm-checks/pending", calmCheck_1.handleGetPendingCalmChecks);
+app.get("/api/calm-checks/pending", calmCheck_1.handleGetPendingCalmChecks);
+app.post("/calm-checks/answer", calmCheck_1.handleAnswerCalmCheck);
+app.post("/api/calm-checks/answer", calmCheck_1.handleAnswerCalmCheck);
+app.post("/calm-checks/generate", calmCheck_1.handleGenerateCalmChecks);
+app.post("/api/calm-checks/generate", calmCheck_1.handleGenerateCalmChecks);
+app.get("/calm-checks/history", calmCheck_1.handleGetCalmCheckHistory);
+app.get("/api/calm-checks/history", calmCheck_1.handleGetCalmCheckHistory);
+app.get("/calm-checks/targets", calmCheck_1.handleGetCalmCheckTargets);
+app.get("/api/calm-checks/targets", calmCheck_1.handleGetCalmCheckTargets);
+app.post("/calm-checks/targets", calmCheck_1.handleAddCalmCheckTarget);
+app.post("/api/calm-checks/targets", calmCheck_1.handleAddCalmCheckTarget);
+app.post("/calm-checks/targets/remove", calmCheck_1.handleRemoveCalmCheckTarget);
+app.post("/api/calm-checks/targets/remove", calmCheck_1.handleRemoveCalmCheckTarget);
 // 毎朝7時（JST）に今日の予定を通知
 exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
     schedule: "0 7 * * *", // JST 07:00

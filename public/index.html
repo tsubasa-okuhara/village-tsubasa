@@ -136,6 +136,16 @@
 
             <p id="notifications-note" class="summary-card__note">自分への連絡を確認しています。</p>
 
+            <div id="calm-check-alert" class="calm-check-alert" style="display:none;">
+              <a href="/calm-check/" class="calm-check-alert__link">
+                <span class="calm-check-alert__icon">&#9888;&#65039;</span>
+                <span class="calm-check-alert__text">
+                  落ち着き確認が <strong id="calm-check-count">0</strong> 件あります
+                </span>
+                <span class="calm-check-alert__arrow">&rarr;</span>
+              </a>
+            </div>
+
             <div class="summary-card__actions">
               <a id="notifications-action" class="summary-action summary-action--secondary has-badge" href="/notifications/">
                 <span>通知を見る</span>
@@ -238,11 +248,25 @@
             <a href="/service-records-move/">開く</a>
           </article>
 
-          <article class="menu-card">
-            <span class="menu-card__label">そのほか</span>
+          <article class="menu-card menu-card--expense">
+            <span class="menu-card__label">経費</span>
+            <h3>経費提出</h3>
+            <p>レシートを撮影して経費を提出できます。</p>
+            <a href="/expense/">開く</a>
+          </article>
+
+          <article class="menu-card menu-card--training">
+            <span class="menu-card__label">学び</span>
             <h3>研修報告</h3>
-            <p>研修内容や気づきをまとめる入口です。</p>
-            <a href="/training-reports/">開く</a>
+            <p>受講した研修の報告を送信できます。AIが所感を読みやすく整えます。</p>
+            <a href="/training-reports/">報告する</a>
+          </article>
+
+          <article class="menu-card menu-card--feedback">
+            <span class="menu-card__label">みんなの声</span>
+            <h3>声のポスト</h3>
+            <p>アプリや業務への意見・要望を匿名で届けられます。</p>
+            <a href="/feedback/">声を届ける</a>
           </article>
         </div>
       </section>
@@ -312,6 +336,31 @@
             </p>
             <p class="push-note">
               iPhone はホーム画面に追加した状態で通知許可を行う想定です。
+            </p>
+          </section>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-label="キャッシュ管理">
+        <div class="section-head">
+          <div>
+            <h2>アプリの更新</h2>
+            <p>画面が古い表示のままのときに使ってください。</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <section class="setting-card">
+            <div class="setting-card__head">
+              <div>
+                <h3>キャッシュクリア</h3>
+                <p class="setting-card__copy">表示がおかしいときや、最新の機能が反映されないときにお試しください。</p>
+              </div>
+            </div>
+            <div class="push-actions">
+              <button id="cache-clear-btn" class="push-button" data-tone="primary" type="button">キャッシュをクリアして更新</button>
+            </div>
+            <p id="cache-clear-message" class="push-message" data-tone="default">
+              ボタンを押すとページが再読み込みされます。
             </p>
           </section>
         </div>

@@ -32,6 +32,20 @@ import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
 import { handleSaveHomeRecord } from "./service-records-home/saveRecord";
 
 import {
+  handleSubmitFeedback,
+  handleGetFeedback,
+  handleUpdateFeedbackStatus,
+  handleGetResolvedFeedback,
+} from "./feedback";
+
+import {
+  handleSubmitTrainingReport,
+  handleSubmitTrainingNotice,
+  handleGetTrainingReports,
+  handleUpdateTrainingReportStatus,
+} from "./trainingReport";
+
+import {
   handleGetPushPublicKey,
   handleSendTestPush,
   handleSubscribePush,
@@ -40,6 +54,16 @@ import {
   WEB_PUSH_VAPID_PRIVATE_KEY,
   WEB_PUSH_VAPID_PUBLIC_KEY,
 } from "./push";
+
+import {
+  handleGetPendingCalmChecks,
+  handleAnswerCalmCheck,
+  handleGenerateCalmChecks,
+  handleGetCalmCheckHistory,
+  handleGetCalmCheckTargets,
+  handleAddCalmCheckTarget,
+  handleRemoveCalmCheckTarget,
+} from "./calmCheck";
 
 const app = express();
 
@@ -114,6 +138,42 @@ app.get("/service-records-home/unwritten", handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
 app.post("/service-records-home/save", handleSaveHomeRecord);
 app.post("/api/service-records-home/save", handleSaveHomeRecord);
+
+// 匿名フィードバック
+app.post("/feedback", handleSubmitFeedback);
+app.post("/api/feedback", handleSubmitFeedback);
+app.get("/feedback", handleGetFeedback);
+app.get("/api/feedback", handleGetFeedback);
+app.post("/feedback/update-status", handleUpdateFeedbackStatus);
+app.post("/api/feedback/update-status", handleUpdateFeedbackStatus);
+app.get("/feedback/resolved", handleGetResolvedFeedback);
+app.get("/api/feedback/resolved", handleGetResolvedFeedback);
+
+// 研修報告
+app.post("/training-reports", handleSubmitTrainingReport);
+app.post("/api/training-reports", handleSubmitTrainingReport);
+app.get("/training-reports", handleGetTrainingReports);
+app.get("/api/training-reports", handleGetTrainingReports);
+app.post("/training-reports/notice", handleSubmitTrainingNotice);
+app.post("/api/training-reports/notice", handleSubmitTrainingNotice);
+app.post("/training-reports/update-status", handleUpdateTrainingReportStatus);
+app.post("/api/training-reports/update-status", handleUpdateTrainingReportStatus);
+
+// 落ち着き確認
+app.get("/calm-checks/pending", handleGetPendingCalmChecks);
+app.get("/api/calm-checks/pending", handleGetPendingCalmChecks);
+app.post("/calm-checks/answer", handleAnswerCalmCheck);
+app.post("/api/calm-checks/answer", handleAnswerCalmCheck);
+app.post("/calm-checks/generate", handleGenerateCalmChecks);
+app.post("/api/calm-checks/generate", handleGenerateCalmChecks);
+app.get("/calm-checks/history", handleGetCalmCheckHistory);
+app.get("/api/calm-checks/history", handleGetCalmCheckHistory);
+app.get("/calm-checks/targets", handleGetCalmCheckTargets);
+app.get("/api/calm-checks/targets", handleGetCalmCheckTargets);
+app.post("/calm-checks/targets", handleAddCalmCheckTarget);
+app.post("/api/calm-checks/targets", handleAddCalmCheckTarget);
+app.post("/calm-checks/targets/remove", handleRemoveCalmCheckTarget);
+app.post("/api/calm-checks/targets/remove", handleRemoveCalmCheckTarget);
 
 // 毎朝7時（JST）に今日の予定を通知
 export const notifyTodaySchedule = onSchedule(
