@@ -1,17 +1,12 @@
 # Supabase スキーマ (village-tsubasa)
-
 本ファイルは village-tsubasa プロジェクトで使っている Supabase のテーブル・ビューを一覧化したものです。
 各テーブルの役割、主要列、関連 API/画面、参考ファイルをまとめています。
-
 > **凡例**
 > - ✅ : リポジトリ内に CREATE 文（sql/）あり
 > - ⚠️ : コード参照のみ（CREATE 文がリポジトリに無い、Supabase 上で直接作成されたもの）
 > - 🔎 : 要確認（別チャットで追加された可能性あり）
-
 ---
-
 ## 1. schedule 系
-
 ### ⚠️ `schedule`
 - **役割**: 利用者の予定データ本体。利用者アプリ・ヘルパーアプリ・スプレッドシート同期の中心テーブル
 - **列**:
@@ -27,6 +22,8 @@
   - `summary` (text): 概要
   - `beneficiary_number` (text): 受給者証番号
   - `source_key` (text): 元データキー（スプレッドシート側との同期キー）
+  - `synced_to_sheet` (boolean, default false): スプレッドシートに反映済みか（2026-04-17 追加）。毎月 15 日の GAS トリガーが `false` の行を対象にまとめて流し込む設計
+  - `synced_at` (timestamptz, nullable): シート書き込み完了時刻（2026-04-17 追加）。現状 GAS 側で更新していない（シート内の supabaseId 列で同期状態を判定する「シート状態ベース版」に切り替えたため、このカラムはデフォルト値のまま残る）
   - `created_at` / `updated_at` (timestamptz)
 - **制約**: pk = `id`。その他の unique/fk は未確認
 - **参照箇所**:
@@ -37,13 +34,18 @@
     - `functions/src/scheduleAll.ts`
     - `schedule_web_v` view の元テーブル
   - GAS 「【ビレッジつばさ】全体スケジュール」 → `★supabase転送本体.gs` でスプレッドシート ⇄ Supabase 双方向同期
-  - GAS 「スケジュール逆同期」 → `doPost` （利用者アプリ → スプレッドシート反映）
+  - GAS 「スケジュール逆同期」 プロジェクト:
+    - `doPost` / `doGet` （利用者アプリ → スプレッドシート即時反映、`handleAdd` / `handleEdit` / `handleDelete`）
+    - `monthlySheetAutoCreate_` （2026-04-17 追加、毎月 15 日 00:05 自動起動）：翌月の週シート生成 + Supabase の対象月予定を一括流し込み
+    - `flushScheduleToSheet_(year, month)`：指定年月の Supabase 予定を引いて、シートに無い分だけ `handleAdd` で書き込み（重複防止は `findRowByIdOrKey_` で判定）
 - **備考**:
   - CREATE 文はリポジトリに無い（Supabase 直作成の可能性が高い）
-  - `.insert(...).select('id')` が RLS の影響で `data: null` を返すことを確認済み。anon ロールに INSERT 後の SELECT 権限が無い可能性あり
-  - 2026-04-08 時点で 1,861 レコード
-  - スプレッドシート側は Supabase `id` を Q 列相当に保持して同期キーにしている
-
+  - `.insert(...).select('id')` が RLS の影響で `data: null` を返すことを確認済み。anon ロールに INSERT 後の SELECT 権限が無い可能性あり（利用者アプリで発生）
+  - 2026-04-17 時点で 1,838 レコード（service_role 経由のカウント）
+  - スプレッドシート側は Supabase `id` を **W 列相当**（block 開始列からの offset 19）に保持して同期キーにしている
+    - 2026-04-17 変更: Q 列（offset 13）→ W 列（offset 19）に移動。`gas/コード.gs` の `COL.SUPABASE_ID` 定数で管理
+  - RLS は OFF（2026-04-17 確認）。service_role キーは GAS のスクリプトプロパティ `SUPABASE_SERVICE_KEY` に保存
+  - ⚠️ 過去に GAS スクリプトプロパティが別プロジェクト (`xwnbdlcukycihgfrfcox`) の anon キーを指していた事故あり。現在は `pbqqqwwgswniuomjlhsh` の service_role キーに修正済み（2026-04-17）
 ### ✅ `schedule_web_v` （ビュー）
 - **役割**: Web アプリ表示用に `schedule` を整形した view
 - **参考**: `sql/2026-03-29_create_schedule_web_v.sql`
@@ -59,7 +61,6 @@
   - `functions/src/helperSummary.ts`
   - `functions/src/nextHelperSchedule.ts`
   - `functions/src/scheduledNotifications.ts`
-
 ### ✅ `helper_master`
 - **役割**: ヘルパー名とメールアドレスの対応マスタ
 - **参考**: `sql/2026-03-29_create_helper_master.sql`
@@ -67,11 +68,8 @@
   - `helper_name` (pk): `schedule.name` と一致させるヘルパー表示名
   - `helper_email`: 通知・予定紐付け用メール
 - **使われ方**: `schedule_web_v` の join で補完に使われる
-
 ---
-
 ## 2. 移動支援（move）系
-
 ### ⚠️ `schedule_tasks_move`
 - **役割**: 移動支援の予定タスク（未記入 / 記入済みを管理）
 - **列**（village-admin / village-tsubasa 両方から読み取り）:
@@ -100,7 +98,6 @@
 - **⚠️ バグ疑い**:
   - `functions/src/services/moveCheckService.ts:52` で `.order("date", { ascending: true })` となっているが、村上翼さんの調査で正規の列名は `service_date` と確認済み。`date` 列は存在しない可能性が高く、**バグの疑いあり**。デプロイ前に要修正 🔎
 - **備考**: CREATE 文はリポジトリに無い
-
 ### ⚠️ `service_notes_move`
 - **役割**: 移動支援の完成サービス記録。村上さんの管理ダッシュボードから Excel 出力する際の元データにもなる
 - **列**:
@@ -124,7 +121,6 @@
 - **備考**:
   - Excel 生成は `excel-move.ts` で 2 件 / ページの A4 縦レイアウト
   - CREATE 文はリポジトリに無い
-
 ### ⚠️ `move_check_logs`
 - **役割**: 移動支援のチェックポイント通過ログ（位置情報付き）。おそらく送迎の出発・到着・引き返しなどを記録するための用途
 - **列**（`MoveCheckLogRow` 型より）:
@@ -141,11 +137,8 @@
     - `fetchMoveCheckLogs` （`schedule_task_id` で絞り込み、`checked_at` 昇順）
     - `createMoveCheckLog` （insert）
 - **備考**: CREATE 文はリポジトリに無い
-
 ---
-
 ## 3. 居宅介護（home）系
-
 ### ⚠️ `home_schedule_tasks`
 - **役割**: 居宅介護（home）の予定タスク（move と同じ責務の home 版）
 - **列**:
@@ -170,7 +163,6 @@
 - **備考**:
   - テーブル名の prefix/suffix が `schedule_tasks_move` と非対称 (`schedule_tasks_move` vs `home_schedule_tasks`)。将来統一する場合は要注意
   - CREATE 文はリポジトリに無い
-
 ### ⚠️ `service_notes_home`
 - **役割**: 居宅介護の完成サービス記録（Excel 出力の元データ）
 - **列**:
@@ -198,7 +190,6 @@
   - `service_notes_move` と違って **`start_time` / `end_time` 列を持たない**。時間は `final_note` の冒頭から正規表現で抽出する仕様
   - `memo` の独自フォーマットに admin 側の `parseMemo` が依存しているため、保存時の形式を変更するとダッシュボードが壊れる
   - CREATE 文はリポジトリに無い
-
 ### ⚠️ `service_action_logs_home`
 - **役割**: 居宅介護の構造化アクションログ（1つの `service_notes_home` に 0〜1 件紐付く想定）
 - **列**（`ServiceActionLogHomeInsertRow` 型より）:
@@ -219,11 +210,8 @@
 - **備考**:
   - CREATE 文はリポジトリに無い
   - move 側の `service_record_structured` / `service_action_logs` が親子分離して汎用化されているのに対し、home 側は `service_notes_home` と 1:1 想定の独立テーブルになっている。設計方針の違いあり
-
 ---
-
 ## 4. 構造化記録（service-records-structured）系
-
 ### ✅ `service_record_structured`
 - **役割**: 移動/居宅の支援内容を構造化した記録の親テーブル
 - **参考**: `sql/service_records_structured_move_mvp.sql`
@@ -243,7 +231,6 @@
   - `functions/src/service-records-structured/list.ts`
   - `functions/src/service-records-structured/detail.ts`
   - `functions/src/service-records-structured/getRecord.ts`
-
 ### ✅ `service_action_logs`
 - **役割**: 構造化記録に紐づく支援アクションログ（親 1 : 子 多）
 - **参考**: `sql/service_records_structured_move_mvp.sql`
@@ -255,7 +242,6 @@
   - `start_time`, `end_time`, `duration` (分)
   - `action_result`, `difficulty`, `assist_level`
   - `created_at`
-
 ### ✅ `service_irregular_events`
 - **役割**: 構造化記録に紐づくイレギュラー事象
 - **参考**: `sql/service_records_structured_move_mvp.sql`
@@ -264,11 +250,8 @@
   - `structured_record_id` (fk, cascade delete)
   - `event_type`, `before_state`, `after_action`
   - `created_at`
-
 ---
-
 ## 5. 通知・プッシュ系
-
 ### ✅ `notifications`
 - **役割**: helper_email 単位のアプリ内通知
 - **参考**: `sql/notifications.sql`
@@ -283,7 +266,6 @@
   - `functions/src/notifications.ts`
   - `functions/src/push.ts`
   - `functions/src/scheduledNotifications.ts`
-
 ### ✅ `push_subscriptions`
 - **役割**: helper_email と端末 Push 購読情報の紐付け
 - **参考**: `sql/push_subscriptions.sql`
@@ -298,11 +280,8 @@
 - **参照箇所**:
   - `functions/src/push.ts`
   - `functions/src/scheduledNotifications.ts`
-
 ---
-
 ## 6. フィードバック系
-
 ### ✅ `anonymous_feedback`
 - **役割**: ヘルパーからの匿名フィードバック（AI で整形後のメッセージのみ保存）
 - **参考**: `sql/create_anonymous_feedback.sql`
@@ -315,11 +294,8 @@
   - `created_at`
 - **重要**: 元メッセージ・送信者情報は保存しない（完全匿名）
 - **参照箇所**: `functions/src/feedback.ts`
-
 ---
-
 ## 7. 研修報告系
-
 ### ✅ `training_reports`
 - **役割**: ヘルパーの研修報告 + 管理者からの研修お知らせを統合管理
 - **参考**: `sql/create_training_reports.sql`
@@ -339,11 +315,8 @@
   - `created_at` (timestamptz)
 - **参照箇所**: `functions/src/trainingReport.ts`
 - **備考**: `anonymous_feedback` と違い、元のメッセージ (`original_comment`) も保存する（管理者が比較できるように）
-
 ---
-
 ## 8. 落ち着き確認（calm check）系
-
 ### ✅ `calm_check_targets`
 - **役割**: 落ち着き確認の対象利用者を管理。管理者が追加・削除可能
 - **CREATE 文**: `sql/create_calm_checks.sql`
@@ -355,7 +328,6 @@
   - `created_at` / `updated_at` (timestamptz)
 - **API**: `GET /api/calm-checks/targets`, `POST /api/calm-checks/targets`, `POST /api/calm-checks/targets/remove`
 - **使用場所**: `functions/src/calmCheck.ts` (handleGenerateCalmChecks で対象者取得)
-
 ### ✅ `calm_checks`
 - **役割**: ヘルパーの落ち着き確認回答を記録。支援後に対象利用者の様子を共有
 - **CREATE 文**: `sql/create_calm_checks.sql`
@@ -383,34 +355,62 @@
   - `GET /api/calm-checks/history` — 回答履歴（管理者用）
 - **使用場所**: `functions/src/calmCheck.ts`, `public/calm-check/`
 - **ホーム画面**: `public/index.js` で pending 件数を取得し、連絡確認カード内にアラート表示
-
 ---
-
 ## 9. village-admin 専用テーブル（別リポジトリ管理）
-
 以下は `village-admin` リポジトリ側の `sql/create_admin_tables.sql` で管理されているテーブル。village-tsubasa からは参照していないが、同じ Supabase プロジェクトを共有しているため記録:
-
 ### ✅ `admin_users`
 - **役割**: 管理ダッシュボードにアクセスできる管理者のメール allow-list
 - **参考**: `village-admin/sql/create_admin_tables.sql`
 - **参照箇所**: `village-admin/functions/src/middleware/adminAuth.ts`
-
 ### ✅ `admin_error_alerts`
 - **役割**: 管理ダッシュボードのエラーアラート管理
 - **参考**: `village-admin/sql/create_admin_tables.sql`
 - **参照箇所**:
   - `village-admin/functions/src/error-alerts/list.ts`
   - `village-admin/functions/src/error-alerts/dismiss.ts`
+---
+## 10. スプレッドシート同期（GAS 「スケジュール逆同期」プロジェクト）
+Supabase テーブルではないが、`schedule` テーブルの延長線上にあるので併記:
+
+### スプレッドシートの列構造（各曜日ブロック）
+ブロック開始列は曜日により異なる（月:D, 火:AA, 水:AX, 木:BU, 金:CR, 土:DO, 日:EL）。各ブロックは 22 列幅。各ブロック内の offset で以下のカラムを管理:
+
+| offset | 役割 | COL 定数 |
+|-------|------|----------|
+| 0 | ヘルパー | `HELPER` |
+| 1 | 利用者 | `CLIENT` |
+| 2 | 開始時間 | `START` |
+| 3 | 終了時間 | `END` |
+| 4 | 配車 | `HAISHA` |
+| 5 | 内容（サービス種類） | `TASK` |
+| 6 | 概要 | `SUMMARY` |
+| 7 | 日付 | `DATE` |
+| 8 | 目的コード | `PURPOSE` |
+| 9 | 2人付フラグ | `TWO_PERSON` |
+| 10 | 請求 | `BILLING` |
+| 11 | 受給者番号 | `BENEFICIARY` |
+| 12 | ヘルパーメール | `HELPER_EMAIL` |
+| 13〜18 | サービスコード / 単位数 / サービス内容 / (2人付) 計6列 | （GAS 未使用、シート上の手入力欄） |
+| 19 | スケジュール id (Supabase uuid) | `SUPABASE_ID` ← **2026-04-17 に 13→19 へ変更** |
+
+### GAS 関数
+- `doPost` / `doGet`: 利用者アプリからの即時同期（add / edit / delete / export_records）
+- `handleAdd` / `handleEdit` / `handleDelete`: 実書き込み処理。`COL.SUPABASE_ID` を経由してシート内の uuid 列を一元管理
+- `findRowByIdOrKey_`: id または (client + startTime) で行特定。edit / delete / 流し込み時の重複判定に使用
+- `monthlySheetAutoCreate_` （2026-04-17 追加）: 毎月 15 日 00:05 のトリガー。翌月 1 日を `基本!A2` にセット → `createCalendarsWeek1to6_FromKihonA2_MondayStart(ss)` でシート生成 → `flushScheduleToSheet_(year, month)` で Supabase の未反映分を流し込み
+- `installMonthlyTrigger_`: 上記トリガーを登録する 1 回きりの手動実行関数
+- `runMonthlySheetAutoCreateNow`: 緊急時の手動起動
+
+### スクリプトプロパティ
+- `SUPABASE_URL`: `https://pbqqqwwgswniuomjlhsh.supabase.co`
+- `SUPABASE_SERVICE_KEY`: service_role キー（管理者権限）
 
 ---
-
-## 9. 要確認 / TODO 🔎
-
+## 11. 要確認 / TODO 🔎
 ### ⚠️ バグ疑い: `moveCheckService.ts` の `date` カラム参照
 - `functions/src/services/moveCheckService.ts:52` で `.order("date", ...)` となっているが、`schedule_tasks_move` の正規列名は `service_date`（village-admin 側も `service_date` を使用）
 - テーブルに `date` 列が存在しないなら、このクエリは実行時エラーになる
 - **4/15 デプロイ前に要修正**
-
 ### CREATE 文のリポジトリ化
 以下のテーブルはコード参照のみで CREATE 文が無い:
 - `schedule`
@@ -420,24 +420,22 @@
 - `home_schedule_tasks`
 - `service_notes_home`
 - `service_action_logs_home`
-
 村上翼さんからの提案: 次回本番反映のタイミングで Supabase ダッシュボードから実スキーマをエクスポートして `sql/` 配下に取り込む。そうすれば RLS / trigger / index の情報も追えるようになる。
-
 ### RLS（Row Level Security）設定
-- `schedule` は anon ロールが INSERT 後の SELECT を返せない事例あり（村上翼さん確認）
+- `schedule` は RLS OFF を確認済み（2026-04-17）。ただし anon ロールが INSERT 後の SELECT を返せない事例あり（村上翼さん確認）
 - 他テーブルの RLS 状況は未確認
-
 ### `service_notes_home` の独自フォーマット依存
 - `memo` と `final_note` に独自フォーマットが埋め込まれていて、village-admin 側の `parseMemo` / `parseTimeFromFinalNote` が依存している
 - village-tsubasa 側で保存形式を変更する場合は、村上さんの admin ダッシュボードが壊れるので事前共有が必要
-
+### `synced_to_sheet` / `synced_at` が未使用状態
+- 2026-04-17 にカラムを追加したが、PostgREST キャッシュ問題で GAS から書き込みできなかった経緯から、現在の `sheet_auto_create.gs` は「シート状態ベース版」（シートに同じ supabaseId があるかで判定）に切り替え済み
+- カラム自体は残してあるので、将来必要になれば GAS 側で `sbMarkSynced_()` を有効化すれば使える
 ---
-
 ## 更新履歴
-
 - 2026-04-11: 初版作成
 - 2026-04-11: `schedule` テーブルの列定義・参照箇所・RLS 上の注意点を追記（村上翼 / village-admin チャットからの情報反映）
 - 2026-04-11: move / home 系（`schedule_tasks_move`, `service_notes_move`, `move_check_logs`, `home_schedule_tasks`, `service_notes_home`, `service_action_logs_home`）を `functions/src/` から読み取って詳細化
 - 2026-04-11: village-admin 調査結果を反映。`sent_at`、`memo` / `final_note` の独自フォーマット、`schedule_tasks_move` のバグ疑い、`admin_users` / `admin_error_alerts` テーブルを追記
 - 2026-04-13: `training_reports` テーブル追加（研修報告 + 管理者お知らせ統合）。CREATE 文は `sql/create_training_reports.sql`
 - 2026-04-14: `calm_check_targets` / `calm_checks` テーブル追加（落ち着き確認システム）。CREATE 文は `sql/create_calm_checks.sql`
+- 2026-04-17: `schedule` テーブルに `synced_to_sheet` (boolean) / `synced_at` (timestamptz) を追加。スプレッドシートの `SUPABASE_ID` 列位置を Q列（offset 13）→ W列（offset 19）に変更。GAS 「スケジュール逆同期」に月次自動化（`monthlySheetAutoCreate_` / `flushScheduleToSheet_` / `installMonthlyTrigger_`）を追加。毎月 15 日 00:05 に翌月シート自動生成 + Supabase 未反映分の流し込みを実行。`sheet_auto_create.gs` は「シート状態ベース版」で実装。GAS スクリプトプロパティの SUPABASE_URL が別プロジェクトを指していた事故を修正し、正しい service_role キーに更新
