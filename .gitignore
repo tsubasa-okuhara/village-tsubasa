@@ -9,3 +9,22 @@ node_modules/
 village-tsubasa-home/
 village-tsubasa-move/
 home/
+
+# ===== 経費精算アプリ (Streamlit) 用 =====
+# Streamlit secrets（APIキー等の機密情報、絶対コミット禁止）
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+
+# ローカル SQLite データベース
+receipt_database.db
+*.sqlite
+*.sqlite3
+
+# 画像アップロード（ユーザーデータ）
+images/
+uploads/
