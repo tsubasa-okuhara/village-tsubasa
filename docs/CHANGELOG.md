@@ -1,0 +1,182 @@
+# CHANGELOG — 3アプリ横断の変更ログ
+
+> **目的**: 3アプリ（village-tsubasa / village-admin / user-schedule-app）のいずれかで **他アプリに影響しうる変更** があった際に追記する台帳。
+>
+> **書き方**:
+> ```
+> ## YYYY-MM-DD [リポ名] 変更タイトル
+> - 変更内容
+> - 影響範囲: （他アプリへの影響、なければ「本リポ内のみ」）
+> - 関連コミット/PR: （あれば）
+> ```
+>
+> 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
+> **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
+
+最終更新: 2026-04-19（経費精算 Streamlit アプリのソース復旧）
+
+---
+
+## 2026-04-19 [village-tsubasa] 経費精算 Streamlit アプリのソースを main に追加（`v-sche-receipt.streamlit.app` 復旧）
+
+- Streamlit Cloud の「v-sche-receipt」アプリが `The main module file does not exist: /mount/src/village-tsubasa/app.py` で起動失敗していた
+- 原因: Streamlit Cloud が village-tsubasa リポの main ブランチから `app.py` を起動しようとしていたが、main に未コミットだった（ローカルのみに存在）
+- 対応: 追加だけのコミット (`1e37463`) を作成。Firebase 側のファイル削除や変更はステージから完全に除外
+- 追加ファイル（10）:
+  - `app.py`, `database.py`, `image_utils.py`, `ocr_utils.py` — Streamlit 経費精算アプリ本体
+  - `requirements.txt` — streamlit / Pillow / pandas / openpyxl / anthropic / supabase
+  - `supabase_schema.sql`, `supabase_migration_ai_fields.sql`, `supabase_migration_multiuser.sql` — DB スキーマ（全テーブル `receipt_` プレフィックスで既存と衝突回避）
+  - `.streamlit/secrets.toml.example` — Cloud Secrets 設定用テンプレ
+  - `.gitignore` — Streamlit / Python 用パターン追記（既存 Firebase パターンは維持）
+- **影響範囲**:
+  - village-tsubasa (Firebase) の本体コード・API・画面には一切変更なし
+  - Supabase 共有プロジェクトに **新規テーブル（`receipts` / `receipt_audit_log` / `receipt_categories`）を追加する前提**。既存テーブルの変更はなし → RULES.md ルール2・4 に準拠
+  - `helper_master` テーブルは READ のみ（`sign_up_helper` のホワイトリストチェックと `sign_in_helper` の名前引き）。INSERT/UPDATE はしない
+- 稼働条件: Streamlit Cloud Secrets に `[supabase] url/key` (service_role) / `[anthropic] api_key` / `[admin] emails` / `[auth] password` の設定が必要
+- push は奥原さんが確認してから実施
+
+## 2026-04-18 [village-tsubasa] 研修資料テーブル追加（`training_materials`）
+
+- `training_materials` テーブルを新設（`sql/create_training_materials.sql`）
+- `training_reports` に3列追加: `training_material_id` (uuid fk), `checklist_answers` (jsonb), `extra_comments` (jsonb)
+- AI（gpt-4o-mini）がチェック5項目を自動生成、管理者が編集可
+- 本文抽出は **ブラウザ側の mammoth.js** で行い、サーバーには抽出済みテキストのみ送信（cold start 軽量化）
+- 新 API: `POST/GET /api/training-materials`, `GET /api/training-materials/:id`, `POST /api/training-materials/update`, `POST /api/training-materials/delete`
+- **影響範囲**: `training_reports` の新規列はすべて nullable なので、village-admin 側が既存 SELECT 文で引いても破壊的影響なし。admin 側が研修資料を一覧したい場合は新 API を叩く。
+- 関連: `docs/HANDOFF_TRAINING_SYSTEM.md`
+
+## 2026-04-18 [village-tsubasa] 横断連携ドキュメント整備
+
+- `docs/CURRENT_STATE.md` 初版作成（3アプリの API・画面 URL・Scheduler ジョブの横断ビュー）
+- `docs/CHANGELOG.md` 初版作成（本ファイル）
+- `docs/RULES.md` 初版作成（新チャットが最初に読むルール）
+- 既存の `docs/SUPABASE_SCHEMA.md` を「共有契約の正」として位置付け
+- **影響範囲**: コード変更なし。3リポの新チャット開始時プロトコルが変わる。
+
+## 2026-04-17 [village-tsubasa] `schedule` テーブルに同期フラグ列追加
+
+- `schedule` に `synced_to_sheet` (boolean, default false) / `synced_at` (timestamptz, nullable) を追加
+- GAS 「スケジュール逆同期」に `monthlySheetAutoCreate_` / `flushScheduleToSheet_` / `installMonthlyTrigger_` 追加
+  - 毎月15日 00:05 に翌月週シート自動生成 + Supabase 未反映分の流し込み
+- `sheet_auto_create.gs` は **「シート状態ベース版」** で実装（PostgREST キャッシュ問題で列書き込みが不安定だったため、`synced_to_sheet` 列は現状使用していない）
+- スプレッドシートの `SUPABASE_ID` 列位置を **Q列 (offset 13) → W列 (offset 19)** に変更
+- GAS スクリプトプロパティの `SUPABASE_URL` が別プロジェクト (`xwnbdlcukycihgfrfcox`) を指していた事故を発見、正しい `pbqqqwwgswniuomjlhsh` の service_role キーに修正
+- **影響範囲**: `schedule` の新規2列は nullable/default あり → user-schedule-app / village-admin の既存クエリは破壊的影響なし。GAS 側のシート列位置変更は「スケジュール逆同期」プロジェクトに閉じた変更。
+- 関連コミット: `ab4e1a2`, `b78cb5c`, `9555528`
+
+## 2026-04-14 [village-tsubasa] 落ち着き確認システム（calm check）追加
+
+- 新テーブル2つ: `calm_check_targets` / `calm_checks`（`sql/create_calm_checks.sql`）
+- 新 API 7つ: `/api/calm-checks/pending`, `/answer`, `/generate`, `/history`, `/targets`, `/targets` (POST), `/targets/remove`
+- 新画面: `public/calm-check/`
+- ホーム画面 (`public/index.js`) で pending 件数を取得し、連絡確認カード内にアラート表示
+- **影響範囲**: 新規テーブルのみで既存テーブルに変更なし → 他アプリへの影響なし。
+- 関連コミット: `98435bc`
+
+## 2026-04-07〜2026-04-14 [village-tsubasa] カレンダー連携・サービス記録GAS連携
+
+- `feat: カレンダー連携（Google推奨・iPhone対応・一括追加）` (`ae12bc1`)
+- `feat: カレンダー追加の重複防止機能` (`9193a4e`)
+- サービス記録転送GASコード追加（4コミット連続）
+- **影響範囲**: 本リポ内 + GAS。他アプリへの影響なし。
+
+## 2026-04-06 [village-tsubasa] 通知UIとcron修正
+
+- Scheduler の cron 式を **JST基準に修正**（7時/20時）(`f4cf552`)
+- 戻るボタン追加・通知色分けデプロイ・ステータス資料作成 (`0156a1e`)
+- 通知一覧の通知タイプ別に色分けを追加 (`fe48b63`)
+- 予定カードから概要欄を非表示に (`c0e1379`)
+- **影響範囲**: 本リポ内のみ。
+
+## 2026-04-04〜2026-04-05 [village-tsubasa] スケジュール通知機能 + helper_email ilike化
+
+- スケジュール通知機能の追加 (`71d0818`)
+- `helper_email` の比較を `ilike`（大文字小文字無視）に変更 — `07b06ab` ほか複数
+- schedule_web_v で helper_email 自動補完、localStorage 記憶 (`b78cb5c`)
+- **影響範囲**: API レスポンスのフィルタ条件が変わったため、既存のメールアドレスをたとえば `"Admin@..."` と `"admin@..."` で使い分けていたクライアントは挙動が変わる可能性。user-schedule-app / village-admin からの影響は無いはず。
+
+## 2026-04-02 [village-tsubasa] ヘルパー選択 UI 改修
+
+- ヘルパー選択: 人名でない項目をその他グループに分離 (`25f6b8f`)
+- ヘルパー選択を個別名に分割して表示 (`d8c8299`)
+- メール検索を `ilike`（大文字小文字無視）に変更 (`4896cb7`)
+- 移動サービス記録: `haisha` 列を select から削除（列が存在しないため）(`83e135d`)
+- **影響範囲**: 本リポ内のみ。
+
+## 2026-03-31 [village-tsubasa] サービス記録のAI要約フォールバック改善
+
+- 移動支援・居宅介護: AI要約フォールバック時に警告表示を追加 (`103bb25`, #7)
+- スケジュール同期: API失敗時のモックデータ表示に警告バナーを追加 (`eb56560`, #6)
+- service-worker のデバッグ log 削除 (`51efba9`, `1e16050`, #11)
+- 移動支援未記録一覧: `haisha` フィールドをDBから正しく取得するよう修正 (`7c60407`)
+- 移動支援・居宅介護記録: モデル名修正とロールバック処理追加 (`8d06992`)
+- 移動支援記録: OpenAI要約生成と保存失敗時の再試行導線を実装 (`c316e79`)
+- **影響範囲**: 本リポ内のみ。
+
+## 2026-03-29〜2026-03-30 [village-tsubasa] ホーム画面・構造化記録・SQL 整備
+
+- `feat: helper home, next schedule, push badge, schedule view and sql setup` (`181f088`)
+- `docs: add supabase sql setup files for helper home, schedule view, and notification tests` (`d7f3a0c`)
+- `feat: group same schedule items in schedule sync view` (`b351a62`)
+- Home summary route / require AI before save (`91c083d`)
+- Enhance home structured logs and save flow (`7417af0`)
+- Home summary generation and function packaging fix (`a8a3f5d`)
+- **影響範囲**: 本リポ内が中心。`schedule_web_v` の形式変更は他アプリの SELECT 文に影響しうるが、カラム削除はしていないので後方互換あり。
+
+## 2026-03-26 [village-tsubasa] AI要約 + アプリ内通知
+
+- Add AI summary generation for home service records (`99a1a5b`)
+- Add in-app notifications and schedule improvements (`27484eb`)
+- **影響範囲**: 本リポ内のみ。`notifications` テーブルは本リポ専用。
+
+---
+
+## village-admin リポの変更（転記）
+
+> 村上翼さんのチャットで村上さん側に変更があったら、ここに転記してください。
+> 現状、別リポジトリの git log はこのチャットからは直接追えないため、手動追記待ち。
+
+### 2026-04-18 [village-admin] 研修管理画面の追加
+
+**変更内容**
+- 新規ページ `/training.html` を追加。2サブタブ構成で研修資料と研修報告を1画面に集約
+  - タブ1「📚 研修資料マスタ」— 一覧表示（停止中トグル）／新規登録モーダル（.docx アップロード→ブラウザで mammoth.js 抽出→本文反映／「ヘルパーへ自動通知」チェック）／学習チェック項目編集モーダル（最大10個）／基本情報の編集／停止・再開／完全削除
+  - タブ2「📝 研修報告・お知らせ一覧」— フィルタチップ（状態：全て/未読/既読/完了、種別：全て/ヘルパー報告/お知らせ、資料連携フィルタ）／AI整形文＋元文トグル／学習チェック達成率表示（✓✗付き%表示）／感想3コメント／既読・完了・未読戻し・削除
+  - サブタブに未読件数バッジ、資料カードの「報告を見る →」からタブ＆資料フィルタを連動
+- ダッシュボード（`/`）に stat-card「未読研修報告」を追加。件数表示＋未読時に警告色、クリックで `/training.html#reports` へ遷移。30秒ポーリングに組込
+- 全6ページ（index / schedule / search / service-notes-move / service-notes-home / helper-qualification）のナビに「研修」リンクを追加
+- `public/style.css` に研修画面用スタイル一式を追記
+
+**呼び出した village-tsubasa API**
+- `GET  /api/training-materials?email=...&includeInactive=1`
+- `POST /api/training-materials` — 新規登録
+- `POST /api/training-materials/update` — 基本情報編集／チェック項目編集／停止・再開
+- `POST /api/training-materials/delete` — 完全削除
+- `GET  /api/training-reports?email=...&status=...&type=...`
+- `POST /api/training-reports/notice` — 資料登録時のヘルパーへの通知自動投稿
+- `POST /api/training-reports/update-status` — 既読／完了／未読戻し
+- `POST /api/training-reports/delete`
+- ダッシュボードから未読件数取得にも `GET /api/training-reports?status=unread` を使用
+
+**影響範囲**: village-admin 内のみ。Supabase スキーマへの変更なし。village-tsubasa 側の既存 API を呼び出すだけで、API 仕様の変更なし。
+
+**動作確認の状況**: TS ビルド OK / 構文チェック OK / API マッピング OK。ローカル UI 動作確認・本番デプロイは未実施。
+
+---
+
+## user-schedule-app リポの変更（転記）
+
+> user-schedule-app 側に変更があったら、ここに転記してください。
+> 特に `schedule.html` の INSERT/UPDATE/DELETE 呼び出しが変わる場合は要転記。
+
+（未記入）
+
+---
+
+## 未記入の過去変更（SUPABASE_SCHEMA.md の更新履歴から転記）
+
+- **2026-04-13** [village-tsubasa] `training_reports` テーブル追加（研修報告 + 管理者お知らせ統合）。CREATE 文: `sql/create_training_reports.sql`。**影響範囲**: 新規テーブル、既存影響なし
+- **2026-04-11** `SUPABASE_SCHEMA.md` 初版作成（村上翼さん）
+- **2026-04-11** `SUPABASE_SCHEMA.md` に `schedule` テーブルの列定義・RLS 注意点を追記（村上翼 / village-admin チャットからの情報反映）
+- **2026-04-11** `SUPABASE_SCHEMA.md` に move / home 系（`schedule_tasks_move`, `service_notes_move`, `move_check_logs`, `home_schedule_tasks`, `service_notes_home`, `service_action_logs_home`）を詳細化
+- **2026-04-11** `SUPABASE_SCHEMA.md` に village-admin 調査結果を反映（`sent_at`, `memo`/`final_note` の独自フォーマット、`schedule_tasks_move` のバグ疑い、`admin_users` / `admin_error_alerts`）
