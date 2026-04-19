@@ -3,20 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>研修報告</title>
+    <title>研修報告 - ビレッジひろば</title>
     <style>
       :root {
-        --bg: #fffdfb;
+        --bg: #fffdf8;
         --panel: #ffffff;
-        --line: #eadfd7;
-        --text: #5c4b44;
-        --muted: #8b776f;
-        --accent: #f3d7db;
+        --line: #e4d5bf;
+        --text: #3e342f;
+        --muted: #72655d;
+        --accent: #d5bb93;
+        --accent-strong: #c7a773;
+        --accent-soft: #f3eadc;
+        --success: #587960;
+        --success-soft: #e8f0ea;
+        --danger: #b54d59;
+        --green: #5a8466;
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
 
       body {
         margin: 0;
@@ -24,73 +28,446 @@
         font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
         color: var(--text);
         background:
-          radial-gradient(circle at top right, rgba(243, 215, 219, 0.58), transparent 30%),
-          linear-gradient(180deg, #fffdfb 0%, #fff8f5 100%);
+          radial-gradient(circle at top left, rgba(235, 221, 198, 0.6), transparent 28%),
+          radial-gradient(circle at top right, rgba(247, 240, 225, 0.95), transparent 34%),
+          linear-gradient(180deg, #fffefb 0%, var(--bg) 42%, #f8f3ea 100%);
       }
 
       .page {
-        width: min(760px, calc(100% - 24px));
+        width: min(640px, calc(100% - 24px));
         margin: 0 auto;
         padding: 24px 0 40px;
       }
 
-      .back-link {
-        display: inline-flex;
-        align-items: center;
-        margin-bottom: 20px;
-        color: var(--muted);
-        text-decoration: none;
-        font-weight: 700;
-      }
-
-      .panel {
-        min-height: calc(100vh - 108px);
-        display: grid;
-        place-items: center;
-        padding: 24px;
-        border: 1px solid var(--line);
-        border-radius: 24px;
-        background: rgba(255, 255, 255, 0.94);
-        box-shadow: 0 16px 36px rgba(149, 118, 104, 0.1);
-        text-align: center;
-      }
-
-      .content {
-        max-width: 420px;
-      }
-
-      h1 {
-        margin: 0 0 14px;
-        font-size: clamp(1.8rem, 4vw, 2.5rem);
-      }
-
-      .status {
+      .back-home-btn {
         display: inline-block;
         margin-bottom: 16px;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, var(--accent), #f4e7d8);
-        font-weight: 700;
-        color: #7c6269;
+        padding: 10px 20px;
+        background: #6b4c3b;
+        color: #fff;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 12px;
+        border: 2px solid #5a3e2f;
+        box-shadow: 0 2px 8px rgba(107, 76, 59, 0.18);
+      }
+      .back-home-btn:hover { background: #5a3e2f; }
+
+      .hero {
+        text-align: center;
+        margin-bottom: 22px;
+      }
+      .hero__icon { font-size: 2.4rem; margin-bottom: 8px; }
+      .hero h1 { font-size: 1.5rem; margin: 0 0 8px; }
+      .hero p {
+        font-size: 0.92rem;
+        color: var(--muted);
+        margin: 0;
+        line-height: 1.6;
       }
 
-      p {
-        margin: 0;
-        line-height: 1.8;
+      .info-notice {
+        background: var(--accent-soft);
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin-bottom: 20px;
+        font-size: 0.86rem;
+        color: var(--text);
+        line-height: 1.6;
+      }
+      .info-notice strong { color: var(--accent-strong); }
+
+      /* === セクションカード === */
+      .form-card {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 22px;
+        box-shadow: 0 8px 24px rgba(126, 103, 86, 0.06);
+        margin-bottom: 18px;
+      }
+
+      .form-group { margin-bottom: 18px; }
+      .form-group label {
+        display: block;
+        font-weight: 700;
+        font-size: 0.92rem;
+        margin-bottom: 6px;
+        color: var(--text);
+      }
+      .required { color: var(--danger); font-size: 0.85rem; margin-left: 4px; }
+      .hint {
+        font-size: 0.82rem;
         color: var(--muted);
+        margin: 0 0 8px;
+      }
+
+      input[type="email"], input[type="text"], textarea, select {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        font-size: 0.95rem;
+        font-family: inherit;
+        color: var(--text);
+        background: #fffefb;
+      }
+      input:focus, textarea:focus, select:focus {
+        outline: none;
+        border-color: var(--accent-strong);
+        box-shadow: 0 0 0 3px rgba(197, 167, 115, 0.15);
+      }
+
+      .email-row { display: flex; gap: 8px; align-items: stretch; }
+      .email-row input { flex: 1; }
+      .lookup-btn {
+        padding: 10px 16px;
+        background: var(--accent-strong);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .lookup-btn:hover { background: #b89660; }
+      .lookup-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .helper-status {
+        margin-top: 8px;
+        font-size: 0.88rem;
+        min-height: 1.2em;
+      }
+      .helper-status.ok { color: var(--success); font-weight: 600; }
+      .helper-status.ng { color: var(--danger); }
+      .helper-status.loading { color: var(--muted); }
+
+      /* === 研修一覧 === */
+      .material-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .material-item {
+        background: #fff;
+        border: 2px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 16px;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .material-item:hover { border-color: var(--accent); background: #fffaf2; }
+      .material-item.selected {
+        border-color: var(--green);
+        background: #eff5f0;
+      }
+      .material-item__name {
+        font-weight: 700;
+        font-size: 1rem;
+        margin-bottom: 4px;
+      }
+      .material-item__meta {
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .material-item__summary {
+        font-size: 0.82rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .material-empty {
+        text-align: center;
+        padding: 32px 16px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.7;
+      }
+
+      /* === 選択後の入力エリア === */
+      .selected-info {
+        background: #eff5f0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 18px;
+        font-size: 0.88rem;
+        line-height: 1.6;
+      }
+      .selected-info strong { color: var(--green); }
+
+      /* 研修資料本文 */
+      .material-viewer {
+        margin-bottom: 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .material-viewer__toggle {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--accent-soft);
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.92rem;
+        color: var(--text);
+        user-select: none;
+      }
+      .material-viewer__toggle:hover { background: #ecdcc1; }
+      .material-viewer__body {
+        display: none;
+        padding: 16px 18px;
+        max-height: 50vh;
+        overflow-y: auto;
+        background: #fffefb;
+        font-size: 0.9rem;
+        line-height: 1.8;
+        white-space: pre-wrap;
+        color: var(--text);
+      }
+      .material-viewer.open .material-viewer__body { display: block; }
+      .material-viewer__arrow { transition: transform 0.2s; }
+      .material-viewer.open .material-viewer__arrow { transform: rotate(180deg); }
+      .material-viewer__empty {
+        font-size: 0.85rem;
+        color: var(--muted);
+        font-style: italic;
+      }
+      /* 本文内のURLをクリック可能に */
+      .material-viewer__body a {
+        color: var(--accent-strong);
+        word-break: break-all;
+      }
+
+      /* チェック項目 */
+      .checklist {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .check-item {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 12px 14px;
+        background: #fffefb;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .check-item:hover { background: #fffaf2; }
+      .check-item.checked {
+        background: #eff5f0;
+        border-color: var(--green);
+      }
+      .check-item input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        cursor: pointer;
+        accent-color: var(--green);
+        margin: 0;
+        flex-shrink: 0;
+      }
+      .check-item .check-text {
+        flex: 1;
+        font-size: 0.94rem;
+        line-height: 1.55;
+      }
+
+      /* 感想3コメント */
+      .extras {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .extra-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .extra-num {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font-weight: 700;
+        font-size: 0.85rem;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .extra-row input {
+        flex: 1;
+        padding: 10px 12px;
+      }
+
+      .submit-btn {
+        display: block;
+        width: 100%;
+        padding: 14px;
+        background: var(--accent-strong);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .submit-btn:hover { background: #b89660; }
+      .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .result-message {
+        margin-top: 16px;
+        padding: 14px 18px;
+        border-radius: 10px;
+        font-size: 0.92rem;
+        line-height: 1.6;
+        display: none;
+        white-space: pre-wrap;
+      }
+      .result-message.success {
+        display: block;
+        background: var(--success-soft);
+        color: var(--success);
+      }
+      .result-message.error {
+        display: block;
+        background: #f9e6e9;
+        color: var(--danger);
+      }
+
+      .sending-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(255, 253, 248, 0.85);
+        z-index: 100;
+        place-items: center;
+      }
+      .sending-overlay.active { display: grid; }
+      .sending-content { text-align: center; }
+      .sending-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--line);
+        border-top-color: var(--accent-strong);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 16px;
+      }
+      .sending-text {
+        font-size: 0.95rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      .section-title {
+        font-size: 1.05rem;
+        margin: 0 0 12px;
+        color: var(--text);
+        font-weight: 700;
       }
     </style>
   </head>
   <body>
     <main class="page">
-      <a class="back-link" href="/">ビレッジひろばへ戻る</a>
-      <section class="panel">
-        <div class="content">
-          <h1>研修報告</h1>
-          <div class="status">準備中</div>
-          <p>このページは現在作成中です。</p>
+      <a href="/" class="back-home-btn">← ビレッジひろばに戻る</a>
+
+      <div class="hero">
+        <div class="hero__icon">📚</div>
+        <h1>研修報告</h1>
+        <p>
+          受けた研修の内容や学びを共有してください。<br />
+          資料を選んで、チェックと簡単な感想を入力するだけで完了します。
+        </p>
+      </div>
+
+      <!-- ① ヘルパー認証 -->
+      <div class="form-card" id="auth-card">
+        <h2 class="section-title">① あなたを確認</h2>
+        <div class="form-group">
+          <label for="helper-email">メールアドレス<span class="required">*</span></label>
+          <p class="hint">登録されているメールアドレスを入力してください</p>
+          <div class="email-row">
+            <input
+              type="email"
+              id="helper-email"
+              placeholder="例: yamada@example.com"
+              autocomplete="email"
+            />
+            <button type="button" class="lookup-btn" id="lookup-btn">確認</button>
+          </div>
+          <div class="helper-status" id="helper-status"></div>
         </div>
-      </section>
+      </div>
+
+      <!-- ② 研修を選ぶ -->
+      <div class="form-card" id="material-card" style="display: none;">
+        <h2 class="section-title">② 受けた研修を選ぶ</h2>
+        <p class="hint">登録されている研修の中から、報告したい研修を選んでください。</p>
+        <div id="material-list" class="material-list">
+          <div class="material-empty">読み込み中…</div>
+        </div>
+      </div>
+
+      <!-- ③ 学習チェック + 感想 -->
+      <div class="form-card" id="report-card" style="display: none;">
+        <h2 class="section-title">③ 学習チェックと感想</h2>
+
+        <div class="selected-info" id="selected-info"></div>
+
+        <!-- 研修資料本文（開閉式） -->
+        <div class="material-viewer" id="material-viewer" style="display: none;">
+          <div class="material-viewer__toggle" id="material-viewer-toggle">
+            <span>📄 研修資料を見る</span>
+            <span class="material-viewer__arrow">▼</span>
+          </div>
+          <div class="material-viewer__body" id="material-viewer-body"></div>
+        </div>
+
+        <div class="form-group">
+          <label>学習チェック<span class="required">*</span></label>
+          <p class="hint">学んだ・できるようになったと感じる項目にチェックを入れてください（複数可）</p>
+          <div id="checklist" class="checklist"></div>
+        </div>
+
+        <div class="form-group">
+          <label>感想・気づき（短くてOK）</label>
+          <p class="hint">特に印象に残ったことや、現場で活かしたいことを2〜3個短く書いてください。</p>
+          <div class="extras">
+            <div class="extra-row">
+              <div class="extra-num">1</div>
+              <input type="text" id="extra-1" placeholder="例: 手洗いのタイミングを意識したい" maxlength="200" />
+            </div>
+            <div class="extra-row">
+              <div class="extra-num">2</div>
+              <input type="text" id="extra-2" placeholder="例: アルコール消毒の接触時間が分かった" maxlength="200" />
+            </div>
+            <div class="extra-row">
+              <div class="extra-num">3</div>
+              <input type="text" id="extra-3" placeholder="(任意)" maxlength="200" />
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="submit-btn" id="submit-btn" disabled>研修報告を送信</button>
+        <div class="result-message" id="result-message"></div>
+      </div>
     </main>
+
+    <div class="sending-overlay" id="sending-overlay">
+      <div class="sending-content">
+        <div class="sending-spinner"></div>
+        <div class="sending-text">AIが報告を整えています…</div>
+      </div>
+    </div>
+
+    <script src="./main.js"></script>
   </body>
 </html>
