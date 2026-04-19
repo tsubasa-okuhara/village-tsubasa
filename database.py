@@ -371,11 +371,11 @@ def insert_receipt(
     vendor: str,
     category: str,
     description: str,
-    image_path: str,
-    image_hash: str,
-    image_dpi: int,
-    image_color_mode: str,
-    helper_email: str,
+    image_path: Optional[str] = None,
+    image_hash: Optional[str] = None,
+    image_dpi: Optional[int] = None,
+    image_color_mode: Optional[str] = None,
+    helper_email: str = "",
     helper_name: str = "",
     ocr_raw_text: str = None,
     created_by: str = None,
@@ -384,7 +384,13 @@ def insert_receipt(
     store_address: Optional[str] = None,
     ai_confidence: Optional[int] = None,
 ) -> int:
-    """新規レシートを登録 (helper_email必須)"""
+    """新規レシートを登録 (helper_email必須、画像系はすべて任意)
+
+    画像を使わない手入力モード（テンキー／エクセル風）でも呼べるよう、
+    image_* 4 引数はすべて Optional で省略可能。
+    Supabase / SQLite ともに image_hash が TEXT UNIQUE なので、
+    複数 NULL は PostgreSQL/SQLite 既定で許容される。
+    """
     now = datetime.now().isoformat()
     if created_by is None:
         created_by = helper_email or "system"

@@ -477,6 +477,292 @@ def page_receipt_registration(user: dict):
                         st.error(f"エラー: {str(e)}")
 
 
+# ===== ページ1.5: 手入力（テンキー風 + エクセル風 2タブ） =====
+def page_manual_entry(user: dict):
+    """
+    レシート画像を使わず、手入力でレシートを登録するページ。
+    上部 2 タブ:
+      - ⌨️ テンキー風: マネーフォワード風の電卓 UI で 1 件ずつ入力
+      - 📊 エクセル風: 表形式で複数件をまとめて入力 (st.data_editor)
+    画像が無い前提で insert_receipt を呼ぶ。電子帳簿保存法のスキャナ保存対応にはならないため、
+    画面上に「紙レシートは別途保管してください」の注意書きを表示する。
+    """
+    st.title("⌨️ 手入力でレシート登録")
+    st.caption(
+        "レシート画像を使わずに、手入力で経費を登録できます。"
+        "好みの方法を選んでください（途中でタブを切り替えても入力中の内容は保持されません）。"
+    )
+    st.info(
+        "💡 **電子帳簿保存法について**：手入力モードはスキャナ保存要件には対応しません。"
+        "紙のレシートは別途保管していただき、AIで読み取りたい場合は「📝 レシート登録」ページから画像をアップロードしてください。"
+    )
+
+    helper_email = user["helper_email"]
+    helper_name = user.get("helper_name", "")
+
+    # カテゴリーをページ内で1度だけ取得（Supabase 呼び出し節約）
+    categories = get_categories()
+    if not categories:
+        st.warning("⚠️ 費目マスタが空です。管理者に連絡してください。")
+        return
+
+    tab_keypad, tab_excel = st.tabs(["⌨️ テンキー風（1件ずつ）", "📊 エクセル風（複数行まとめて）"])
+
+    # ============================================================
+    # タブ A: テンキー風入力
+    # ============================================================
+    with tab_keypad:
+        # セッション状態の初期化
+        if "manual_amount_str" not in st.session_state:
+            st.session_state.manual_amount_str = ""
+
+        amount_int = int(st.session_state.manual_amount_str or "0")
+
+        # 大きな金額表示
+        st.markdown(
+            f"""
+            <div style="background:#f7f9fc; border-radius:12px; padding:18px 12px;
+                        margin:8px 0 12px; text-align:center;
+                        border:1px solid #e4e8ee;">
+                <div style="color:#6b7785; font-size:0.85rem; letter-spacing:1px;">金額</div>
+                <div style="color:#1a2733; font-size:2.6rem; font-weight:700; line-height:1.1; margin-top:4px;">
+                    ¥{amount_int:,}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # テンキー（3列 × 4行）
+        keypad_rows = [
+            ["7", "8", "9"],
+            ["4", "5", "6"],
+            ["1", "2", "3"],
+            ["C", "0", "⌫"],
+        ]
+        for row in keypad_rows:
+            cols = st.columns(3)
+            for i, key in enumerate(row):
+                clicked = cols[i].button(
+                    key,
+                    use_container_width=True,
+                    key=f"keypad_btn_{key}",
+                )
+                if clicked:
+                    if key == "C":
+                        st.session_state.manual_amount_str = ""
+                    elif key == "⌫":
+                        st.session_state.manual_amount_str = st.session_state.manual_amount_str[:-1]
+                    else:
+                        # 先頭ゼロ抑止 + 桁数上限 9 (¥999,999,999)
+                        if st.session_state.manual_amount_str == "" and key == "0":
+                            pass
+                        elif len(st.session_state.manual_amount_str) < 9:
+                            st.session_state.manual_amount_str += key
+                    st.rerun()
+
+        st.divider()
+
+        # その他のフィールド（フォーム）
+        with st.form("keypad_entry_form", clear_on_submit=False):
+            kp_date = st.date_input(
+                "取引年月日",
+                value=datetime.now().date(),
+                format="YYYY-MM-DD",
+                key="keypad_date",
+            )
+
+            kp_category = st.selectbox(
+                "費目",
+                options=categories,
+                index=0,
+                key="keypad_category",
+            )
+
+            existing_vendors = get_unique_vendors(helper_email)
+            kp_vendor_select = st.selectbox(
+                "取引先（既存から選ぶ）",
+                options=[""] + existing_vendors,
+                index=0,
+                key="keypad_vendor_select",
+                help="新しい取引先は下のテキスト欄に入力してください",
+            )
+            kp_vendor_text = st.text_input(
+                "取引先（新規入力 or 修正）",
+                value="",
+                key="keypad_vendor_text",
+                placeholder="例: スターバックス渋谷店",
+            )
+
+            kp_description = st.text_area(
+                "備考（任意）",
+                value="",
+                height=80,
+                key="keypad_description",
+            )
+
+            kp_submit = st.form_submit_button(
+                "💾 この内容で登録",
+                use_container_width=True,
+                type="primary",
+            )
+
+            if kp_submit:
+                amount_now = int(st.session_state.manual_amount_str or "0")
+                vendor_final = (kp_vendor_text.strip() or kp_vendor_select.strip())
+
+                if amount_now <= 0:
+                    st.error("金額を入力してください（テンキーで0より大きい数値）")
+                elif not vendor_final:
+                    st.error("取引先を入力してください")
+                else:
+                    try:
+                        rid = insert_receipt(
+                            transaction_date=kp_date.isoformat(),
+                            amount=float(amount_now),
+                            vendor=vendor_final,
+                            category=kp_category,
+                            description=kp_description,
+                            helper_email=helper_email,
+                            helper_name=helper_name,
+                            created_by=helper_email,
+                        )
+                        st.success(f"✅ 登録完了！（ID: {rid}）")
+                        st.balloons()
+                        # リセット
+                        st.session_state.manual_amount_str = ""
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"エラー: {str(e)}")
+
+    # ============================================================
+    # タブ B: エクセル風入力（複数件まとめて）
+    # ============================================================
+    with tab_excel:
+        st.write(
+            "下の表に直接打ち込んで、最後に **「まとめて登録」** ボタンを押してください。"
+            "**金額が0** または **費目が空** の行は自動的にスキップされます。"
+        )
+        st.caption("💡 行を追加・削除するには表の右端（… メニュー）または末尾の空行を活用してください。")
+
+        # st.data_editor の key を変えることで「登録後にリセット」が実現できる
+        if "excel_reset_count" not in st.session_state:
+            st.session_state.excel_reset_count = 0
+
+        default_rows = 5
+        today = datetime.now().date()
+        initial_df = pd.DataFrame({
+            "取引日": [today] * default_rows,
+            "金額": [0] * default_rows,
+            "費目": [categories[0]] * default_rows if categories else [""] * default_rows,
+            "取引先": [""] * default_rows,
+            "備考": [""] * default_rows,
+        })
+
+        edited_df = st.data_editor(
+            initial_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key=f"excel_editor_{st.session_state.excel_reset_count}",
+            column_config={
+                "取引日": st.column_config.DateColumn(
+                    "取引日",
+                    format="YYYY-MM-DD",
+                    required=True,
+                ),
+                "金額": st.column_config.NumberColumn(
+                    "金額（円）",
+                    min_value=0,
+                    step=1,
+                    format="%d",
+                ),
+                "費目": st.column_config.SelectboxColumn(
+                    "費目",
+                    options=categories,
+                    required=True,
+                ),
+                "取引先": st.column_config.TextColumn(
+                    "取引先",
+                    max_chars=100,
+                ),
+                "備考": st.column_config.TextColumn(
+                    "備考",
+                    max_chars=200,
+                ),
+            },
+        )
+
+        # 集計プレビュー
+        try:
+            valid_preview = edited_df[
+                (edited_df["金額"].fillna(0).astype(float) > 0)
+                & edited_df["費目"].fillna("").astype(str).str.len().gt(0)
+            ]
+            preview_total = float(valid_preview["金額"].fillna(0).sum())
+            preview_count = len(valid_preview)
+            c1, c2 = st.columns(2)
+            c1.metric("登録される件数", f"{preview_count}件")
+            c2.metric("合計金額", format_currency(preview_total))
+        except Exception:
+            pass
+
+        if st.button(
+            "📥 上記の内容をまとめて登録",
+            use_container_width=True,
+            type="primary",
+        ):
+            success_count = 0
+            skipped_count = 0
+            errors = []
+
+            for idx, row in edited_df.iterrows():
+                try:
+                    amt = float(row["金額"]) if pd.notna(row["金額"]) else 0.0
+                except (ValueError, TypeError):
+                    amt = 0.0
+                cat = str(row["費目"]).strip() if pd.notna(row["費目"]) else ""
+                date_val = row["取引日"]
+
+                # スキップ条件: 金額0以下 / 費目空 / 日付欠損
+                if amt <= 0 or not cat or pd.isna(date_val):
+                    skipped_count += 1
+                    continue
+
+                try:
+                    # date_val が datetime.date / pandas.Timestamp / str の可能性
+                    if hasattr(date_val, "isoformat"):
+                        date_str = date_val.isoformat()[:10]
+                    else:
+                        date_str = str(date_val)[:10]
+
+                    rid = insert_receipt(
+                        transaction_date=date_str,
+                        amount=amt,
+                        vendor=str(row["取引先"]).strip() if pd.notna(row["取引先"]) else "",
+                        category=cat,
+                        description=str(row["備考"]).strip() if pd.notna(row["備考"]) else "",
+                        helper_email=helper_email,
+                        helper_name=helper_name,
+                        created_by=helper_email,
+                    )
+                    success_count += 1
+                except Exception as e:
+                    errors.append(f"{idx + 1}行目: {str(e)}")
+
+            if success_count:
+                st.success(f"✅ {success_count}件を登録しました")
+                st.balloons()
+                # 表をリセット
+                st.session_state.excel_reset_count += 1
+                st.rerun()
+            if skipped_count:
+                st.info(f"ℹ️ {skipped_count}件は金額0または費目空のためスキップしました")
+            if errors:
+                st.error("以下の行で登録エラー:\n\n" + "\n\n".join(errors))
+            if not success_count and not skipped_count and not errors:
+                st.warning("登録対象の行がありませんでした。表に金額と費目を入力してください。")
+
+
 # ===== ページ2: 検索・一覧 =====
 def page_search_and_list(user: dict):
     st.title("🔍 検索・一覧")
@@ -999,6 +1285,7 @@ def main():
     admin_user = is_admin(helper_email)
     page_options = [
         "📝 レシート登録",
+        "⌨️ 手入力",
         "🔍 検索・一覧",
         "📋 詳細・編集",
         "📊 監査ログ",
@@ -1046,6 +1333,8 @@ def main():
     # ページ表示
     if page == "📝 レシート登録":
         page_receipt_registration(user)
+    elif page == "⌨️ 手入力":
+        page_manual_entry(user)
     elif page == "🔍 検索・一覧":
         page_search_and_list(user)
     elif page == "📋 詳細・編集":
