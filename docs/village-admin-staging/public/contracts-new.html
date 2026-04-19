@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>新規契約作成 - village-admin</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      .form-section {
+        background: #fff;
+        border: 1px solid #e4d5bf;
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
+      }
+      .form-section h2 { margin-top: 0; font-size: 1.05rem; color: #5a3e2f; }
+      label { display: block; margin-top: 12px; font-size: 0.9rem; color: #72655d; }
+      input[type=text], input[type=email], input[type=date], input[type=number], select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #d9d0c2;
+        border-radius: 8px;
+        font-size: 0.95rem;
+      }
+      .party-row {
+        display: grid;
+        grid-template-columns: 140px 1.5fr 1.5fr 1fr 70px auto;
+        gap: 8px;
+        align-items: end;
+        margin-top: 10px;
+      }
+      .party-row select, .party-row input { padding: 6px 8px; font-size: 0.9rem; }
+      .remove-btn {
+        background: #fde7ea;
+        color: #b54d59;
+        border: 1px solid #f2c2c8;
+        padding: 4px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .add-party-btn {
+        margin-top: 10px;
+        padding: 8px 14px;
+        background: #f3eadc;
+        border: 1px dashed #c7a773;
+        color: #5a3e2f;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .field-input {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 10px;
+        align-items: center;
+        margin-top: 8px;
+      }
+      .field-input label { margin: 0; }
+      .submit-bar {
+        position: sticky;
+        bottom: 0;
+        background: rgba(255,253,248,0.95);
+        backdrop-filter: blur(8px);
+        padding: 14px 0;
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav></nav>
+      <h1>📄 新規契約作成</h1>
+    </header>
+
+    <main class="page">
+      <div class="form-section">
+        <h2>1. テンプレートを選ぶ</h2>
+        <label>テンプレート
+          <select id="templateSelect"><option value="">読み込み中...</option></select>
+        </label>
+        <div id="templateInfo" style="margin-top:8px; color:#72655d; font-size:0.85rem;"></div>
+      </div>
+
+      <div class="form-section">
+        <h2>2. 契約情報</h2>
+        <label>契約タイトル
+          <input id="titleInput" type="text" placeholder="2026年4月 山田太郎 雇用契約" />
+        </label>
+        <label>ヘルパーID（雇用契約時、任意）
+          <input id="helperIdInput" type="text" placeholder="例: yamada-taro-001" />
+        </label>
+        <label>利用者ID（利用者契約時、任意）
+          <input id="subjectUserIdInput" type="text" placeholder="例: user-116-sato-hanako" />
+        </label>
+        <div id="fieldsWrap"></div>
+      </div>
+
+      <div class="form-section">
+        <h2>3. 署名者</h2>
+        <p style="font-size:0.85rem; color:#72655d;">
+          利用者契約で本人が署名困難な場合は、本人を <code>role=principal / is_signer=false</code> で1名、
+          実際に署名する家族を <code>role=agent / is_signer=true</code> で1名、同意者を <code>co_signer</code> で追加します。
+        </p>
+        <div id="partiesWrap"></div>
+        <button type="button" class="add-party-btn" id="addPartyBtn">＋ 署名者を追加</button>
+      </div>
+
+      <div class="form-section">
+        <h2>4. 送信先プロバイダ</h2>
+        <label>電子署名サービス
+          <select id="providerSelect">
+            <option value="cloudsign" selected>クラウドサイン</option>
+            <option value="gmosign">GMOサイン（Phase 3.2 以降）</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="submit-bar">
+        <a href="contracts.html" class="btn btn-secondary">キャンセル</a>
+        <button id="saveDraftBtn" class="btn btn-secondary">下書き保存</button>
+        <button id="sendBtn" class="btn btn-primary">下書き保存 → 送信</button>
+      </div>
+
+      <div id="status" style="margin-top:16px;"></div>
+    </main>
+
+    <script>
+      (function () {
+        const API =
+          "https://asia-northeast1-village-tsubasa.cloudfunctions.net/api";
+        const ADMIN_EMAIL = "admin@village-support.jp";
+
+        const templateSelect = document.getElementById("templateSelect");
+        const templateInfo = document.getElementById("templateInfo");
+        const fieldsWrap = document.getElementById("fieldsWrap");
+        const partiesWrap = document.getElementById("partiesWrap");
+        const statusEl = document.getElementById("status");
+
+        const state = {
+          templates: [],
+          currentTemplate: null,
+          parties: [],
+        };
+
+        loadTemplates();
+
+        document
+          .getElementById("addPartyBtn")
+          .addEventListener("click", function () {
+            addPartyRow({
+              role: "principal",
+              name: "",
+              email: "",
+              signing_order: state.parties.length,
+              is_signer: true,
+            });
+          });
+
+        templateSelect.addEventListener("change", onTemplateChange);
+        document.getElementById("saveDraftBtn").addEventListener("click", function () {
+          submit(false);
+        });
+        document.getElementById("sendBtn").addEventListener("click", function () {
+          submit(true);
+        });
+
+        async function loadTemplates() {
+          try {
+            const res = await fetch(
+              API + "/contracts/templates?email=" + encodeURIComponent(ADMIN_EMAIL),
+            );
+            const json = await res.json();
+            state.templates = json.templates || [];
+            templateSelect.innerHTML =
+              '<option value="">— 選択してください —</option>' +
+              state.templates
+                .map(function (t) {
+                  return (
+                    '<option value="' +
+                    t.id +
+                    '">' +
+                    escapeHtml(t.title) +
+                    " (v" + t.version + ")" +
+                    "</option>"
+                  );
+                })
+                .join("");
+          } catch (err) {
+            templateSelect.innerHTML = '<option value="">取得失敗</option>';
+          }
+        }
+
+        function onTemplateChange() {
+          const id = templateSelect.value;
+          state.currentTemplate = state.templates.find(function (t) { return t.id === id; });
+          templateInfo.textContent = "";
+          fieldsWrap.innerHTML = "";
+          if (!state.currentTemplate) return;
+          templateInfo.textContent =
+            "種類: " + state.currentTemplate.kind +
+            " ・ version: " + state.currentTemplate.version;
+
+          (state.currentTemplate.fillable_fields || []).forEach(function (f) {
+            const row = document.createElement("div");
+            row.className = "field-input";
+            row.innerHTML =
+              "<label>" + escapeHtml(f.label || f.key) + (f.required ? " *" : "") + "</label>" +
+              '<input type="' + (f.type === "date" ? "date" : "text") +
+              '" data-field-key="' + escapeHtml(f.key) + '" placeholder="' +
+              (f.source ? "自動補完候補: " + f.source : "") + '" />';
+            fieldsWrap.appendChild(row);
+          });
+        }
+
+        function addPartyRow(p) {
+          const idx = state.parties.length;
+          state.parties.push(p);
+          const row = document.createElement("div");
+          row.className = "party-row";
+          row.innerHTML =
+            '<select data-k="role">' +
+            '<option value="principal">本人</option>' +
+            '<option value="agent">代理人</option>' +
+            '<option value="guardian">保護者</option>' +
+            '<option value="witness">立会人</option>' +
+            '<option value="co_signer">同意者</option>' +
+            "</select>" +
+            '<input data-k="name" type="text" placeholder="氏名" />' +
+            '<input data-k="email" type="email" placeholder="メール" />' +
+            '<input data-k="relation_to_subject" type="text" placeholder="続柄 (例:子)" />' +
+            '<input data-k="is_signer" type="checkbox" checked title="署名必須" />' +
+            '<button type="button" class="remove-btn">削除</button>';
+          row.querySelector('[data-k="role"]').value = p.role;
+          row.querySelector('[data-k="name"]').value = p.name || "";
+          row.querySelector('[data-k="email"]').value = p.email || "";
+          row.querySelector('[data-k="relation_to_subject"]').value =
+            p.relation_to_subject || "";
+          row.querySelector('[data-k="is_signer"]').checked = p.is_signer !== false;
+
+          row.querySelector(".remove-btn").addEventListener("click", function () {
+            row.remove();
+            state.parties.splice(idx, 1);
+          });
+          partiesWrap.appendChild(row);
+        }
+
+        function collectParties() {
+          const rows = partiesWrap.querySelectorAll(".party-row");
+          const out = [];
+          rows.forEach(function (row, i) {
+            out.push({
+              role: row.querySelector('[data-k="role"]').value,
+              name: row.querySelector('[data-k="name"]').value.trim(),
+              email: row.querySelector('[data-k="email"]').value.trim() || null,
+              relation_to_subject:
+                row.querySelector('[data-k="relation_to_subject"]').value.trim() || null,
+              signing_order: i,
+              is_signer: row.querySelector('[data-k="is_signer"]').checked,
+            });
+          });
+          return out;
+        }
+
+        function collectFieldValues() {
+          const out = {};
+          fieldsWrap.querySelectorAll("[data-field-key]").forEach(function (inp) {
+            out[inp.dataset.fieldKey] = inp.value;
+          });
+          return out;
+        }
+
+        async function submit(andSend) {
+          statusEl.innerHTML = "";
+          if (!state.currentTemplate) {
+            statusEl.innerHTML = '<div style="color:#b54d59;">テンプレートを選んでください</div>';
+            return;
+          }
+          const body = {
+            email: ADMIN_EMAIL,
+            template_id: state.currentTemplate.id,
+            title: document.getElementById("titleInput").value.trim(),
+            field_values: collectFieldValues(),
+            helper_id: document.getElementById("helperIdInput").value.trim() || null,
+            subject_user_id:
+              document.getElementById("subjectUserIdInput").value.trim() || null,
+            provider: document.getElementById("providerSelect").value,
+            parties: collectParties(),
+          };
+          try {
+            const res = await fetch(API + "/contracts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || "保存に失敗しました");
+            statusEl.innerHTML =
+              '<div style="padding:10px; background:#dcefe1; color:#2f6b43; border-radius:8px;">' +
+              "下書き保存しました (ID: " + json.contract.id + ")</div>";
+
+            if (andSend) {
+              const res2 = await fetch(
+                API + "/contracts/" + json.contract.id + "/send",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email: ADMIN_EMAIL }),
+                },
+              );
+              const j2 = await res2.json();
+              if (res2.status === 501) {
+                statusEl.innerHTML +=
+                  '<div style="margin-top:8px; padding:10px; background:#fff3d0; color:#8a6600; border-radius:8px;">' +
+                  "下書きは保存されましたが、外部API送信は Phase 3.2 以降の実装待ちです（" +
+                  escapeHtml(j2.error || "") + "）</div>";
+              } else if (!res2.ok) {
+                throw new Error(j2.error || "送信失敗");
+              } else {
+                statusEl.innerHTML +=
+                  '<div style="margin-top:8px; padding:10px; background:#dcefe1; color:#2f6b43; border-radius:8px;">' +
+                  "送信しました</div>";
+              }
+            }
+          } catch (err) {
+            statusEl.innerHTML =
+              '<div style="padding:10px; background:#fde7ea; color:#b54d59; border-radius:8px;">' +
+              escapeHtml(err.message) + "</div>";
+          }
+        }
+
+        function escapeHtml(s) {
+          return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
+      })();
+    </script>
+  </body>
+</html>

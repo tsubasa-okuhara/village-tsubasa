@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>契約管理 - village-admin</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      .filter-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .filter-bar select {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #d9d0c2;
+        font-size: 0.95rem;
+      }
+      .contract-row {
+        display: grid;
+        grid-template-columns: 140px 2fr 1fr 130px 140px auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 14px;
+        border-bottom: 1px solid #efe7d8;
+      }
+      .contract-row:hover { background: #fffdf7; }
+      .chip {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+      .chip-draft             { background: #e7e0d4; color: #5a4a34; }
+      .chip-pending_signature { background: #fff3d0; color: #8a6600; }
+      .chip-signed            { background: #dcefe1; color: #2f6b43; }
+      .chip-revoked           { background: #fde7ea; color: #b54d59; }
+      .chip-expired           { background: #ede7e0; color: #72655d; }
+      .actions-cell a {
+        margin-right: 8px;
+        text-decoration: none;
+        color: #7a5c3b;
+        font-weight: 600;
+        font-size: 0.88rem;
+      }
+      .stat-bar {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .stat-card {
+        flex: 1;
+        background: #fff;
+        border: 1px solid #e4d5bf;
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+      }
+      .stat-card .num { font-size: 1.6rem; font-weight: 700; color: #6b4c3b; }
+      .stat-card .label { font-size: 0.85rem; color: #72655d; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav><!-- 既存の village-admin ナビをここに --></nav>
+      <h1>📄 契約管理</h1>
+    </header>
+
+    <main class="page">
+      <div class="stat-bar">
+        <div class="stat-card">
+          <div class="num" id="statDraft">-</div>
+          <div class="label">下書き</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" id="statPending">-</div>
+          <div class="label">署名待ち</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" id="statSigned">-</div>
+          <div class="label">今月締結</div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div class="filter-bar">
+          <select id="filterKind">
+            <option value="">全ての種類</option>
+            <option value="employment">雇用契約</option>
+            <option value="nda">秘密保持</option>
+            <option value="service_agreement">業務委託</option>
+            <option value="important_matter">重要事項説明書</option>
+          </select>
+          <select id="filterStatus">
+            <option value="">全ての状態</option>
+            <option value="draft">下書き</option>
+            <option value="pending_signature">署名待ち</option>
+            <option value="signed">締結済</option>
+            <option value="revoked">撤回</option>
+            <option value="expired">期限切れ</option>
+          </select>
+        </div>
+        <div>
+          <a href="contracts-templates.html" class="btn btn-secondary">テンプレート管理</a>
+          <a href="contracts-new.html" class="btn btn-primary">＋ 新規契約</a>
+        </div>
+      </div>
+
+      <div id="list" class="card">
+        <div class="contract-row" style="font-weight:700;">
+          <div>種類</div>
+          <div>タイトル</div>
+          <div>対象</div>
+          <div>状態</div>
+          <div>送信日</div>
+          <div></div>
+        </div>
+        <div id="rows"><div style="padding:20px;">読み込み中...</div></div>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        const API =
+          "https://asia-northeast1-village-tsubasa.cloudfunctions.net/api";
+        const ADMIN_EMAIL = "admin@village-support.jp"; // ログインユーザーから取る場合は差し替え
+
+        const kindLabel = {
+          employment: "雇用契約",
+          nda: "秘密保持",
+          service_agreement: "業務委託",
+          important_matter: "重要事項説明書",
+          usage_contract: "利用契約",
+        };
+        const statusLabel = {
+          draft: "下書き",
+          pending_signature: "署名待ち",
+          signed: "締結済",
+          revoked: "撤回",
+          expired: "期限切れ",
+        };
+
+        const filterKindEl = document.getElementById("filterKind");
+        const filterStatusEl = document.getElementById("filterStatus");
+        const rowsEl = document.getElementById("rows");
+
+        filterKindEl.addEventListener("change", load);
+        filterStatusEl.addEventListener("change", load);
+
+        load();
+
+        async function load() {
+          const params = new URLSearchParams({ email: ADMIN_EMAIL });
+          if (filterKindEl.value) params.set("kind", filterKindEl.value);
+          if (filterStatusEl.value) params.set("status", filterStatusEl.value);
+          rowsEl.innerHTML = '<div style="padding:20px;">読み込み中...</div>';
+          try {
+            const res = await fetch(API + "/contracts?" + params.toString());
+            const json = await res.json();
+            render(json.contracts || []);
+            updateStats(json.contracts || []);
+          } catch (err) {
+            rowsEl.innerHTML =
+              '<div style="padding:20px; color:#b54d59;">取得に失敗しました: ' +
+              String(err) +
+              "</div>";
+          }
+        }
+
+        function updateStats(list) {
+          const now = new Date();
+          const thisMonth = now.getFullYear() * 100 + (now.getMonth() + 1);
+          let draft = 0, pending = 0, signedMonth = 0;
+          list.forEach(function (c) {
+            if (c.status === "draft") draft++;
+            else if (c.status === "pending_signature") pending++;
+            else if (c.status === "signed" && c.completed_at) {
+              const d = new Date(c.completed_at);
+              if (d.getFullYear() * 100 + (d.getMonth() + 1) === thisMonth) signedMonth++;
+            }
+          });
+          document.getElementById("statDraft").textContent = draft;
+          document.getElementById("statPending").textContent = pending;
+          document.getElementById("statSigned").textContent = signedMonth;
+        }
+
+        function render(list) {
+          if (!list.length) {
+            rowsEl.innerHTML =
+              '<div style="padding:30px; text-align:center; color:#72655d;">該当する契約はありません。</div>';
+            return;
+          }
+          rowsEl.innerHTML = "";
+          list.forEach(function (c) {
+            const row = document.createElement("div");
+            row.className = "contract-row";
+            const sent = c.sent_at
+              ? new Date(c.sent_at).toLocaleDateString("ja-JP")
+              : "—";
+            const subject = c.helper_id
+              ? "ヘルパー: " + c.helper_id
+              : c.subject_user_id
+                ? "利用者: " + c.subject_user_id
+                : "—";
+            row.innerHTML =
+              "<div>" + (kindLabel[c.kind] || c.kind) + "</div>" +
+              "<div>" + escapeHtml(c.title || "(無題)") + "</div>" +
+              "<div>" + subject + "</div>" +
+              '<div><span class="chip chip-' + c.status + '">' +
+              (statusLabel[c.status] || c.status) +
+              "</span></div>" +
+              "<div>" + sent + "</div>" +
+              '<div class="actions-cell">' +
+              '<a href="contract-detail.html?id=' + encodeURIComponent(c.id) + '">詳細</a>' +
+              "</div>";
+            rowsEl.appendChild(row);
+          });
+        }
+
+        function escapeHtml(s) {
+          return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
+      })();
+    </script>
+  </body>
+</html>
