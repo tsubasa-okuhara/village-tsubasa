@@ -26,6 +26,7 @@ import {
 
 import { serviceRecordsMoveRouter } from "./service-records-move/routes";
 import { serviceRecordsStructuredRouter } from "./service-records-structured/routes";
+import { contractsRouter } from "./contracts/routes";
 
 import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
 import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
@@ -88,6 +89,10 @@ app.use("/api/service-records-move", serviceRecordsMoveRouter);
 
 app.use("/service-records-structured", serviceRecordsStructuredRouter);
 app.use("/api/service-records-structured", serviceRecordsStructuredRouter);
+
+// 電子契約（設計書: docs/CONTRACTS_DESIGN.md, 実装: functions/src/contracts/）
+app.use("/contracts", contractsRouter);
+app.use("/api/contracts", contractsRouter);
 
 app.get("/push/public-key", handleGetPushPublicKey);
 app.get("/api/push/public-key", handleGetPushPublicKey);

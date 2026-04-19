@@ -13,9 +13,32 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-19（経費精算アプリに「手入力」ページを追加）
+最終更新: 2026-04-19（電子契約機能の Phase 0〜4 雛形を追加）
 
 ---
+
+## 2026-04-19 [village-tsubasa] 電子契約機能 Phase 0〜4 雛形の追加
+
+- ハイブリッド構成（自社UI + 外部署名API）で電子契約機能を既存アプリに統合する方針。別アプリは作らない
+- **Phase 0 方針メモ**: `docs/CONTRACTS_PHASE0.md`（GMOサイン vs クラウドサイン比較、介護業界固有論点、MVPスコープ）
+  - 第一候補 = クラウドサイン（SwaggerHub 仕様公開、トークン取得が単純）、GMOサインは後追いで並行評価
+- **Phase 1 設計書**: `docs/CONTRACTS_DESIGN.md`（DB ER図・API一覧・状態遷移・画面設計・provider抽象層）
+- **Phase 2 SQL**: `sql/create_contracts.sql` — 新規5テーブル（`contracts` / `contract_templates` / `contract_parties` / `contract_signatures` / `contract_audit_log`）
+- **Phase 3 Functions 雛形**: `functions/src/contracts/` （router / handlers / services / providers）
+  - `functions/src/index.ts` に `app.use("/contracts", contractsRouter)` と `app.use("/api/contracts", contractsRouter)` を追加（15エンドポイント）
+  - テンプレート CRUD・契約 CRUD・一覧・監査ログは動作。送信／ダウンロード／署名URL発行／Webhook 本処理は **Phase 3.2 以降に実装**（現状 501 スタブ）
+- **Phase 4 UI 雛形**: `public/contracts/index.html` / `sign.html` / `viewer.html`（ヘルパー向け「雇用契約」タブ）
+  - **利用者側（user-schedule-app）の UI は基盤優先方針に基づき未着手**
+  - **管理者側（village-admin）の契約管理画面も未着手**
+- MVP対象: ①ヘルパー雇用契約（★最優先）、②事業所間 業務委託・秘密保持（★）、③利用者 重要事項説明書・契約書は国定型様式／代理人署名あり（★基盤のみ）
+- **影響範囲**:
+  - 既存テーブル変更なし（RULES ルール2 準拠）
+  - `helper_master` / `notifications` / `admin_users` は SELECT or 既存列のみ参照（RULES ルール4 準拠）
+  - 既存 API の破壊的変更なし（RULES ルール3 準拠）。新規エンドポイント追加のみ
+  - user-schedule-app の `schedule` 呼び出しには触らない（RULES ルール6 準拠）
+  - Firebase Functions Secret Manager に `CLOUDSIGN_CLIENT_ID` / `CLOUDSIGN_WEBHOOK_SECRET` を **後日追加予定**（Phase 3.2 着手時）。現時点ではスタブが到達前に 501 を返すためデプロイ可
+- **次のアクション**: Phase 3.2 で `providers/cloudsign.ts` の実装 → `handleSendContract` 実装 → Webhook 本処理 → 結合試験 → 1件目のリアル雇用契約を電子化
+- 関連ドキュメント: `functions/src/contracts/README.md`（モジュール構成と動作状況の一覧）
 
 ## 2026-04-19 [village-tsubasa] 経費精算アプリに「⌨️ 手入力」ページを追加（テンキー風 + エクセル風 2 タブ）
 

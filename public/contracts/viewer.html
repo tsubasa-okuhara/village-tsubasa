@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>契約書の閲覧 - ビレッジひろば</title>
+    <style>
+      :root {
+        --bg: #fffdf8;
+        --line: #e4d5bf;
+        --text: #3e342f;
+        --muted: #72655d;
+        --accent-strong: #c7a773;
+      }
+      body {
+        margin: 0;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+      .page {
+        width: min(760px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 24px 0 40px;
+      }
+      .back {
+        display: inline-block;
+        margin-bottom: 16px;
+        padding: 10px 20px;
+        background: #6b4c3b;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 12px;
+        font-weight: 600;
+      }
+      .panel {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 22px;
+      }
+      h1 { margin-top: 0; color: #6b4c3b; }
+      .dl {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 12px 24px;
+        background: var(--accent-strong);
+        color: #fff;
+        text-decoration: none;
+        border-radius: 10px;
+        font-weight: 600;
+      }
+      .notice {
+        margin-top: 20px;
+        padding: 14px 16px;
+        background: #fff3d0;
+        border-left: 4px solid #c49500;
+        color: #6c5200;
+        font-size: 0.9rem;
+        border-radius: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <a class="back" href="./">← 契約一覧へ</a>
+
+      <div class="panel">
+        <h1>締結済 契約書</h1>
+        <div id="meta"></div>
+
+        <a id="dlBtn" class="dl" href="#">契約書PDFをダウンロード</a>
+
+        <div class="notice">
+          <strong>🚧 Phase 4 雛形</strong><br />
+          ダウンロードは Phase 3.2 以降で実装（GCS Signed URL 経由）。
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        const API_BASE =
+          "https://asia-northeast1-village-tsubasa.cloudfunctions.net/api";
+        const id = new URLSearchParams(location.search).get("id");
+        if (!id) { document.getElementById("meta").textContent = "契約ID未指定"; return; }
+        const email =
+          localStorage.getItem("village-tsubasa-helper-email") || "";
+        fetch(
+          API_BASE +
+            "/contracts/" +
+            encodeURIComponent(id) +
+            "?email=" +
+            encodeURIComponent(email),
+        )
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j.contract) return;
+            document.getElementById("meta").textContent =
+              j.contract.title +
+              "（締結: " +
+              (j.contract.completed_at
+                ? new Date(j.contract.completed_at).toLocaleDateString("ja-JP")
+                : "—") +
+              "）";
+          });
+        document.getElementById("dlBtn").addEventListener("click", function (e) {
+          e.preventDefault();
+          alert("Phase 3.2 以降で実装予定のダウンロード機能です。");
+        });
+      })();
+    </script>
+  </body>
+</html>
