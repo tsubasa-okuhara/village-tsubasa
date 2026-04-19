@@ -25,6 +25,7 @@
   var submitBtn = document.getElementById("submit-btn");
   var resultMessage = document.getElementById("result-message");
   var sendingOverlay = document.getElementById("sending-overlay");
+  var fallbackArea = document.getElementById("fallback-feedback-area");
 
   var materialViewer = document.getElementById("material-viewer");
   var materialViewerToggle = document.getElementById("material-viewer-toggle");
@@ -282,6 +283,7 @@
     submitBtn.textContent = "送信中…";
     sendingOverlay.classList.add("active");
     resultMessage.style.display = "none";
+    if (fallbackArea) fallbackArea.classList.remove("show");
 
     fetch(API_BASE + "/training-reports", {
       method: "POST",
@@ -341,6 +343,14 @@
     resultMessage.className = "result-message " + type;
     resultMessage.textContent = text;
     resultMessage.style.display = "block";
+    // 送信失敗時のみ「声のポストに切替」案内を表示。成功時は隠す。
+    if (fallbackArea) {
+      if (type === "error") {
+        fallbackArea.classList.add("show");
+      } else {
+        fallbackArea.classList.remove("show");
+      }
+    }
   }
 
   function escapeHtml(s) {
