@@ -13,9 +13,18 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-19（training-reports 改修2件追加: 既存実装の git 取り込み + 失敗時フォールバック）
+最終更新: 2026-04-20（training-reports に「✅ 報告済み」バッジを追加）
 
 ---
+
+## 2026-04-20 [village-tsubasa] training-reports に「✅ 報告済み」バッジを追加
+
+- 研修報告を送信した直後、その資料カードに緑色の「✅ 報告済み」バッジを表示。カード自体も淡い緑系のスタイルに変えてヘルパーの達成感と確認をサポート
+- セッション内変数 `reportedMaterialIds = {}` で記録（ページリロードでリセット、サーバー永続化なし）
+- 送信成功ハンドラに `reportedMaterialIds[selectedMaterial.id] = true` を `clearReportForm()` より先に実行
+- `renderMaterialList()` でバッジ HTML + `.reported` クラスを差し込み
+- **影響範囲**: training-reports の UI のみ。既存挙動・API・Supabase・他アプリへの影響なし
+- 関連コミット: `c984b03`
 
 ## 2026-04-19 [village-tsubasa] training-reports 送信失敗時のみ「声のポストに切替」ボタンを追加
 
