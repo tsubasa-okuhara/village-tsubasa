@@ -42,6 +42,7 @@
   var selectedMaterial = null;      // 選択中の研修資料
   var checkedAnswers = {};          // { id: boolean }
   var isSubmitting = false;         // 送信処理中フラグ（二重送信防止）
+  var reportedMaterialIds = {};     // { material_id: true } 当セッションで報告完了した資料
 
   // ---- 初期化: localStorageからメール復元 ----
   var savedEmail = "";
@@ -140,9 +141,14 @@
       var metaStr = meta.join(" / ");
 
       var sel = (selectedMaterial && selectedMaterial.id === m.id) ? "selected" : "";
+      var reported = reportedMaterialIds[m.id] ? "reported" : "";
+      var badge = reportedMaterialIds[m.id]
+        ? '<div class="material-item__badge">✅ 報告済み</div>'
+        : "";
       var summaryStr = m.material_summary ? escapeHtml(m.material_summary) : "";
       return (
-        '<div class="material-item ' + sel + '" data-id="' + m.id + '">' +
+        '<div class="material-item ' + sel + ' ' + reported + '" data-id="' + m.id + '">' +
+          badge +
           '<div class="material-item__name">' + escapeHtml(m.training_name) + '</div>' +
           (metaStr ? '<div class="material-item__meta">' + escapeHtml(metaStr) + '</div>' : '') +
           (summaryStr ? '<div class="material-item__summary">' + summaryStr + '</div>' : '') +
@@ -306,6 +312,10 @@
             (r.data.message || "研修報告を送信しました。ありがとうございます！") +
               "\nお疲れさまでした。"
           );
+          // 「報告済み」マーク登録（clearReportForm で selectedMaterial が null になる前にキャプチャ）
+          if (selectedMaterial && selectedMaterial.id) {
+            reportedMaterialIds[selectedMaterial.id] = true;
+          }
           clearReportForm();
           renderMaterialList();
           window.scrollTo({ top: 0, behavior: "smooth" });
