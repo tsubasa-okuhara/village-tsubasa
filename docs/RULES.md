@@ -119,6 +119,30 @@
 
 第3段階に進む前に、**まず手動運用で2〜4週間の定着期間**を設ける（自動化してから運用を変えると、自動化が足かせになる）。
 
+## ルール9. 週次のリポジトリ健康診断
+
+毎週金曜（または週初め）、各自で以下を実行:
+
+```bash
+bash ~/village-tsubasa/scripts/repo-health-check.sh
+```
+
+`~/Desktop` / `~/Documents` / `~/dev` / `~/Projects` 配下の git リポを自動検出し、各リポを以下で判定:
+
+- 🟢 **健全**: GitHub と同期、未コミットなし
+- 🟡 **注意**: 未push or 未コミットあり（意図的な作業中か確認）
+- 🔴 **危険**: GitHub remote 未設定（どこにも push されていない = ロストリスク）
+
+**運用ルール**:
+
+- 🔴 のリポは**今週中に対応**（GitHub にリポ作成 → remote 追加 → push）
+- 🟡 のリポは、未コミット・未pushが意図的か必ず確認。1週間以上 🟡 続いたら早めに片付け
+- 2週連続で 🔴 → 「放置リポ」として整理候補に。本当に不要なら `_archive_review/` に退避
+
+**過去にこれが原因で起きた事故**:
+- 2026-04-19: `village-tsubasa` の `public/training-reports/main.js` (354行) が git HEAD 上で空ファイル (`e69de29`) のまま放置されていた事故。Firebase Hosting だけにデプロイ済みで、git に存在しなかった。→ ローカル消失 = ロストの危険。今回 commit `5207650` で正式登録
+- 2026-04-21: `Desktop/v-sche-app` `Desktop/receipt_app` `Desktop/supabase-helper` `Desktop/pictweet2` 等の重複・放置リポジトリが多数発見。整理に時間を要した
+
 ---
 
 ## 疑問が出たら
@@ -132,3 +156,4 @@
 ## ルールの更新履歴
 
 - **2026-04-18** 初版作成（奥原翼）
+- **2026-04-21** ルール9「週次のリポジトリ健康診断」を追加（奥原翼 + Claude Opus）。`scripts/repo-health-check.sh` を併設。背景: 4/19 の `main.js` 354行ロスト未遂と 4/21 の Desktop 整理で大量の重複/孤立リポが見つかった反省から
