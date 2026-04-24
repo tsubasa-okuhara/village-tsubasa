@@ -13,9 +13,37 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-21（FUTURE_IDEAS.md + ルール10 追加）
+最終更新: 2026-04-24（RLS 段階移行計画 + Phase 0/1/3 SQL 雛形 を追加）
 
 ---
+
+## 2026-04-24 [village-tsubasa] RLS 段階移行計画 + Phase 0/1/3 SQL 雛形を追加
+
+- Supabase から `rls_disabled_in_public` / `exposed_sensitive_data` の警告メールが
+  届いたことを契機に、段階移行計画を起草
+- 新規ドキュメント `docs/RLS_MIGRATION_PLAN.md`（約220行）
+  - テーブルを 🟢A（service_role のみ）/ 🟡B（anon 直叩きあり）/ 🟣C（判断保留）の
+    3グループに分類
+  - Phase 0（診断）→ Phase 1（グループA の RLS ON）→ Phase 2（user-schedule-app
+    コード調査）→ Phase 3（グループB の RLS ON）→ Phase 4（厳密化・任意）
+  - ロールバック手順と「一括 RLS ON で何が壊れるか」を明記
+- 新規 SQL 3本（いずれも適用は奥原さんが Supabase Dashboard で実行予定）:
+  - `sql/check_rls_status.sql` — Phase 0 用。全テーブルの RLS 状態・既存ポリシー・
+    anon/authenticated GRANT・センシティブ列候補を一覧
+  - `sql/enable_rls_group_a.sql` — Phase 1 用。service_role 限定の 23 テーブルを
+    `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`（ポリシー無し、service_role が
+    bypass するため Firebase Functions / GAS は通常動作）
+  - `sql/enable_rls_schedule.sql` — Phase 3 用。**DRAFT 状態**（選択肢A「anon
+    全許可で警告だけ消す」/ 選択肢B「beneficiary_number で絞る厳格案」の2案を
+    コメントアウトで併記、user-schedule-app のコード確認後に採用案を確定）
+- **影響範囲**:
+  - ドキュメント + SQL ファイル追加のみ。まだ Supabase へは適用していない
+  - Phase 1 を適用するとグループA 23 テーブルの anon/authenticated 直アクセスが
+    拒否されるが、現時点で anon から叩いているアプリは user-schedule-app のみで、
+    user-schedule-app は `schedule` / `schedule_web_v` / `helper_master` しか
+    触らないため、Phase 1 単独では他アプリに影響なし想定
+  - Phase 3 は user-schedule-app の実コード確認とポリシー設計レビュー後に適用
+- 関連ドキュメント: `docs/RLS_MIGRATION_PLAN.md`
 
 ## 2026-04-21 [village-tsubasa] FUTURE_IDEAS.md とルール10（アイデア蓄積の自動化）を追加
 

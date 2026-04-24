@@ -1,0 +1,107 @@
+-- =============================================================
+-- enable_rls_schedule.sql  ⚠️ DRAFT / NOT READY TO APPLY ⚠️
+-- =============================================================
+-- 目的:
+--   RLS 段階移行計画 Phase 3 用。`schedule` および関連ビュー/マスタに
+--   対して、user-schedule-app（anon キー）からの INSERT/UPDATE/
+--   DELETE/SELECT を通しつつ RLS を有効化する。
+--
+-- ⚠️ 注意:
+--   本ファイルは **雛形** です。user-schedule-app の実アクセスパターンを
+--   確認する前に適用すると、116 名全員のスケジュール画面が壊れます。
+--
+-- 適用前の必須確認:
+--   [ ] user-schedule-app/schedule.html の Supabase 呼び出し全箇所の洗い出し
+--       （loadSchedule / doAdd / doEdit / doCancel / doSubmit の
+--       .from() / .select() / .insert() / .update() / .delete() チェーン）
+--   [ ] docs/RLS_MIGRATION_PLAN.md §5 への呼び出しパターン追記
+--   [ ] 奥原さんによるポリシー案のレビュー
+--   [ ] 下記の「選択肢A」「選択肢B」のどちらを採用するかを決定
+--
+-- 関連: docs/RLS_MIGRATION_PLAN.md Phase 2 / Phase 3
+-- 作成: 2026-04-24（雛形）
+-- =============================================================
+
+
+-- =============================================================
+-- 選択肢A: 全 anon に全操作を許可（現状の OFF と機能的に等価）
+-- =============================================================
+-- 警告メールの「誰でも読み書きできる」状況は解消されないが、
+-- `rls_disabled_in_public` 警告自体は消える。
+-- user-schedule-app のコード変更は不要。
+-- 「まず警告だけ消したい」用途向けの暫定案。
+-- =============================================================
+
+-- ALTER TABLE public.schedule ENABLE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY schedule_anon_all
+--   ON public.schedule
+--   FOR ALL
+--   TO anon
+--   USING (true)
+--   WITH CHECK (true);
+--
+-- ALTER TABLE public.helper_master ENABLE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY helper_master_anon_select
+--   ON public.helper_master
+--   FOR SELECT
+--   TO anon
+--   USING (true);
+
+
+-- =============================================================
+-- 選択肢B: 利用者ごとに beneficiary_number で絞る厳格案
+-- =============================================================
+-- user-schedule-app が利用者ごとに beneficiary_number を localStorage 等で
+-- 持っていて、それを Supabase クライアントの request header か
+-- クエリパラメータに乗せられる前提。
+-- 現状の user-schedule-app がこの前提を満たしているか **要確認**。
+--
+-- 満たしていない場合: 選択肢Aで一旦警告を消して、user-schedule-app
+-- 側にヘッダ付与を実装してから選択肢Bに切替（移行期間中は両方のポリシーを
+-- 共存させる）。
+-- =============================================================
+
+-- ALTER TABLE public.schedule ENABLE ROW LEVEL SECURITY;
+--
+-- -- 利用者は自分の beneficiary_number の予定だけ見える
+-- CREATE POLICY schedule_select_self
+--   ON public.schedule
+--   FOR SELECT
+--   TO anon
+--   USING (
+--     beneficiary_number = current_setting('request.headers.x-beneficiary-number', true)
+--   );
+--
+-- -- 利用者は自分の beneficiary_number でだけ INSERT できる
+-- CREATE POLICY schedule_insert_self
+--   ON public.schedule
+--   FOR INSERT
+--   TO anon
+--   WITH CHECK (
+--     beneficiary_number = current_setting('request.headers.x-beneficiary-number', true)
+--   );
+--
+-- -- UPDATE / DELETE も同様（略）
+
+
+-- =============================================================
+-- ROLLBACK（必要時）
+-- =============================================================
+-- DROP POLICY IF EXISTS schedule_anon_all          ON public.schedule;
+-- DROP POLICY IF EXISTS schedule_select_self       ON public.schedule;
+-- DROP POLICY IF EXISTS schedule_insert_self       ON public.schedule;
+-- DROP POLICY IF EXISTS helper_master_anon_select  ON public.helper_master;
+-- ALTER TABLE public.schedule      DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.helper_master DISABLE ROW LEVEL SECURITY;
+
+
+-- =============================================================
+-- TODO（Phase 2 で埋める）
+-- =============================================================
+-- [ ] user-schedule-app/schedule.html の .from('schedule') 呼び出し一覧を RLS_MIGRATION_PLAN.md §5 へ
+-- [ ] .from('helper_master') の呼び出しがあるか確認（無ければ helper_master はグループA送り）
+-- [ ] schedule_web_v ビューを anon から使っているか確認（使っていなければビュー単体で GRANT を削る案もあり）
+-- [ ] 選択肢A / B のどちらで行くかを奥原さんと合意
+-- [ ] 選択肢B の場合、user-schedule-app に request header 付与のコード修正が必要か判定

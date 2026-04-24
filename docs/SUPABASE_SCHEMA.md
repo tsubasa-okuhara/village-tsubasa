@@ -424,6 +424,7 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 ### RLS（Row Level Security）設定
 - `schedule` は RLS OFF を確認済み（2026-04-17）。ただし anon ロールが INSERT 後の SELECT を返せない事例あり（村上翼さん確認）
 - 他テーブルの RLS 状況は未確認
+- **2026-04-24**: Supabase から `rls_disabled_in_public` / `exposed_sensitive_data` 警告メールが到来。段階移行計画を `docs/RLS_MIGRATION_PLAN.md` に起草し、Phase 0（診断）/ Phase 1（service_role 限定テーブルの RLS ON）/ Phase 3（`schedule` 系ポリシー設計）の SQL 雛形を `sql/check_rls_status.sql` / `sql/enable_rls_group_a.sql` / `sql/enable_rls_schedule.sql` に配置。Supabase への適用は未実施
 ### `service_notes_home` の独自フォーマット依存
 - `memo` と `final_note` に独自フォーマットが埋め込まれていて、village-admin 側の `parseMemo` / `parseTimeFromFinalNote` が依存している
 - village-tsubasa 側で保存形式を変更する場合は、村上さんの admin ダッシュボードが壊れるので事前共有が必要
@@ -439,3 +440,4 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - 2026-04-13: `training_reports` テーブル追加（研修報告 + 管理者お知らせ統合）。CREATE 文は `sql/create_training_reports.sql`
 - 2026-04-14: `calm_check_targets` / `calm_checks` テーブル追加（落ち着き確認システム）。CREATE 文は `sql/create_calm_checks.sql`
 - 2026-04-17: `schedule` テーブルに `synced_to_sheet` (boolean) / `synced_at` (timestamptz) を追加。スプレッドシートの `SUPABASE_ID` 列位置を Q列（offset 13）→ W列（offset 19）に変更。GAS 「スケジュール逆同期」に月次自動化（`monthlySheetAutoCreate_` / `flushScheduleToSheet_` / `installMonthlyTrigger_`）を追加。毎月 15 日 00:05 に翌月シート自動生成 + Supabase 未反映分の流し込みを実行。`sheet_auto_create.gs` は「シート状態ベース版」で実装。GAS スクリプトプロパティの SUPABASE_URL が別プロジェクトを指していた事故を修正し、正しい service_role キーに更新
+- 2026-04-24: RLS 段階移行計画を `docs/RLS_MIGRATION_PLAN.md` に起草。診断 SQL (`sql/check_rls_status.sql`)、Phase 1 適用 SQL (`sql/enable_rls_group_a.sql`、23 テーブル対象)、Phase 3 雛形 SQL (`sql/enable_rls_schedule.sql`、選択肢A/B を併記した DRAFT) を追加。Supabase への適用は未実施
