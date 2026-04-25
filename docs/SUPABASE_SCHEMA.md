@@ -382,16 +382,16 @@
 RLS 移行 Phase 0 の診断 SQL で初めて存在が判明。
 
 ### 🔎 `helper_priority`
-- **状態**: RLS 既に ON
+- **状態**: RLS 既に ON、ただし**「Always True」相当のゆるいポリシー付き**（2026-04-25 Security Advisor で判明）
 - **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
 - **推定**: ヘルパー優先度マスタ？
-- **TODO**: 用途・列構成・参照箇所を奥原さんに確認
+- **TODO**: 用途・列構成・参照箇所を奥原さんに確認 → 必要なら厳格なポリシーに置換
 
 ### 🔎 `process_log`
-- **状態**: RLS 既に ON
+- **状態**: RLS 既に ON、ただし**「Always True」相当のゆるいポリシー付き**（2026-04-25 Security Advisor で判明）
 - **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
 - **推定**: 何らかの処理ログ？
-- **TODO**: 用途・列構成・参照箇所を奥原さんに確認
+- **TODO**: 用途・列構成・参照箇所を奥原さんに確認 → 必要なら厳格なポリシーに置換
 
 ### ✅ `receipts` / `receipt_categories` / `receipt_audit_log`
 - **状態**: RLS 既に ON
@@ -502,3 +502,4 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - 2026-04-25: RLS 移行 Phase 2 完了。user-schedule-app の4 HTML を grep して anon アクセスパターン確定。`notifications` を Group A → B に変更（`schedule.html` から anon INSERT されるため）。`client_users` テーブルを発見し §8.5 に追加（user-schedule-app/index.html L108 で参照、CREATE 文・列構成は未調査）。`sql/enable_rls_schedule.sql` を選択肢A 確定版に書き換え（`schedule` / `helper_master` / `notifications` / `client_users` の4テーブル対象）。Supabase への適用は未実施
 - 2026-04-25: RLS 移行 Phase 0（診断）実行。Supabase の public スキーマに **27 オブジェクト**（テーブル26 + ビュー1）存在を確認。RLS ON は5個（`helper_priority` / `process_log` / `receipts` / `receipt_categories` / `receipt_audit_log`）、OFF は22個。新発見テーブル `helper_priority` / `process_log` を §8.6 に追記（用途未確認）。`contracts` 5テーブルは Supabase 未作成（`sql/create_contracts.sql` 未適用）であることが判明 — Phase 1 SQL は `IF EXISTS` で防御的に対応
 - 2026-04-25 夜: ✅ **RLS 移行 全フェーズ完了**。`sql/enable_rls_group_a.sql`（Phase 1、17 テーブル）と `sql/enable_rls_schedule.sql`（Phase 3、4 テーブル＋4 ポリシー）を Supabase で適用。途中で village-admin の Firebase Secret に anon キーが入っていた事故を発見・修正（同 CHANGELOG 参照）。全 4 アプリ動作確認 OK
+- 2026-04-25 夜: Security Advisor クリーンアップ。`schedule_web_v` を `security_invoker = true` に変更（Errors 1→0）、public スキーマの5関数に `SET search_path = pg_catalog, public, pg_temp` 設定（Function Search Path Mutable 警告解消、Warnings 11→6）。残った6警告は Phase 3 の意図的な FOR ALL ポリシーや Firebase Auth 利用のため無関係なものだけで、実質的に追加対応不要

@@ -13,9 +13,40 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-25 夜（RLS 移行 全フェーズ完了 ✅）
+最終更新: 2026-04-25 夜（RLS 移行 + Security Advisor クリーンアップ完了 ✅）
 
 ---
+
+## 2026-04-25 [village-tsubasa] Security Advisor クリーンアップ（Errors=0 / Warnings=11→6）
+
+RLS 全フェーズ完了後、Supabase Security Advisor を確認:
+
+### Errors (1 → 0)
+- ❌ → ✅ `Security Definer View` on `public.schedule_web_v`
+  - 修正: `ALTER VIEW public.schedule_web_v SET (security_invoker = true);`
+  - これで anon 経由のビュー読み込みも基底テーブル（schedule, helper_master）の
+    RLS ポリシーを尊重するようになった
+
+### Warnings (11 → 6)
+- ✅ Function Search Path Mutable × 5件解消
+  - `fill_helper_email_home/move/schedule`、`prevent_receipt_delete`、
+    `prevent_receipt_audit_modification` の5関数に
+    `SET search_path = pg_catalog, public, pg_temp` を設定
+  - 適用 SQL: public スキーマの全関数を走査して未設定のものに自動適用する
+    DO ブロック（汎用、再実行可）
+
+### 残ったまま OK の Warnings (6件)
+- **RLS Policy Always True × 5件** — Phase 3 選択肢A の意図的な選択 + 既存テーブル
+  - `public.schedule` / `public.notifications` / `public.client_users` ←我々
+  - `public.helper_priority` / `public.process_log` ←既存（用途未確認）
+  - 厳密化は Phase 4（中長期）で対応
+- **Leaked Password Protection Disabled × 1件** — Supabase Auth の設定。
+  村のつばさは **Firebase Auth を使用**しており Supabase Auth は不使用なので無関係
+
+### 新発見
+- `helper_priority` と `process_log` には既存で「USING (true)」相当の
+  ゆるいポリシーが付いていることが判明（誰がいつ作ったか不明）
+- これも `SUPABASE_SCHEMA.md` §8.6 に追記
 
 ## 2026-04-25 [village-tsubasa] 🎉 RLS 段階移行 全フェーズ完了
 
