@@ -387,7 +387,10 @@ function applyFilters(data) {
     month: data.month,
     items: items.filter(function (item) {
       const helperNames = Array.isArray(item.helperNames) ? item.helperNames : [];
-      if (helperNames.length === 0) {
+      const hasRealHelper = helperNames.some(function (name) {
+        return name && name !== "担当未設定";
+      });
+      if (!hasRealHelper) {
         return false;
       }
       const matchesSelect =
