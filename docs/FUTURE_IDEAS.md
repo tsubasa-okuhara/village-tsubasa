@@ -25,6 +25,7 @@
 - **2026-04-21** Supabase 側で使われていないのに残っているもの（`helper_priority` テーブル、`process_log` テーブル、`process-schedule` Edge Function 等）を **SUPABASE_SCHEMA.md に「存在するが未使用」として記載**する運用を追加したい
 - **2026-04-21** 他社販売を考えるとき、SaaS化より先に **「IT ヘルパー代行サービス」** として人間の手で入れる形の方がリスク低くスタートできる
 - **2026-04-21** Desktop や Downloads フォルダの整理も、リポ健康診断みたいに **スクリプト化**できる（"怪しいフォルダ検出"）。ただし優先度低
+- **2026-04-25** **ヘルパーアプリの予定表示で「end_time なしでも start_time を表示」修正を `today-schedule` / `today-schedule-all` / `tomorrow-schedule` の3ページにも展開**したい。今日 `tomorrow-schedule-all` だけ修正済み（commit `9cb3edc`）。同じ `formatTimeRange` パターンなので3ファイルとも 4 行追加で済む。慎重に1ページずつ動作確認しながら。明日以降にやる予定
 
 ---
 
