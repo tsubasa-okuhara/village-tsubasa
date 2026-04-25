@@ -1,107 +1,134 @@
 -- =============================================================
--- enable_rls_schedule.sql  ⚠️ DRAFT / NOT READY TO APPLY ⚠️
+-- enable_rls_schedule.sql  (Phase 3 / 選択肢A 確定版)
 -- =============================================================
 -- 目的:
---   RLS 段階移行計画 Phase 3 用。`schedule` および関連ビュー/マスタに
---   対して、user-schedule-app（anon キー）からの INSERT/UPDATE/
---   DELETE/SELECT を通しつつ RLS を有効化する。
+--   RLS 段階移行計画 Phase 3 用。user-schedule-app（GitHub Pages、
+--   anon キー）が直接叩いているテーブル群に対して、anon の現在の
+--   操作を全て許可するポリシーを付けつつ RLS を有効化する。
 --
--- ⚠️ 注意:
---   本ファイルは **雛形** です。user-schedule-app の実アクセスパターンを
---   確認する前に適用すると、116 名全員のスケジュール画面が壊れます。
+-- 採用方針: 選択肢A（anon 全許可で警告だけ消す）
+--   - 理由1: user-schedule-app が schedule を WHERE 無し全件取得して
+--     クライアント側でフィルタしている設計のため、DB 側で利用者ごとに
+--     絞る選択肢B には user-schedule-app の大幅改修が必要
+--   - 理由2: Supabase 警告メールへの即時対応を優先
+--   - 厳密化（選択肢B 相当）は Phase 4 で別途検討
 --
--- 適用前の必須確認:
---   [ ] user-schedule-app/schedule.html の Supabase 呼び出し全箇所の洗い出し
---       （loadSchedule / doAdd / doEdit / doCancel / doSubmit の
---       .from() / .select() / .insert() / .update() / .delete() チェーン）
---   [ ] docs/RLS_MIGRATION_PLAN.md §5 への呼び出しパターン追記
---   [ ] 奥原さんによるポリシー案のレビュー
---   [ ] 下記の「選択肢A」「選択肢B」のどちらを採用するかを決定
+-- 確認したアクセスパターン（2026-04-25 時点）:
+--   user-schedule-app/schedule.html:
+--     - schedule_web_v       SELECT
+--     - schedule             SELECT / INSERT / UPDATE / DELETE
+--     - notifications        INSERT
+--   user-schedule-app/index.html:
+--     - client_users         (操作未確認、保守的に FOR ALL)
+--   user-schedule-app/records.html:
+--     - schedule_web_v       SELECT
+--     - schedule             SELECT / UPDATE
+--   user-schedule-app/mypage.html:
+--     - DB アクセス無し
 --
--- 関連: docs/RLS_MIGRATION_PLAN.md Phase 2 / Phase 3
--- 作成: 2026-04-24（雛形）
+-- 実行方法:
+--   Supabase Dashboard → SQL Editor に貼って Run
+--
+-- 検証（適用直後に必ず実施）:
+--   [ ] 奥原さんの端末で user-schedule-app を開いて schedule.html の
+--       予定一覧が表示される
+--   [ ] schedule.html で予定を追加 → スプレッドシート即時反映が成功
+--   [ ] schedule.html で予定を編集 → 同上
+--   [ ] schedule.html で予定をキャンセル → 同上
+--   [ ] index.html / records.html も開いて崩れがないか目視
+--
+-- ロールバック:
+--   本ファイル末尾の ROLLBACK ブロックをコメントアウト解除して実行
+--
+-- 関連: docs/RLS_MIGRATION_PLAN.md Phase 3
+-- 作成: 2026-04-24（DRAFT）→ 2026-04-25 確定（schedule.html 実調査後）
 -- =============================================================
 
 
--- =============================================================
--- 選択肢A: 全 anon に全操作を許可（現状の OFF と機能的に等価）
--- =============================================================
--- 警告メールの「誰でも読み書きできる」状況は解消されないが、
--- `rls_disabled_in_public` 警告自体は消える。
--- user-schedule-app のコード変更は不要。
--- 「まず警告だけ消したい」用途向けの暫定案。
--- =============================================================
+-- -------------------------------------------------------------
+-- 1. schedule: anon に全操作許可
+-- -------------------------------------------------------------
+ALTER TABLE public.schedule ENABLE ROW LEVEL SECURITY;
 
--- ALTER TABLE public.schedule ENABLE ROW LEVEL SECURITY;
---
--- CREATE POLICY schedule_anon_all
---   ON public.schedule
---   FOR ALL
---   TO anon
---   USING (true)
---   WITH CHECK (true);
---
--- ALTER TABLE public.helper_master ENABLE ROW LEVEL SECURITY;
---
--- CREATE POLICY helper_master_anon_select
---   ON public.helper_master
---   FOR SELECT
---   TO anon
---   USING (true);
+CREATE POLICY schedule_anon_all
+  ON public.schedule
+  FOR ALL
+  TO anon
+  USING (true)
+  WITH CHECK (true);
 
 
--- =============================================================
--- 選択肢B: 利用者ごとに beneficiary_number で絞る厳格案
--- =============================================================
--- user-schedule-app が利用者ごとに beneficiary_number を localStorage 等で
--- 持っていて、それを Supabase クライアントの request header か
--- クエリパラメータに乗せられる前提。
--- 現状の user-schedule-app がこの前提を満たしているか **要確認**。
---
--- 満たしていない場合: 選択肢Aで一旦警告を消して、user-schedule-app
--- 側にヘッダ付与を実装してから選択肢Bに切替（移行期間中は両方のポリシーを
--- 共存させる）。
--- =============================================================
+-- -------------------------------------------------------------
+-- 2. helper_master: schedule_web_v JOIN 用の SELECT 許可
+-- -------------------------------------------------------------
+-- user-schedule-app は helper_master を直接叩いていないが、
+-- schedule_web_v ビュー内で helper_email 補完のために JOIN している。
+-- ビューが security_invoker で動作する場合、anon にも基底テーブルの
+-- SELECT 権が必要なため許可しておく。
+ALTER TABLE public.helper_master ENABLE ROW LEVEL SECURITY;
 
--- ALTER TABLE public.schedule ENABLE ROW LEVEL SECURITY;
---
--- -- 利用者は自分の beneficiary_number の予定だけ見える
--- CREATE POLICY schedule_select_self
---   ON public.schedule
---   FOR SELECT
---   TO anon
---   USING (
---     beneficiary_number = current_setting('request.headers.x-beneficiary-number', true)
---   );
---
--- -- 利用者は自分の beneficiary_number でだけ INSERT できる
--- CREATE POLICY schedule_insert_self
---   ON public.schedule
---   FOR INSERT
---   TO anon
---   WITH CHECK (
---     beneficiary_number = current_setting('request.headers.x-beneficiary-number', true)
---   );
---
--- -- UPDATE / DELETE も同様（略）
+CREATE POLICY helper_master_anon_select
+  ON public.helper_master
+  FOR SELECT
+  TO anon
+  USING (true);
+
+
+-- -------------------------------------------------------------
+-- 3. notifications: user-schedule-app からの INSERT 許可
+-- -------------------------------------------------------------
+-- schedule.html L281 で利用者がヘルパーへ通知を投げる用途。
+-- SELECT/UPDATE/DELETE は Firebase Functions（service_role）でのみ
+-- 行うため、ここでは INSERT のみ anon 許可。
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY notifications_anon_insert
+  ON public.notifications
+  FOR INSERT
+  TO anon
+  WITH CHECK (true);
+
+
+-- -------------------------------------------------------------
+-- 4. client_users: index.html L108 で参照
+-- -------------------------------------------------------------
+-- 操作種別（SELECT/INSERT/UPDATE/DELETE）が未確認のため、保守的に
+-- FOR ALL で許可。Phase 4 で利用パターン詳細確認後に絞り込む候補。
+-- ⚠️ このテーブルは SUPABASE_SCHEMA.md に未記載 → Phase 4 で文書化
+ALTER TABLE public.client_users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY client_users_anon_all
+  ON public.client_users
+  FOR ALL
+  TO anon
+  USING (true)
+  WITH CHECK (true);
 
 
 -- =============================================================
--- ROLLBACK（必要時）
+-- 適用後の自己チェック
+-- =============================================================
+-- SELECT schemaname, tablename, rowsecurity
+--   FROM pg_tables
+--  WHERE schemaname = 'public'
+--    AND tablename IN ('schedule','helper_master','notifications','client_users')
+--  ORDER BY tablename;
+--
+-- SELECT tablename, policyname, cmd, roles
+--   FROM pg_policies
+--  WHERE schemaname = 'public'
+--    AND tablename IN ('schedule','helper_master','notifications','client_users')
+--  ORDER BY tablename, policyname;
+
+
+-- =============================================================
+-- ROLLBACK（必要時にコメントアウトを外して実行）
 -- =============================================================
 -- DROP POLICY IF EXISTS schedule_anon_all          ON public.schedule;
--- DROP POLICY IF EXISTS schedule_select_self       ON public.schedule;
--- DROP POLICY IF EXISTS schedule_insert_self       ON public.schedule;
 -- DROP POLICY IF EXISTS helper_master_anon_select  ON public.helper_master;
--- ALTER TABLE public.schedule      DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE public.helper_master DISABLE ROW LEVEL SECURITY;
-
-
--- =============================================================
--- TODO（Phase 2 で埋める）
--- =============================================================
--- [ ] user-schedule-app/schedule.html の .from('schedule') 呼び出し一覧を RLS_MIGRATION_PLAN.md §5 へ
--- [ ] .from('helper_master') の呼び出しがあるか確認（無ければ helper_master はグループA送り）
--- [ ] schedule_web_v ビューを anon から使っているか確認（使っていなければビュー単体で GRANT を削る案もあり）
--- [ ] 選択肢A / B のどちらで行くかを奥原さんと合意
--- [ ] 選択肢B の場合、user-schedule-app に request header 付与のコード修正が必要か判定
+-- DROP POLICY IF EXISTS notifications_anon_insert  ON public.notifications;
+-- DROP POLICY IF EXISTS client_users_anon_all      ON public.client_users;
+-- ALTER TABLE public.schedule       DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.helper_master  DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.notifications  DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE public.client_users   DISABLE ROW LEVEL SECURITY;

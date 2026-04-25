@@ -76,7 +76,8 @@ ALTER TABLE public.anonymous_feedback        ENABLE ROW LEVEL SECURITY;
 -- -------------------------------------------------------------
 -- 7. 通知・プッシュ系
 -- -------------------------------------------------------------
-ALTER TABLE public.notifications             ENABLE ROW LEVEL SECURITY;
+-- ⚠️ notifications は user-schedule-app が anon で INSERT するため
+--    グループB 送り。本ファイルからは除外。詳細は sql/enable_rls_schedule.sql。
 ALTER TABLE public.push_subscriptions        ENABLE ROW LEVEL SECURITY;
 
 -- -------------------------------------------------------------
@@ -108,7 +109,7 @@ ALTER TABLE public.admin_error_alerts        ENABLE ROW LEVEL SECURITY;
 --      'training_reports','training_materials',
 --      'calm_checks','calm_check_targets',
 --      'anonymous_feedback',
---      'notifications','push_subscriptions',
+--      'push_subscriptions',
 --      'contracts','contract_templates','contract_parties',
 --      'contract_signatures','contract_audit_log',
 --      'admin_users','admin_error_alerts'
@@ -133,7 +134,6 @@ ALTER TABLE public.admin_error_alerts        ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE public.calm_checks               DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE public.calm_check_targets        DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE public.anonymous_feedback        DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE public.notifications             DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE public.push_subscriptions        DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE public.contracts                 DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE public.contract_templates        DISABLE ROW LEVEL SECURITY;

@@ -13,9 +13,44 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-24（RLS 段階移行計画 + Phase 0/1/3 SQL 雛形 を追加）
+最終更新: 2026-04-25（RLS 移行 Phase 2 完了、Phase 3 SQL DRAFT 解除）
 
 ---
+
+## 2026-04-25 [village-tsubasa] RLS 移行 Phase 2 完了 + Phase 3 SQL DRAFT 解除
+
+- `~/Desktop/user-schedule-app/` の HTML 4ファイル（`schedule.html` /
+  `index.html` / `records.html` / `mypage.html`）を grep して anon
+  キーで叩いている全テーブルを特定
+- 判明したアクセスパターン（詳細は `RLS_MIGRATION_PLAN.md` §5）:
+  - `schedule` — schedule.html: SELECT/INSERT/UPDATE/DELETE、records.html: SELECT/UPDATE
+  - `schedule_web_v` — schedule.html / records.html: SELECT
+  - `notifications` — schedule.html: INSERT（**新発見、Group A → B に変更**）
+  - `client_users` — index.html: 操作未確認（**新発見、SUPABASE_SCHEMA 未記載**）
+  - `helper_master` — 直接アクセス無し（schedule_web_v JOIN 経由のみ）
+- 採用方針: **選択肢A（anon 全許可で警告だけ消す）** を確定
+  - 理由: user-schedule-app が WHERE 条件無しで全件取得してクライアント
+    側でフィルタしている設計のため、選択肢B（DB 側で利用者ごとに絞る）には
+    user-schedule-app の大幅改修が必要
+  - 厳密化は Phase 4 で別途検討
+- 変更ファイル:
+  - `sql/enable_rls_schedule.sql` — DRAFT 解除、選択肢A 確定版（4テーブル対象、検証手順・ロールバック付）
+  - `sql/enable_rls_group_a.sql` — `notifications` を除外（コメントで Group B 送りと注記）
+  - `docs/RLS_MIGRATION_PLAN.md` — §3 グループ分類更新（Group B に
+    `helper_master`/`notifications`/`client_users` 編入）、§4 Phase 2 を
+    完了マーク、§5 を呼び出しパターンで埋める
+  - `docs/SUPABASE_SCHEMA.md` — §8.5 に `client_users` を新規追加（要調査タグ付き）、更新履歴追記
+- **影響範囲**:
+  - ドキュメント + SQL ファイル更新のみ。Supabase へは未適用
+  - Phase 1 (`enable_rls_group_a.sql` 22 テーブル) と
+    Phase 3 (`enable_rls_schedule.sql` 4 テーブル) は両方とも適用準備完了。
+    奥原さんの判断で Supabase Dashboard で実行
+- **次のアクション**:
+  1. `sql/check_rls_status.sql` で現状診断
+  2. `sql/enable_rls_group_a.sql` を Run（Phase 1）
+  3. 動作確認（Firebase Functions 主要 API・GAS 同期）
+  4. `sql/enable_rls_schedule.sql` を Run（Phase 3）
+  5. user-schedule-app の閲覧/追加/編集/削除を奥原さん端末で動作確認
 
 ## 2026-04-24 [village-tsubasa] RLS 段階移行計画 + Phase 0/1/3 SQL 雛形を追加
 
