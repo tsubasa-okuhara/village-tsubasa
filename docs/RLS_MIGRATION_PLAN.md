@@ -4,8 +4,50 @@
 > 対応計画。ワンクリック一括 RLS ON は user-schedule-app（116名配布済）を
 > 即座に破壊するため、テーブルをリスク別に3グループへ分類し、段階的に ON にする。
 
-最終更新: 2026-04-25（user-schedule-app 4ファイル全 grep 完了、選択肢A 確定、Phase 3 SQL DRAFT 解除）
+最終更新: 2026-04-25 夕刻（Phase 1 試行→ロールバック→隠れバグ修正→未再実行で停止中）
 起草者: 奥原翼 + Claude Opus（本計画）
+
+## 🚨 再開時のメモ（次のチャット最初に読む）
+
+### 現在の状態（2026-04-25 終了時点）
+- ✅ Phase 0（診断）完了 — 全 27 オブジェクトの状態把握済み
+- ⚠️ Phase 1（Group A 17テーブル RLS ON）: **一度試して即ロールバック**
+- ✅ village-admin の Firebase Secret 修正済み（anon → service_role）
+- ✅ village-admin Functions 再デプロイ完了（service_role 反映済み）
+- ⏸️ Phase 1 を**まだ再実行していない**（Supabase は全テーブル RLS OFF のまま、
+  警告メールが残っている状態）
+- ⏸️ Phase 3（schedule 系 4テーブル）も未実行
+
+### 再開時にやること（順番厳守）
+
+1. **管理ダッシュボードの正常確認**
+   - `https://village-admin-bd316.web.app/` を開いて未記録/完成カウントが
+     ちゃんと数字で出ているか確認（0件のはずがない）
+   - これは前回の修正後の状態を再チェック
+
+2. **Phase 1 再実行**
+   - Supabase SQL Editor で `sql/enable_rls_group_a.sql` の中身を Run
+   - 「Success. No rows returned」を確認
+
+3. **動作確認3点セット**
+   - ✅ 管理ダッシュボード `https://village-admin-bd316.web.app/`
+     カウントが正常に出るか（**前回はここで0件になった**）
+   - ✅ ヘルパー今日の予定 `https://village-tsubasa.web.app/today-schedule/`
+   - ✅ ヘルパーホーム `https://village-tsubasa.web.app/`
+
+4. **Phase 3 へ進む**
+   - 上3つ全部 OK なら `sql/enable_rls_schedule.sql` を Run
+   - その後 user-schedule-app の動作確認:
+     `https://tsubasa-okuhara.github.io/user-schedule-app/schedule.html`
+
+### もしまた管理ダッシュボードが壊れたら
+
+- **慌てずロールバック**: `CHANGELOG.md` 2026-04-25 のロールバック SQL を参照
+- 原因の追加調査（Firebase Secret 以外にも anon キー使用箇所が無いか）
+- 当面は妥協案として `enable_rls_schedule.sql` の選択肢A を全テーブルに適用する選択も
+
+---
+
 
 ---
 

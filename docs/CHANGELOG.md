@@ -13,9 +13,70 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-25（RLS Phase 0 診断実行 + SQL 防御化 / Phase 2 完了 + Phase 3 SQL DRAFT 解除）
+最終更新: 2026-04-25（Phase 1 試行→ロールバック→隠れバグ修正→未再実行）
 
 ---
+
+## 2026-04-25 [village-admin] Firebase Secret `SUPABASE_SERVICE_ROLE_KEY` 修正（**隠れバグ発覚事故**）
+
+### 何が起きたか
+- 同日の Phase 1（Group A 17テーブル RLS ON）適用直後、管理ダッシュボード
+  `https://village-admin-bd316.web.app/` の「未記録（移動支援/居宅介護）」
+  「完成（移動支援/居宅介護）」のカウントが**全部0件**になる事象が発生
+- `本日の予定 47件`（`schedule_web_v` 経由、まだ RLS OFF）と
+  `未読研修報告 21件`（village-tsubasa API 経由、service_role）は表示されており、
+  **village-admin 自身の summary.ts 経由のクエリだけ**が結果0件
+
+### 即時対応
+- 全 17テーブルを `DISABLE ROW LEVEL SECURITY` に戻して**ロールバック完了**
+- 管理ダッシュボードのカウントは正常値に復帰
+
+### 根本原因
+- `village-admin/functions/src/lib/supabase.ts` のコードは正しく
+  `SUPABASE_SERVICE_ROLE_KEY` を `defineSecret` で読んでいた
+- しかし **Firebase Secret Manager に保存されていた値が anon キー**だった
+  （`firebase functions:secrets:access` で取得して JWT decode → `role: anon`）
+- service_role の名前で anon キーが入っていたため、RLS が ON になった瞬間に
+  全クエリが拒否されて 0件レスポンスになっていた
+- これは 2026-04-17 の GAS スクリプトプロパティ別プロジェクト事故と
+  **同パターンの再発**（村のつばさで2回目）
+
+### 修正
+1. Supabase Dashboard → Settings → API から正しい `service_role` キーを取得
+2. `firebase functions:secrets:set SUPABASE_SERVICE_ROLE_KEY --project village-admin-bd316`
+   で上書き（バージョン3として保存）
+3. 同コマンドの「stale function を再デプロイしますか？」プロンプトに `Y`
+   → `api(asia-northeast1)` Function を新シークレットで自動再デプロイ
+   + 古いバージョン（anon 入り）を Secret Manager から削除
+4. `firebase functions:secrets:access` + JWT decode で
+   `role: service_role | ref: pbqqqwwgswniuomjlhsh` を確認
+5. 管理ダッシュボード強制リロード → 正常動作確認（**RLS は OFF のまま**）
+
+### **影響範囲**
+- `village-admin` Firebase Functions が今後 RLS bypass で動作するようになった
+  （RLS が ON になっても summary が壊れない）
+- ペイントするように Phase 1 を**再実行する必要あり**（次回チャットで継続）
+- 過去にこの隠れバグが顕在化していなかったのは、これまで Supabase に RLS が
+  かかっていなかったから（anon でも全テーブル読めた）。RLS なしで運用していた
+  ぶん、誰も気付けなかった
+
+### 補足
+- 今回の事故により、**「コードが正しい = 設定も正しい」とは限らない**ことを
+  改めて学んだ。`defineSecret` の値の妥当性は CI で自動検証できないので、
+  デプロイ前に role 確認を手動で踏む運用にすべき
+- ルール7「触ると危ないポイント」に Firebase Secret のキー名/値ミスマッチ
+  事例を追記（同 RULES.md 更新）
+
+---
+
+## 2026-04-25 [village-tsubasa] RLS 移行 Phase 1 試行 → ロールバック
+
+- `sql/enable_rls_group_a.sql`（17テーブル）を Supabase で適用 → 一時的に RLS ON
+- 管理ダッシュボードのカウント0件問題を確認後、即座に DISABLE で全テーブルを
+  RLS OFF に戻した
+- **22テーブル全て元通り（RLS OFF）の状態で停止中**
+- 次回再開時は village-admin の secret 修正済みなので、安全に Phase 1 再実行可能
+- 詳細は本日の `[village-admin] Firebase Secret 修正` エントリ参照
 
 ## 2026-04-25 [village-tsubasa] RLS 移行 Phase 0 診断実行 + SQL を IF EXISTS で防御化
 
