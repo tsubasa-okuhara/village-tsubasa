@@ -48,7 +48,7 @@
 -- -------------------------------------------------------------
 -- 1. schedule: anon に全操作許可
 -- -------------------------------------------------------------
-ALTER TABLE public.schedule ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.schedule ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY schedule_anon_all
   ON public.schedule
@@ -65,7 +65,7 @@ CREATE POLICY schedule_anon_all
 -- schedule_web_v ビュー内で helper_email 補完のために JOIN している。
 -- ビューが security_invoker で動作する場合、anon にも基底テーブルの
 -- SELECT 権が必要なため許可しておく。
-ALTER TABLE public.helper_master ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.helper_master ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY helper_master_anon_select
   ON public.helper_master
@@ -80,7 +80,7 @@ CREATE POLICY helper_master_anon_select
 -- schedule.html L281 で利用者がヘルパーへ通知を投げる用途。
 -- SELECT/UPDATE/DELETE は Firebase Functions（service_role）でのみ
 -- 行うため、ここでは INSERT のみ anon 許可。
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.notifications ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY notifications_anon_insert
   ON public.notifications
@@ -95,7 +95,7 @@ CREATE POLICY notifications_anon_insert
 -- 操作種別（SELECT/INSERT/UPDATE/DELETE）が未確認のため、保守的に
 -- FOR ALL で許可。Phase 4 で利用パターン詳細確認後に絞り込む候補。
 -- ⚠️ このテーブルは SUPABASE_SCHEMA.md に未記載 → Phase 4 で文書化
-ALTER TABLE public.client_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.client_users ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY client_users_anon_all
   ON public.client_users
@@ -128,7 +128,7 @@ CREATE POLICY client_users_anon_all
 -- DROP POLICY IF EXISTS helper_master_anon_select  ON public.helper_master;
 -- DROP POLICY IF EXISTS notifications_anon_insert  ON public.notifications;
 -- DROP POLICY IF EXISTS client_users_anon_all      ON public.client_users;
--- ALTER TABLE public.schedule       DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE public.helper_master  DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE public.notifications  DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE public.client_users   DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE IF EXISTS public.schedule       DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE IF EXISTS public.helper_master  DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE IF EXISTS public.notifications  DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE IF EXISTS public.client_users   DISABLE ROW LEVEL SECURITY;

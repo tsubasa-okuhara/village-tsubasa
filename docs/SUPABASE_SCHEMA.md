@@ -376,6 +376,31 @@
 
 ---
 
+## 8.6 未文書化テーブル（2026-04-25 発見）
+
+以下のテーブルは Supabase に存在するが、本ドキュメントで用途が把握できていない。
+RLS 移行 Phase 0 の診断 SQL で初めて存在が判明。
+
+### 🔎 `helper_priority`
+- **状態**: RLS 既に ON
+- **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
+- **推定**: ヘルパー優先度マスタ？
+- **TODO**: 用途・列構成・参照箇所を奥原さんに確認
+
+### 🔎 `process_log`
+- **状態**: RLS 既に ON
+- **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
+- **推定**: 何らかの処理ログ？
+- **TODO**: 用途・列構成・参照箇所を奥原さんに確認
+
+### ✅ `receipts` / `receipt_categories` / `receipt_audit_log`
+- **状態**: RLS 既に ON
+- **用途**: Streamlit 経費精算アプリ（`v-sche-receipt.streamlit.app`）の格納先
+- **参考**: `supabase_schema.sql` / `supabase_migration_*.sql`（CHANGELOG 2026-04-19）
+- 本リポからは触らない（Streamlit アプリ側で管理）
+
+---
+
 ## 9. village-admin 専用テーブル（別リポジトリ管理）
 以下は `village-admin` リポジトリ側の `sql/create_admin_tables.sql` で管理されているテーブル。village-tsubasa からは参照していないが、同じ Supabase プロジェクトを共有しているため記録:
 ### ✅ `admin_users`
@@ -462,3 +487,4 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - 2026-04-17: `schedule` テーブルに `synced_to_sheet` (boolean) / `synced_at` (timestamptz) を追加。スプレッドシートの `SUPABASE_ID` 列位置を Q列（offset 13）→ W列（offset 19）に変更。GAS 「スケジュール逆同期」に月次自動化（`monthlySheetAutoCreate_` / `flushScheduleToSheet_` / `installMonthlyTrigger_`）を追加。毎月 15 日 00:05 に翌月シート自動生成 + Supabase 未反映分の流し込みを実行。`sheet_auto_create.gs` は「シート状態ベース版」で実装。GAS スクリプトプロパティの SUPABASE_URL が別プロジェクトを指していた事故を修正し、正しい service_role キーに更新
 - 2026-04-24: RLS 段階移行計画を `docs/RLS_MIGRATION_PLAN.md` に起草。診断 SQL (`sql/check_rls_status.sql`)、Phase 1 適用 SQL (`sql/enable_rls_group_a.sql`、23 テーブル対象)、Phase 3 雛形 SQL (`sql/enable_rls_schedule.sql`、選択肢A/B を併記した DRAFT) を追加。Supabase への適用は未実施
 - 2026-04-25: RLS 移行 Phase 2 完了。user-schedule-app の4 HTML を grep して anon アクセスパターン確定。`notifications` を Group A → B に変更（`schedule.html` から anon INSERT されるため）。`client_users` テーブルを発見し §8.5 に追加（user-schedule-app/index.html L108 で参照、CREATE 文・列構成は未調査）。`sql/enable_rls_schedule.sql` を選択肢A 確定版に書き換え（`schedule` / `helper_master` / `notifications` / `client_users` の4テーブル対象）。Supabase への適用は未実施
+- 2026-04-25: RLS 移行 Phase 0（診断）実行。Supabase の public スキーマに **27 オブジェクト**（テーブル26 + ビュー1）存在を確認。RLS ON は5個（`helper_priority` / `process_log` / `receipts` / `receipt_categories` / `receipt_audit_log`）、OFF は22個。新発見テーブル `helper_priority` / `process_log` を §8.6 に追記（用途未確認）。`contracts` 5テーブルは Supabase 未作成（`sql/create_contracts.sql` 未適用）であることが判明 — Phase 1 SQL は `IF EXISTS` で防御的に対応

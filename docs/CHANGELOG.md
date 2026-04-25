@@ -13,9 +13,32 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-25（RLS 移行 Phase 2 完了、Phase 3 SQL DRAFT 解除）
+最終更新: 2026-04-25（RLS Phase 0 診断実行 + SQL 防御化 / Phase 2 完了 + Phase 3 SQL DRAFT 解除）
 
 ---
+
+## 2026-04-25 [village-tsubasa] RLS 移行 Phase 0 診断実行 + SQL を IF EXISTS で防御化
+
+- Supabase Dashboard で `sql/check_rls_status.sql` の Query 1 を実行
+- 結果（public スキーマの全 27 オブジェクト）:
+  - **RLS 既に ON（5個）**: `helper_priority`, `process_log`, `receipts`,
+    `receipt_categories`, `receipt_audit_log`
+  - **RLS OFF（22個）**: schedule 系・service 系・training 系・admin 系・
+    notifications・push_subscriptions・helper_master・client_users・
+    schedule_web_v(view) など
+- 新発見:
+  - 🆕 `helper_priority`（既に RLS ON、用途未確認）
+  - 🆕 `process_log`（既に RLS ON、用途未確認）
+  - ❌ `contracts` 5テーブル（`sql/create_contracts.sql` が Supabase 未適用、
+    DB に存在しない）
+- 対応:
+  - `sql/enable_rls_group_a.sql` の `ALTER TABLE` を全て `ALTER TABLE IF EXISTS`
+    に書き換え（contracts 系テーブルが DB に未作成でもエラーにならない）
+  - `sql/enable_rls_schedule.sql` も同様に防御化
+  - `docs/SUPABASE_SCHEMA.md` §8.6「未文書化テーブル」を新規追加して
+    `helper_priority` / `process_log` / receipt_* を記録
+- **影響範囲**: ドキュメント + SQL ファイル更新のみ。Supabase への変更は
+  Phase 0 の Query 1 のみ（読み取り、副作用なし）
 
 ## 2026-04-25 [village-tsubasa] RLS 移行 Phase 2 完了 + Phase 3 SQL DRAFT 解除
 
