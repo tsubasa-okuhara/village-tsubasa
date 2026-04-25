@@ -13,9 +13,57 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-25（Phase 1 試行→ロールバック→隠れバグ修正→未再実行）
+最終更新: 2026-04-25 夜（RLS 移行 全フェーズ完了 ✅）
 
 ---
+
+## 2026-04-25 [village-tsubasa] 🎉 RLS 段階移行 全フェーズ完了
+
+### 達成内容
+2026-04-13 に Supabase から届いた `rls_disabled_in_public` /
+`exposed_sensitive_data` 警告メールへの対応を完遂。**27 オブジェクト全てが
+RLS ON または service_role 専用アクセス**になった。
+
+### 適用結果
+- ✅ **Phase 1**（Group A 17テーブル + contracts 5テーブル IF EXISTS スキップ）
+  - `sql/enable_rls_group_a.sql` を Supabase で Run
+  - service_role 専用アクセス（ポリシー無し）
+  - 対象: schedule_tasks_move / service_notes_move / move_check_logs /
+    home_schedule_tasks / service_notes_home / service_action_logs_home /
+    service_record_structured / service_action_logs / service_irregular_events /
+    training_reports / training_materials / calm_checks / calm_check_targets /
+    anonymous_feedback / push_subscriptions / admin_users / admin_error_alerts
+- ✅ **Phase 3**（Group B 4テーブル）
+  - `sql/enable_rls_schedule.sql` を Supabase で Run
+  - 採用方針: 選択肢A（anon 全許可で警告だけ消す、現状の挙動維持）
+  - schedule: `FOR ALL TO anon` ポリシー
+  - helper_master: `FOR SELECT TO anon` ポリシー
+  - notifications: `FOR INSERT TO anon` ポリシー
+  - client_users: `FOR ALL TO anon` ポリシー（保守的）
+
+### 動作確認（全て OK）
+- ✅ 利用者スケジュールアプリ `https://tsubasa-okuhara.github.io/user-schedule-app/schedule.html`
+- ✅ ヘルパーアプリ「今日の予定」 `https://village-tsubasa.web.app/today-schedule/`
+- ✅ ヘルパーアプリ「ホーム」 `https://village-tsubasa.web.app/`
+- ✅ 管理ダッシュボード `https://village-admin-bd316.web.app/`
+
+### **影響範囲**
+- Supabase 警告メール（`rls_disabled_in_public`）が解消される見込み
+- **anon キー（GitHub Pages 公開済）から無制限に読めた状態は終了**
+- ただし、Phase 3 で anon 全許可ポリシーを付けた4テーブルは「警告は消えるが
+  実質的には誰でも読める」状態。これは利用者アプリ（116名配布済）の挙動を
+  維持するための妥協で、Phase 4（厳密化）で別途対応予定
+
+### 関連事故記録
+- 2026-04-25 [village-admin] Firebase Secret 修正（隠れバグ事故）→ 同日エントリ参照
+- Phase 1 を初回適用時に管理ダッシュボード破損 → ロールバック → secret 修正
+  → Phase 1 再適用成功 という流れだった
+
+### Phase 4 候補（中長期、未着手）
+- 利用者アプリの認証導入（utility ID / beneficiary_number ベース）
+- `client_users` テーブルの実態調査と適切なポリシー設計
+- 未文書化テーブル `helper_priority` / `process_log` の用途調査
+- 電子契約 `contracts` 5テーブルを Supabase に作成（`sql/create_contracts.sql` 適用）
 
 ## 2026-04-25 [village-admin] Firebase Secret `SUPABASE_SERVICE_ROLE_KEY` 修正（**隠れバグ発覚事故**）
 

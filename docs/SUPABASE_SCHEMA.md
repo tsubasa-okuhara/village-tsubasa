@@ -467,9 +467,22 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - `service_action_logs_home`
 村上翼さんからの提案: 次回本番反映のタイミングで Supabase ダッシュボードから実スキーマをエクスポートして `sql/` 配下に取り込む。そうすれば RLS / trigger / index の情報も追えるようになる。
 ### RLS（Row Level Security）設定
-- `schedule` は RLS OFF を確認済み（2026-04-17）。ただし anon ロールが INSERT 後の SELECT を返せない事例あり（村上翼さん確認）
-- 他テーブルの RLS 状況は未確認
-- **2026-04-24**: Supabase から `rls_disabled_in_public` / `exposed_sensitive_data` 警告メールが到来。段階移行計画を `docs/RLS_MIGRATION_PLAN.md` に起草し、Phase 0（診断）/ Phase 1（service_role 限定テーブルの RLS ON）/ Phase 3（`schedule` 系ポリシー設計）の SQL 雛形を `sql/check_rls_status.sql` / `sql/enable_rls_group_a.sql` / `sql/enable_rls_schedule.sql` に配置。Supabase への適用は未実施
+- **2026-04-25**: ✅ **全テーブルの RLS 移行完了**（`docs/RLS_MIGRATION_PLAN.md` 参照）
+  - Phase 1: Group A 17テーブル（service_role 専用、ポリシー無し）
+  - Phase 3: Group B 4テーブル（anon 全許可ポリシー、選択肢A）
+    - `schedule` `FOR ALL TO anon`、`helper_master` `FOR SELECT TO anon`、
+      `notifications` `FOR INSERT TO anon`、`client_users` `FOR ALL TO anon`
+  - 既に RLS ON だった5テーブル（`helper_priority` / `process_log` /
+    receipt_*）はそのまま
+  - 全 4 アプリ（利用者・ヘルパー2画面・管理）動作確認 OK
+- 過去の経緯:
+  - 2026-04-17: `schedule` の RLS OFF を確認。anon INSERT 後の SELECT が
+    返らない事例あり（村上翼さん確認）
+  - 2026-04-24: Supabase から `rls_disabled_in_public` /
+    `exposed_sensitive_data` 警告メール到来。段階移行計画を起草
+  - 2026-04-25: Phase 1 初回適用時に管理ダッシュボード破損 → ロールバック →
+    村のつばさ Firebase Secret に anon キーが入っていた事故を発見・修正 →
+    Phase 1 / Phase 3 ともに適用成功
 ### `service_notes_home` の独自フォーマット依存
 - `memo` と `final_note` に独自フォーマットが埋め込まれていて、village-admin 側の `parseMemo` / `parseTimeFromFinalNote` が依存している
 - village-tsubasa 側で保存形式を変更する場合は、村上さんの admin ダッシュボードが壊れるので事前共有が必要
@@ -488,3 +501,4 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - 2026-04-24: RLS 段階移行計画を `docs/RLS_MIGRATION_PLAN.md` に起草。診断 SQL (`sql/check_rls_status.sql`)、Phase 1 適用 SQL (`sql/enable_rls_group_a.sql`、23 テーブル対象)、Phase 3 雛形 SQL (`sql/enable_rls_schedule.sql`、選択肢A/B を併記した DRAFT) を追加。Supabase への適用は未実施
 - 2026-04-25: RLS 移行 Phase 2 完了。user-schedule-app の4 HTML を grep して anon アクセスパターン確定。`notifications` を Group A → B に変更（`schedule.html` から anon INSERT されるため）。`client_users` テーブルを発見し §8.5 に追加（user-schedule-app/index.html L108 で参照、CREATE 文・列構成は未調査）。`sql/enable_rls_schedule.sql` を選択肢A 確定版に書き換え（`schedule` / `helper_master` / `notifications` / `client_users` の4テーブル対象）。Supabase への適用は未実施
 - 2026-04-25: RLS 移行 Phase 0（診断）実行。Supabase の public スキーマに **27 オブジェクト**（テーブル26 + ビュー1）存在を確認。RLS ON は5個（`helper_priority` / `process_log` / `receipts` / `receipt_categories` / `receipt_audit_log`）、OFF は22個。新発見テーブル `helper_priority` / `process_log` を §8.6 に追記（用途未確認）。`contracts` 5テーブルは Supabase 未作成（`sql/create_contracts.sql` 未適用）であることが判明 — Phase 1 SQL は `IF EXISTS` で防御的に対応
+- 2026-04-25 夜: ✅ **RLS 移行 全フェーズ完了**。`sql/enable_rls_group_a.sql`（Phase 1、17 テーブル）と `sql/enable_rls_schedule.sql`（Phase 3、4 テーブル＋4 ポリシー）を Supabase で適用。途中で village-admin の Firebase Secret に anon キーが入っていた事故を発見・修正（同 CHANGELOG 参照）。全 4 アプリ動作確認 OK
