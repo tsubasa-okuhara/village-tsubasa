@@ -13,9 +13,56 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-25 夜（RLS 移行 + Security Advisor クリーンアップ完了 ✅）
+最終更新: 2026-04-25 夜（RLS + Security Advisor 完了、schedule-sync / tomorrow-schedule-all UI 修正）
 
 ---
+
+## 🔔 次回チャットで Claude が奥原さんに確認すべきこと
+
+> **新チャットの Claude へ**: 以下を作業冒頭で必ず聞いてください。
+> 奥原さんが「やる」と答えたら実施、「やらない」と答えたら本セクションを削除してください。
+
+- **`today-schedule` / `today-schedule-all` / `tomorrow-schedule` の3ページに、`tomorrow-schedule-all` と同じ `formatTimeRange` 修正（end_time なしでも start_time を表示）を入れますか？**
+  - 背景: 2026-04-25 に `tomorrow-schedule-all` だけ修正したが（commit `9cb3edc`）、他3ページにも同じバグが残っており「時間未設定」と表示される
+  - 修正内容: 各 `main.js` の `formatTimeRange` 関数に4行追加するだけ（パターンは tomorrow-schedule-all と同じ）
+  - 対象ファイル:
+    - `public/today-schedule/main.js` L87-99
+    - `public/today-schedule-all/main.js` L44-52
+    - `public/tomorrow-schedule/main.js` L87-99
+  - 慎重派: 1ページずつデプロイ・動作確認してから次へ進む
+  - 関連: `docs/FUTURE_IDEAS.md` 即席メモ 2026-04-25 行
+
+---
+
+## 2026-04-25 [village-tsubasa] schedule-sync で「担当：担当未設定」予定を非表示に / tomorrow-schedule-all で start のみでも時間表示
+
+奥原さんからの2件の UI 改善要望を反映。
+
+### 1. `/schedule-sync/` カレンダーから「担当：担当未設定」のカードを非表示
+- `public/schedule-sync/main.js` の `applyFilters` を修正（4行追加）
+- `schedule_web_v` ビューが空 helper を `'担当未設定'` という文字列に変換して
+  返すため、初回修正の `helperNames.length === 0` では弾けず表示されていた
+- 修正後: `hasRealHelper = helperNames.some(name => name && name !== "担当未設定")`
+  がfalseのアイテムを除外。複数ヘルパーで1人だけ「担当未設定」の場合は
+  実在ヘルパーがいるので残す
+- ビュー側（schedule_web_v）の挙動は変更していないので、他の API
+  （today-schedule / tomorrow-schedule / helperSummary 等）への影響なし
+- 関連コミット: `9cb3edc`（初回修正、`length === 0` チェックでは
+  ビューが返す「担当未設定」文字列を弾けず不十分）→ `bd1885c`（追加修正、完成）
+
+### 2. `/tomorrow-schedule-all/` で end_time なしでも start_time を表示
+- `public/tomorrow-schedule-all/main.js` の `formatTimeRange` を修正（4行追加）
+- 旧: start と end どちらか欠けると「時間未設定」表示
+- 新: 両方あれば `start〜end`、start のみあれば `start` だけ表示、両方なければ「時間未設定」
+- ⚠️ 同じバグが `today-schedule` / `today-schedule-all` / `tomorrow-schedule`
+  にも残存。次回チャットで奥原さんに確認後に修正予定
+  （上の「🔔 次回チャットで確認すべきこと」参照）
+- 関連コミット: `9cb3edc`
+
+### 影響範囲
+- village-tsubasa の `public/` 配下のみ。Firebase Functions / Supabase /
+  他アプリへの影響なし
+- デプロイは Firebase Hosting のみ（Functions 不要）
 
 ## 2026-04-25 [village-tsubasa] Security Advisor クリーンアップ（Errors=0 / Warnings=11→6）
 
