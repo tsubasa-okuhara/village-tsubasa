@@ -387,6 +387,9 @@ function applyFilters(data) {
     month: data.month,
     items: items.filter(function (item) {
       const helperNames = Array.isArray(item.helperNames) ? item.helperNames : [];
+      if (helperNames.length === 0) {
+        return false;
+      }
       const matchesSelect =
         !selectedHelper || helperNames.includes(selectedHelper);
       const matchesSearch =
