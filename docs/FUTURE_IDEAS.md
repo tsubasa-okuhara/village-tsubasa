@@ -31,6 +31,43 @@
 
 ## 📝 正式エントリ
 
+### 2026-04-26 利用者情報マスタ + Google マップ連携機能
+
+**きっかけ**
+- 2026-04-26 の機能要望チャットで奥原さんから提案
+- 現状: ヘルパーがスケジュール画面で利用者の住所を確認 → スマホで地図アプリに手入力 → ナビ起動 という手間が毎日発生
+- 利用者の連絡先・特記事項も毎回紙やメモを参照している
+
+**ゴール**
+1. スケジュール画面で **利用者名タップ** → 利用者詳細画面（住所・連絡先・メモ・直近の支援履歴）が即表示
+2. スケジュール画面で **行き先住所タップ** → Google マップ（or Apple マップ）でナビが即起動
+3. ヘルパーが紙メモや別アプリを参照する手間を撲滅
+
+**コア構成案**
+- 新規テーブル `clients`
+  - `id` (uuid PK), `beneficiary_number` (unique), `name`, `display_name`, `address`, `postal_code`, `phone`, `emergency_contact`, `notes`, `active`, `created_at`, `updated_at`
+  - 既存 `client_users` / `clients` （`calm_check_targets.client_id` 参照先）と関係整理が必要
+- 利用者マスタ管理画面 `/clients/`（一覧）/ `/clients/:id`（詳細・編集）
+- 既存の `today-schedule` / `tomorrow-schedule` / `today-schedule-all` / `tomorrow-schedule-all` /
+  `schedule-sync` の利用者名・行き先テキストにタップイベント追加
+- Google マップ起動: `https://www.google.com/maps/dir/?api=1&destination=...`（iOS は自動でアプリ切替）
+
+**実装フェーズ案**
+1. **Phase A**: `clients` / `client_users` の既存テーブル調査（既存テーブルを使えるなら作り直し不要）
+2. **Phase B**: 利用者マスタ画面 MVP（CRUD、認証は admin_users allow-list）
+3. **Phase C**: 116名の利用者データ入力（CSV から一括 INSERT）
+4. **Phase D**: 既存スケジュール画面に名前タップ → 詳細遷移を追加
+5. **Phase E**: 行き先住所タップ → Google マップ起動を追加
+
+**未解決課題・検討事項**
+- 既存 `schedule.client` は文字列で利用者名が入っている → `clients` テーブルとの紐付けは「名前一致」「`beneficiary_number` 一致」のどちらにするか
+- 116名分のデータ入力をどこから持ってくるか（受給者証データの活用？）
+- 個人情報（住所・連絡先）の取り扱いは RLS 整備済みで OK だが、表示画面側で誰に何が見えるかの権限設計が必要
+
+**着手タイミング**
+- 機能1（スプレッドシート的スケジュール編集 HTML）の完成後に着手予定
+- 2026-04-26 時点では機能1 を優先
+
 ### 2026-04-21 合同会社つばさ発「福祉業界向け IT オールインワン」構想
 
 **きっかけ**
