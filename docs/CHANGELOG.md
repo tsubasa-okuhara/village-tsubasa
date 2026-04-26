@@ -13,15 +13,16 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-25 夜（RLS + Security Advisor 完了、schedule-sync / tomorrow-schedule-all UI 修正）
+最終更新: 2026-04-26（GAS transferServiceRecords を RLS 適合 + 日付全角カッコ対応）
 
 ---
 
 ## 🔔 次回チャットで Claude が奥原さんに確認すべきこと
 
 > **新チャットの Claude へ**: 以下を作業冒頭で必ず聞いてください。
-> 奥原さんが「やる」と答えたら実施、「やらない」と答えたら本セクションを削除してください。
+> 奥原さんが「やる」と答えたら実施、「やらない」と答えたら該当項目を削除してください。
 
+### A. 他3ページの formatTimeRange 統一（UI 微修正）
 - **`today-schedule` / `today-schedule-all` / `tomorrow-schedule` の3ページに、`tomorrow-schedule-all` と同じ `formatTimeRange` 修正（end_time なしでも start_time を表示）を入れますか？**
   - 背景: 2026-04-25 に `tomorrow-schedule-all` だけ修正したが（commit `9cb3edc`）、他3ページにも同じバグが残っており「時間未設定」と表示される
   - 修正内容: 各 `main.js` の `formatTimeRange` 関数に4行追加するだけ（パターンは tomorrow-schedule-all と同じ）
@@ -32,7 +33,59 @@
   - 慎重派: 1ページずつデプロイ・動作確認してから次へ進む
   - 関連: `docs/FUTURE_IDEAS.md` 即席メモ 2026-04-25 行
 
+### B. GAS 全ファイルの git 同期チェック（リスク管理）
+- **`gas/` 配下の全 GAS ファイルが実 GAS 環境と一致しているか棚卸ししますか？**
+  - 背景: 2026-04-26 に `gas/transferServiceRecords.gs` が実環境と乖離していた問題（formatDate の全角カッコ対応漏れ）が判明。同種の乖離が他の GAS にもある可能性。これは 2026-04-19 の `main.js` 354行ロスト未遂と同パターン
+  - 対象 GAS（推定、CHANGELOG / SCHEMA より）:
+    - 「サービス記録転送」（今回修正済み）
+    - 「スケジュール逆同期」（`コード.gs` / `sheet_auto_create.gs`）
+    - 「【ビレッジつばさ】全体スケジュール」（`★supabase転送本体.gs`）
+  - やり方: 各 GAS の Apps Script からコードをエクスポート → git のファイルと diff → 差分があれば奥原さん側のコードを正として git 側を更新
+  - 推定所要時間: 1ファイル 10〜15分
+
 ---
+
+## 2026-04-26 [village-tsubasa] GAS「サービス記録転送」を service_role キー対応 + 日付全角カッコ対応
+
+2026-04-25 の RLS 移行後に GAS が壊れたため修正。2件のバグを連続して
+潰す形になった。
+
+### バグ1: anon キーで INSERT → RLS で 401
+- `gas/transferServiceRecords.gs` が `SUPABASE_API`（anon キー）を使っており、
+  RLS が ON になった `home_schedule_tasks` / `schedule_tasks_move` への
+  INSERT が `42501 new row violates row-level security policy` で全件拒否
+- 修正: スクリプトプロパティ名を `SUPABASE_SERVICE_KEY` に変更
+  （他 GAS「スケジュール逆同期」「全体スケジュール」と命名統一）。
+  後方互換のため `SUPABASE_API` も fallback で読む
+- 奥原さん作業: GAS スクリプトプロパティに `SUPABASE_SERVICE_KEY` を追加
+  （値は Supabase Dashboard → Settings → API → service_role キー）
+- 関連コミット: `b83fbc9`
+
+### バグ2: 日付の全角カッコ未対応 → 22007
+- バグ1 修正後の再実行で、日付 `"4/25（土）"` が Supabase に渡って
+  `22007 invalid input syntax for type date` エラーで全件拒否
+- 原因: `formatDate` 関数の正規表現が `/\(.*?\)/g`（半角カッコのみ）で、
+  シート A2 の全角カッコ `（土）` を除去できていなかった。さらに
+  フォールバックが `return str` で変換失敗を握り潰していた
+- 修正:
+  - 正規表現を `/[（(].*?[）)]/g` に変更（全角・半角両対応）
+  - フォールバックを `throw new Error("日付変換できません: " + str)` に
+    変更（Supabase に不正値を渡す前に止める）
+- 奥原さん作業: GAS スクリプトに最新コードを再貼り付け、再実行で動作確認 OK
+- 関連コミット: `4da3da0`
+
+### 影響範囲
+- GAS のみの変更。Supabase / Firebase Functions / 他アプリへの影響なし
+- 修正後、毎日の「サービス記録転送」シートからの転送が再び動作
+
+### 教訓 / 副次的な気付き
+- **git の `gas/transferServiceRecords.gs` が実 GAS 環境のコードと乖離していた**
+  - 奥原さんが過去に GAS 上で全角カッコ対応版（formatDate_）に
+    アップデート → しかし git に反映されておらず、古い半角版が残存
+  - これは 2026-04-19 の `public/training-reports/main.js` 354行ロスト未遂と
+    同パターン
+  - 別途、`gas/` 配下の全 GAS ファイルが実環境と一致しているかの棚卸しが必要
+    → FUTURE_IDEAS.md にメモ追加予定
 
 ## 2026-04-25 [village-tsubasa] schedule-sync で「担当：担当未設定」予定を非表示に / tomorrow-schedule-all で start のみでも時間表示
 
