@@ -66,6 +66,8 @@ import {
   handleRemoveCalmCheckTarget,
 } from "./calmCheck";
 
+import { handleScheduleEditorAuth } from "./scheduleEditor/auth";
+
 const app = express();
 
 app.use(
@@ -179,6 +181,11 @@ app.post("/calm-checks/targets", handleAddCalmCheckTarget);
 app.post("/api/calm-checks/targets", handleAddCalmCheckTarget);
 app.post("/calm-checks/targets/remove", handleRemoveCalmCheckTarget);
 app.post("/api/calm-checks/targets/remove", handleRemoveCalmCheckTarget);
+
+// スケジュール編集 HTML（/schedule-editor/）の認証
+// admin_users.can_edit_schedule = true のメールアドレスだけ通す
+app.get("/schedule-editor/auth", handleScheduleEditorAuth);
+app.get("/api/schedule-editor/auth", handleScheduleEditorAuth);
 
 // 毎朝7時（JST）に今日の予定を通知
 export const notifyTodaySchedule = onSchedule(

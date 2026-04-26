@@ -23,6 +23,7 @@ const scheduleSync_1 = require("./scheduleSync");
 const scheduledNotifications_1 = require("./scheduledNotifications");
 const routes_1 = require("./service-records-move/routes");
 const routes_2 = require("./service-records-structured/routes");
+const routes_3 = require("./contracts/routes");
 const generateSummary_1 = require("./service-records-home/generateSummary");
 const listUnwritten_1 = require("./service-records-home/listUnwritten");
 const saveRecord_1 = require("./service-records-home/saveRecord");
@@ -30,6 +31,7 @@ const feedback_1 = require("./feedback");
 const trainingReport_1 = require("./trainingReport");
 const push_1 = require("./push");
 const calmCheck_1 = require("./calmCheck");
+const auth_1 = require("./scheduleEditor/auth");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: true,
@@ -46,6 +48,9 @@ app.use("/service-records-move", routes_1.serviceRecordsMoveRouter);
 app.use("/api/service-records-move", routes_1.serviceRecordsMoveRouter);
 app.use("/service-records-structured", routes_2.serviceRecordsStructuredRouter);
 app.use("/api/service-records-structured", routes_2.serviceRecordsStructuredRouter);
+// 電子契約（設計書: docs/CONTRACTS_DESIGN.md, 実装: functions/src/contracts/）
+app.use("/contracts", routes_3.contractsRouter);
+app.use("/api/contracts", routes_3.contractsRouter);
 app.get("/push/public-key", push_1.handleGetPushPublicKey);
 app.get("/api/push/public-key", push_1.handleGetPushPublicKey);
 app.post("/push/subscribe", push_1.handleSubscribePush);
@@ -117,6 +122,10 @@ app.post("/calm-checks/targets", calmCheck_1.handleAddCalmCheckTarget);
 app.post("/api/calm-checks/targets", calmCheck_1.handleAddCalmCheckTarget);
 app.post("/calm-checks/targets/remove", calmCheck_1.handleRemoveCalmCheckTarget);
 app.post("/api/calm-checks/targets/remove", calmCheck_1.handleRemoveCalmCheckTarget);
+// スケジュール編集 HTML（/schedule-editor/）の認証
+// admin_users.can_edit_schedule = true のメールアドレスだけ通す
+app.get("/schedule-editor/auth", auth_1.handleScheduleEditorAuth);
+app.get("/api/schedule-editor/auth", auth_1.handleScheduleEditorAuth);
 // 毎朝7時（JST）に今日の予定を通知
 exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
     schedule: "0 7 * * *", // JST 07:00

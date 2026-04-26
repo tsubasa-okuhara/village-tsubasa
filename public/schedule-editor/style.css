@@ -1,0 +1,320 @@
+:root {
+  color-scheme: light;
+  --bg: #f8f4ef;
+  --panel: rgba(255, 255, 255, 0.92);
+  --panel-strong: rgba(255, 253, 250, 0.98);
+  --line: rgba(223, 207, 196, 0.92);
+  --text: #463830;
+  --muted: #7b6c63;
+  --brown: #8a6f55;
+  --brown-strong: #6a5340;
+  --beige: #f4e7d8;
+  --beige-strong: #d5bb93;
+  --error: #c0392b;
+  --shadow: 0 20px 42px rgba(144, 113, 98, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+    "Yu Gothic UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ─── ヘッダー ─── */
+.page-header {
+  background: var(--panel-strong);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.back-link {
+  display: inline-block;
+  padding: 8px 14px;
+  background: var(--brown);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.back-link:hover {
+  background: var(--brown-strong);
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ─── 認証画面 ─── */
+.auth-screen {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 60px 20px;
+  min-height: calc(100vh - 60px);
+}
+
+.auth-card {
+  background: var(--panel-strong);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: var(--shadow);
+}
+
+.auth-card h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.auth-help {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.auth-form input[type="email"] {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 16px;
+  background: #fff;
+  color: var(--text);
+}
+
+.auth-form input[type="email"]:focus {
+  outline: none;
+  border-color: var(--brown);
+  box-shadow: 0 0 0 3px rgba(138, 111, 85, 0.15);
+}
+
+.auth-form button {
+  padding: 12px;
+  background: var(--brown);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-form button:hover {
+  background: var(--brown-strong);
+}
+
+.auth-form button:disabled {
+  background: #c5b8aa;
+  cursor: wait;
+}
+
+.auth-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: #fbe9e7;
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.auth-note {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* ─── メイン画面 ─── */
+.main-screen {
+  padding: 16px 20px;
+  max-width: 100%;
+}
+
+.toolbar {
+  background: var(--panel-strong);
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+.toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.toolbar__row:last-of-type {
+  margin-bottom: 0;
+}
+
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--beige);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.user-badge__label {
+  color: var(--muted);
+}
+
+.user-badge__email {
+  font-weight: 600;
+}
+
+.logout-button {
+  margin-left: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--brown);
+  color: var(--brown);
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: var(--brown);
+  color: #fff;
+}
+
+.month-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.month-btn {
+  padding: 6px 12px;
+  background: var(--brown);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.month-btn:hover {
+  background: var(--brown-strong);
+}
+
+.month-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 120px;
+  text-align: center;
+}
+
+.filter-control {
+  flex: 1;
+  min-width: 200px;
+}
+
+.quick-filter {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.quick-filter:focus {
+  outline: none;
+  border-color: var(--brown);
+}
+
+.reload-btn {
+  padding: 8px 14px;
+  background: var(--beige-strong);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.reload-btn:hover {
+  background: #c0a47b;
+}
+
+.toolbar__status {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.toolbar__status.is-error {
+  color: var(--error);
+}
+
+/* ─── AG Grid ─── */
+.grid-container {
+  height: calc(100vh - 290px);
+  min-height: 400px;
+  width: 100%;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* Alpine テーマの一部を村のつばさパレットに */
+.ag-theme-alpine {
+  --ag-foreground-color: var(--text);
+  --ag-header-foreground-color: var(--text);
+  --ag-header-background-color: var(--beige);
+  --ag-odd-row-background-color: #fcf8f2;
+  --ag-row-hover-color: rgba(213, 187, 147, 0.18);
+  --ag-selected-row-background-color: rgba(213, 187, 147, 0.32);
+  --ag-border-color: var(--line);
+}
+
+/* ─── フッター ─── */
+.page-footer {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--beige);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.page-footer strong {
+  color: var(--brown);
+}

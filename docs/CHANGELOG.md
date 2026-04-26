@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-26（schedule-editor Phase A: DB 列追加）
+最終更新: 2026-04-26（schedule-editor Phase B: 読み取り専用 AG Grid 表示）
 
 ---
 
@@ -33,6 +33,70 @@
   - 推定所要時間: 1ファイル 10〜15分
 
 ---
+
+## 2026-04-26 [village-tsubasa] schedule-editor Phase B: 読み取り専用 AG Grid 表示
+
+Phase A（DB 列追加）に続き、`/schedule-editor/` 画面 + 認証 API を実装。
+現状は読み取り専用。編集機能は Phase C で追加予定。
+
+### 新規ファイル
+- `functions/src/scheduleEditor/auth.ts` — 認証 API ハンドラ
+  - `admin_users` テーブルから `email` を引いて `can_edit_schedule = true`
+    のときのみ `{ ok: true, canEdit: true }` を返す
+  - email は ilike（大文字小文字無視）で照合
+  - 未登録 / 権限なし / 通信エラーで分岐したメッセージ返却
+- `public/schedule-editor/index.html` — 認証画面 + メイン画面の2セクション
+- `public/schedule-editor/main.js` — 認証フロー、AG Grid 初期化、月切替、
+  クイックフィルタ、再読み込み（v31 API）
+- `public/schedule-editor/style.css` — 村のつばさ標準パレット（茶 / ベージュ系）
+
+### 変更ファイル
+- `functions/src/index.ts`:
+  - `import { handleScheduleEditorAuth } from "./scheduleEditor/auth"` を追加
+  - `app.get("/schedule-editor/auth", handleScheduleEditorAuth)` と
+    `/api/schedule-editor/auth` の両方をマウント
+- `functions/lib/` — TypeScript ビルド成果物（自動生成）
+
+### 認証フロー
+1. 画面ロード → `localStorage` からメール取得
+2. メールあれば自動で `/api/schedule-editor/auth` に問い合わせ
+3. `can_edit_schedule = true` なら AG Grid 表示、それ以外はログイン画面に戻す
+4. 「ログアウト」ボタンで localStorage クリア + 認証画面へ
+
+### 表示機能
+- AG Grid Community v31.3.4（CDN 経由、無料 / npm 不要）
+- カラム: 日付（pinned 左、初期降順なし昇順）、ヘルパー、利用者、開始、終了、配車、内容、概要
+- ソート、列フィルタ、リサイズ、クイックフィルタ（ヘルパー名 / 利用者名）
+- 月切替（◀ ▶ ボタン）+ 再読み込みボタン
+- 編集は無効（`editable: false`）
+
+### 認証範囲
+- Phase A で `can_edit_schedule = true` を設定した4名のメールアドレスのみ閲覧可
+- それ以外は「権限がありません」表示でログインできない
+- これにより、内部 4 人専用ツールとして位置付け
+
+### 影響範囲
+- 新規 API・新規ページのみ。既存機能・他アプリへの影響なし
+- データソース: 既存の `/api/schedule-list`（schedule_web_v ベース）を流用。
+  読み取り専用なので Supabase への書き込み無し
+- デプロイ: Firebase Hosting + Functions 両方必要
+  （Functions は新エンドポイント追加のため）
+
+### 次のフェーズ
+- **Phase C**: セル編集 + 楽観ロック保存（`schedule.updated_at` 比較）
+- **Phase D**: 行追加 / 論理削除 + ゴミ箱画面
+- **Phase E**: コピペ・一括編集など便利機能
+
+### デプロイ手順（奥原さん）
+```bash
+cd ~/village-tsubasa
+git pull origin claude/setup-multi-app-dev-1y2PR
+firebase deploy --project village-tsubasa
+# （Hosting と Functions 両方デプロイ）
+```
+
+その後、`https://village-tsubasa.web.app/schedule-editor/` を開いて
+4名のメールでログイン → 月のスケジュールが表示されれば成功。
 
 ## 2026-04-26 [village-tsubasa] schedule-editor Phase A: DB 列追加（論理削除 + 編集権限）
 
