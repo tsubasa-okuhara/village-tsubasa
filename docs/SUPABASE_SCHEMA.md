@@ -24,6 +24,7 @@
   - `source_key` (text): 元データキー（スプレッドシート側との同期キー）
   - `synced_to_sheet` (boolean, default false): スプレッドシートに反映済みか（2026-04-17 追加）。毎月 15 日の GAS トリガーが `false` の行を対象にまとめて流し込む設計
   - `synced_at` (timestamptz, nullable): シート書き込み完了時刻（2026-04-17 追加）。現状 GAS 側で更新していない（シート内の supabaseId 列で同期状態を判定する「シート状態ベース版」に切り替えたため、このカラムはデフォルト値のまま残る）
+  - `deleted_at` (timestamptz, nullable, default null): 論理削除フラグ（2026-04-26 追加）。`/schedule-editor/` から削除した予定はここに削除日時が入り、ゴミ箱画面から復元可能。一覧クエリは `WHERE deleted_at IS NULL` で絞る想定。partial index `idx_schedule_deleted_at` も追加済み
   - `created_at` / `updated_at` (timestamptz)
 - **制約**: pk = `id`。その他の unique/fk は未確認
 - **参照箇所**:
@@ -404,9 +405,19 @@ RLS 移行 Phase 0 の診断 SQL で初めて存在が判明。
 ## 9. village-admin 専用テーブル（別リポジトリ管理）
 以下は `village-admin` リポジトリ側の `sql/create_admin_tables.sql` で管理されているテーブル。village-tsubasa からは参照していないが、同じ Supabase プロジェクトを共有しているため記録:
 ### ✅ `admin_users`
-- **役割**: 管理ダッシュボードにアクセスできる管理者のメール allow-list
-- **参考**: `village-admin/sql/create_admin_tables.sql`
-- **参照箇所**: `village-admin/functions/src/middleware/adminAuth.ts`
+- **役割**: 管理ダッシュボードにアクセスできる管理者のメール allow-list +
+  `/schedule-editor/`（村のつばさ側）の編集権限管理
+- **列**:
+  - `email` (text, NOT NULL, おそらく PK)
+  - `created_at` (timestamptz, NOT NULL, default `now()`)
+  - `can_edit_schedule` (boolean, NOT NULL, default `false`): 2026-04-26 追加。
+    `/schedule-editor/` で編集できるか。`true` の人だけ編集モード、`false` は
+    閲覧のみ。既存の「ダッシュボード閲覧 allow-list」と組み合わせる二段構え
+- **参考**: `village-admin/sql/create_admin_tables.sql`、
+  村のつばさ側の追加列は `sql/2026-04-26_schedule_editor_phase_a.sql`
+- **参照箇所**:
+  - `village-admin/functions/src/middleware/adminAuth.ts`（既存、ダッシュボード認証）
+  - 村のつばさ `functions/src/scheduleEditor/auth.ts`（Phase C で追加予定）
 ### ✅ `admin_error_alerts`
 - **役割**: 管理ダッシュボードのエラーアラート管理
 - **参考**: `village-admin/sql/create_admin_tables.sql`

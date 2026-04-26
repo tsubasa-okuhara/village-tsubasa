@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-26（4ページの formatTimeRange を統一）
+最終更新: 2026-04-26（schedule-editor Phase A: DB 列追加）
 
 ---
 
@@ -33,6 +33,46 @@
   - 推定所要時間: 1ファイル 10〜15分
 
 ---
+
+## 2026-04-26 [village-tsubasa] schedule-editor Phase A: DB 列追加（論理削除 + 編集権限）
+
+スプレッドシート的なスケジュール編集 HTML（`/schedule-editor/`）の構築開始。
+今回は Phase A（DB 列追加）のみ。実 UI / API は Phase B 以降で実装。
+
+### 変更内容
+- `schedule.deleted_at TIMESTAMPTZ NULL` 列を追加
+  - 論理削除用。NULL = 有効、値あり = 削除済み
+  - Partial index `idx_schedule_deleted_at` も追加（NULL 行のみ対象、軽量）
+  - schedule-editor から「削除」しても元データは残り、ゴミ箱画面（Phase D）で復元可能
+- `admin_users.can_edit_schedule BOOLEAN NOT NULL DEFAULT false` 列を追加
+  - schedule-editor で編集権限を持つ人を判定する allow-list
+  - デフォルト false（誰も編集できない安全側）
+  - 既存 admin_users は「ダッシュボード閲覧 allow-list」、`can_edit_schedule = true` の
+    人はその中でさらに編集権限あり、という二段構え
+- 編集権限を持つ4名のメールに `can_edit_schedule = true` を設定（村のつばさ社内のみ）
+- 誤入力データ `email = 'あなたのGmailアドレス'`（過去の SQL プレースホルダーが
+  そのまま挿入されてた）を削除
+
+### 適用 SQL
+- `sql/2026-04-26_schedule_editor_phase_a.sql`（再現用、本番には 2026-04-26 に
+  既に適用済み）
+
+### 影響範囲
+- 新列はすべて nullable / default 付き → RULES.md ルール2 準拠
+- village-admin 側（村上翼さん）は `admin_users` を SELECT してるが新列を
+  無視するため後方互換 → RULES.md ルール4 準拠
+- user-schedule-app は `admin_users` / `schedule.deleted_at` を参照していないので影響なし
+
+### 次のフェーズ（仮）
+- **Phase B**: 読み取り専用の AG Grid 表示画面 `/schedule-editor/` を新規作成
+- **Phase C**: セル編集 + 保存 + 認証（`admin_users.can_edit_schedule` 連携）
+- **Phase D**: 行追加 / 削除 + ゴミ箱画面
+- **Phase E**: コピペ・一括編集など便利機能
+
+### 関連
+- 機能要望: 奥原翼（2026-04-26 チャット）
+- 設計議論: 同チャットで楽観ロック / GAS 衝突 / 認証 を確定
+- 関連構想: `docs/FUTURE_IDEAS.md`「利用者情報マスタ + Google マップ連携」（後着手）
 
 ## 2026-04-26 [village-tsubasa] 4 schedule ページの formatTimeRange を統一
 
