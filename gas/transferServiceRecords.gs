@@ -9,8 +9,12 @@
  *   移動支援（move）→ それ以外
  *
  * スクリプトプロパティ:
- *   SUPABASE_URL  — Supabase プロジェクト URL
- *   SUPABASE_API  — Supabase anon key
+ *   SUPABASE_URL          — Supabase プロジェクト URL
+ *   SUPABASE_SERVICE_KEY  — Supabase service_role キー（RLS bypass 用）
+ *
+ *   ⚠️ 旧 SUPABASE_API（anon キー）は 2026-04-25 の RLS ON 以降、
+ *      home_schedule_tasks / schedule_tasks_move への INSERT が拒否される
+ *      ため使えなくなった。service_role キーで上書き必須。
  */
 
 // ─── 設定 ───────────────────────────────────────────────
@@ -141,10 +145,15 @@ function createEditTrigger() {
 function transferServiceRecords() {
   var props = PropertiesService.getScriptProperties();
   var supabaseUrl = props.getProperty("SUPABASE_URL");
-  var supabaseKey = props.getProperty("SUPABASE_API");
+  // 2026-04-25 以降、RLS が ON のため service_role キー必須。
+  // 後方互換のため SUPABASE_API（旧名）も読むが、SUPABASE_SERVICE_KEY を優先。
+  var supabaseKey =
+    props.getProperty("SUPABASE_SERVICE_KEY") || props.getProperty("SUPABASE_API");
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error("スクリプトプロパティに SUPABASE_URL と SUPABASE_API を設定してください");
+    throw new Error(
+      "スクリプトプロパティに SUPABASE_URL と SUPABASE_SERVICE_KEY を設定してください"
+    );
   }
 
   var ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
