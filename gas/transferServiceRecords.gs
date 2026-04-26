@@ -325,8 +325,8 @@ function formatDate(value) {
   var str = String(value).trim();
   // "2026-04-07" 形式ならそのまま
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  // "4/7(火)" や "4/7" → 曜日部分を除去してパース
-  var cleaned = str.replace(/\(.*?\)/g, "").trim();
+  // "4/7(火)" や "4/7（土）" → 曜日部分を除去してパース（全角・半角両対応）
+  var cleaned = str.replace(/[（(].*?[）)]/g, "").trim();
   // "4/7" 形式 → 今年の日付として処理
   var slashMatch = cleaned.match(/^(\d{1,2})\/(\d{1,2})$/);
   if (slashMatch) {
@@ -343,7 +343,9 @@ function formatDate(value) {
     var d = ("0" + (parsed.getDate())).slice(-2);
     return y + "-" + m + "-" + d;
   }
-  return str;
+  // 変換できない場合は throw（旧コードは return str だったが、Supabase に
+  // 不正な値が渡って 22007 エラーになるのを防ぐため、ここで止める）
+  throw new Error("日付変換できません: " + str);
 }
 
 function formatTime(value) {
