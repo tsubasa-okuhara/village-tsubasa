@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-26（GAS transferServiceRecords を RLS 適合 + 日付全角カッコ対応）
+最終更新: 2026-04-26（4ページの formatTimeRange を統一）
 
 ---
 
@@ -21,17 +21,6 @@
 
 > **新チャットの Claude へ**: 以下を作業冒頭で必ず聞いてください。
 > 奥原さんが「やる」と答えたら実施、「やらない」と答えたら該当項目を削除してください。
-
-### A. 他3ページの formatTimeRange 統一（UI 微修正）
-- **`today-schedule` / `today-schedule-all` / `tomorrow-schedule` の3ページに、`tomorrow-schedule-all` と同じ `formatTimeRange` 修正（end_time なしでも start_time を表示）を入れますか？**
-  - 背景: 2026-04-25 に `tomorrow-schedule-all` だけ修正したが（commit `9cb3edc`）、他3ページにも同じバグが残っており「時間未設定」と表示される
-  - 修正内容: 各 `main.js` の `formatTimeRange` 関数に4行追加するだけ（パターンは tomorrow-schedule-all と同じ）
-  - 対象ファイル:
-    - `public/today-schedule/main.js` L87-99
-    - `public/today-schedule-all/main.js` L44-52
-    - `public/tomorrow-schedule/main.js` L87-99
-  - 慎重派: 1ページずつデプロイ・動作確認してから次へ進む
-  - 関連: `docs/FUTURE_IDEAS.md` 即席メモ 2026-04-25 行
 
 ### B. GAS 全ファイルの git 同期チェック（リスク管理）
 - **`gas/` 配下の全 GAS ファイルが実 GAS 環境と一致しているか棚卸ししますか？**
@@ -44,6 +33,39 @@
   - 推定所要時間: 1ファイル 10〜15分
 
 ---
+
+## 2026-04-26 [village-tsubasa] 4 schedule ページの formatTimeRange を統一
+
+`tomorrow-schedule-all` だけだった「end_time なしでも start_time を表示」
+パターンを、他3ページにも展開して4ページとも同じ挙動に統一。
+
+### 変更前
+| ファイル | パターン |
+|---|---|
+| `today-schedule/main.js` | `${startTime}〜`（〜あり、修正済み） |
+| `today-schedule-all/main.js` | `"時間未設定"`（未対応） |
+| `tomorrow-schedule/main.js` | `${startTime}〜`（〜あり、修正済み） |
+| `tomorrow-schedule-all/main.js` | `${startTime}`（〜なし、2026-04-25 修正） |
+
+### 変更後（4ページとも統一）
+```js
+function formatTimeRange(item) {
+  const startTime = getDisplayValue(item.startTime, "");
+  const endTime = getDisplayValue(item.endTime, "");
+  if (startTime && endTime) return `${startTime}〜${endTime}`;
+  if (startTime) return `${startTime}〜`;
+  return "時間未設定";
+}
+```
+
+### 変更ファイル
+- `public/today-schedule-all/main.js`: 新規パターン追加（4行追加）
+- `public/tomorrow-schedule-all/main.js`: `startTime` のみ → `${startTime}〜` に統一
+
+### 影響範囲
+- village-tsubasa の `public/` 配下のみ。Functions / Supabase / 他アプリへの影響なし
+- `today-schedule` / `tomorrow-schedule` は無変更（既に正しい形だった）
+- デプロイは Firebase Hosting のみ
 
 ## 2026-04-26 [village-tsubasa] GAS「サービス記録転送」を service_role キー対応 + 日付全角カッコ対応
 

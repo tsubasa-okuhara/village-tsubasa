@@ -50,7 +50,7 @@ function formatTimeRange(item) {
   }
 
   if (startTime) {
-    return startTime;
+    return `${startTime}〜`;
   }
 
   return "時間未設定";

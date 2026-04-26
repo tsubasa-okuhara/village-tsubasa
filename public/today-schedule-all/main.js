@@ -49,6 +49,10 @@ function formatTimeRange(item) {
     return `${startTime}〜${endTime}`;
   }
 
+  if (startTime) {
+    return `${startTime}〜`;
+  }
+
   return "時間未設定";
 }
 
