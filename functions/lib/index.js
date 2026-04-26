@@ -23,7 +23,8 @@ const scheduleSync_1 = require("./scheduleSync");
 const scheduledNotifications_1 = require("./scheduledNotifications");
 const routes_1 = require("./service-records-move/routes");
 const routes_2 = require("./service-records-structured/routes");
-const routes_3 = require("./contracts/routes");
+// import { contractsRouter } from "./contracts/routes";
+// ↑ CloudSign secret 未設定のため一時無効化（次回チャットで CloudSign 設定後に復活）
 const generateSummary_1 = require("./service-records-home/generateSummary");
 const listUnwritten_1 = require("./service-records-home/listUnwritten");
 const saveRecord_1 = require("./service-records-home/saveRecord");
@@ -49,8 +50,9 @@ app.use("/api/service-records-move", routes_1.serviceRecordsMoveRouter);
 app.use("/service-records-structured", routes_2.serviceRecordsStructuredRouter);
 app.use("/api/service-records-structured", routes_2.serviceRecordsStructuredRouter);
 // 電子契約（設計書: docs/CONTRACTS_DESIGN.md, 実装: functions/src/contracts/）
-app.use("/contracts", routes_3.contractsRouter);
-app.use("/api/contracts", routes_3.contractsRouter);
+// CloudSign secret 未設定のため一時無効化
+// app.use("/contracts", contractsRouter);
+// app.use("/api/contracts", contractsRouter);
 app.get("/push/public-key", push_1.handleGetPushPublicKey);
 app.get("/api/push/public-key", push_1.handleGetPushPublicKey);
 app.post("/push/subscribe", push_1.handleSubscribePush);
