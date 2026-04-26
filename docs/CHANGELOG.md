@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-26（schedule-editor Phase B: 読み取り専用 AG Grid 表示）
+最終更新: 2026-04-26（schedule-editor Phase B 本番リリース + 復旧作業）
 
 ---
 
@@ -21,6 +21,12 @@
 
 > **新チャットの Claude へ**: 以下を作業冒頭で必ず聞いてください。
 > 奥原さんが「やる」と答えたら実施、「やらない」と答えたら該当項目を削除してください。
+
+### A. schedule-editor Phase C（編集機能）開始するか？
+- **次は本命の「スプレッドシート代替の編集機能」です**
+- 内容: AG Grid のセルを直接編集 → 楽観ロック（`schedule.updated_at` 比較）で保存 → エクセル並みの操作感
+- 前提条件: 現状 `can_edit_schedule = true` は奥原さんのみ（テスト中ロック中）。Phase C 完成後、他 3 名（inachichoco / tsukada.kouji610 / yutaka.ito1994）を再 ON にする UPDATE 文も忘れずに。元のリストは下記「2026-04-26 復旧作業」エントリ参照
+- 想定所要時間: 60〜90分
 
 ### B. GAS 全ファイルの git 同期チェック（リスク管理）
 - **`gas/` 配下の全 GAS ファイルが実 GAS 環境と一致しているか棚卸ししますか？**
@@ -31,6 +37,156 @@
     - 「【ビレッジつばさ】全体スケジュール」（`★supabase転送本体.gs`）
   - やり方: 各 GAS の Apps Script からコードをエクスポート → git のファイルと diff → 差分があれば奥原さん側のコードを正として git 側を更新
   - 推定所要時間: 1ファイル 10〜15分
+
+### C. 電子契約（contracts）ルータの復活
+- **CloudSign の Client ID / Webhook Secret は取得できましたか？**
+  - 背景: 2026-04-26 の Phase B デプロイ時、CloudSign secret 未設定で `firebase deploy` がインタラクティブ入力を要求してきたため、`functions/src/index.ts` の contracts ルータを一時コメントアウトした
+  - 該当箇所: `import { contractsRouter } ...`（29行目付近）と `app.use("/contracts", ...)` `app.use("/api/contracts", ...)`（97行目付近）
+  - 復旧手順:
+    1. `firebase functions:secrets:set CLOUDSIGN_CLIENT_ID`（CloudSign の値）
+    2. `firebase functions:secrets:set CLOUDSIGN_WEBHOOK_SECRET`（CloudSign の値）
+    3. `index.ts` のコメントアウトを外す
+    4. `npm run build && firebase deploy --only functions:api`
+  - もし CloudSign 契約自体がまだなら、このタスクは見送り。ヘルパーさん影響なし（一度も deploy されていないため）
+
+---
+
+## 2026-04-26 [village-tsubasa] schedule-editor Phase B 本番リリース + 緊急復旧作業
+
+Phase B のコードを本番に出すまでに **3 つの予期せぬ問題** が連続発覚し、その復旧と
+ロック方針の確立まで含めて完了させたセッション。記録のため詳細に残す。
+
+### 問題①: `feedback.ts` / `trainingReport.ts` が git に存在しない（最初から）
+
+- 症状: Mac で `npm run build` 実行時、TypeScript が `Cannot find module './feedback'`
+  と `'./trainingReport'` でエラー → `firebase deploy` できず
+- 原因調査:
+  - 2026-04-14 の commit `98435bc`（落ち着き確認システム追加）で `index.ts` から
+    `import { ... } from "./feedback"` と `... from "./trainingReport"` が追加された
+  - しかし**該当ソースファイル `feedback.ts` / `trainingReport.ts` は git に
+    一度も追加されていなかった**（4 ブランチ全てに存在しない）
+  - コンパイル後の `lib/feedback.js` / `lib/trainingReport.js` も git に無い
+  - Mac 上にも完全に消失（Spotlight `mdfind`、`~/.Trash`、Desktop、`village-admin` 内、
+    `user-schedule-app` 内、いずれも該当ファイル無し）
+  - GitHub の全 4 ブランチ（main / v1.0-stable / feat/service-records-move /
+    claude/setup-multi-app-dev-1y2PR）にも無い
+  - つまり、**Mac でビルドした compile 出力 `lib/*.js` を `firebase deploy` で
+    アップロードしていただけ**で、ソースは untracked のまま放置 → ある時点で消失
+  - これは 2026-04-19 の `public/training-reports/main.js` 事件（git HEAD で空
+    ファイル `e69de29` のまま放置）と同じ「git に上げ忘れ」パターン
+
+- **Cloud Storage からの救出に成功**:
+  - 本番 Cloud Functions の deploy zip は `gs://gcf-v2-sources-220052181950-asia-northeast1/api/function-source.zip` に保存されていた（最終 deploy: 2026-04-18）
+  - 該当 zip をダウンロード・解凍 → `extracted/src/feedback.ts`（254行）と
+    `extracted/src/trainingReport.ts`（500行超）を発見
+  - 2 ファイルを `functions/src/` にコピー → ビルド成功
+  - bonus: zip には `trainingMaterial.ts` も入っていたが、現 index.ts では未使用
+    のためコピー対象外
+  - 復旧 commit: `ecc9086`
+
+- **教訓**:
+  - Cloud Functions v2 の deploy zip には**ソース TS ファイルも全部入っている**
+    （`tsconfig.json` の include 設定上）→ 万が一 git からロストしても救出可能
+  - `gsutil ls gs://gcf-v2-sources-<project-number>-asia-northeast1/` で確認可能
+  - 教訓③（後述）参照
+
+### 問題②: CloudSign secret 未設定で deploy がブロック
+
+- 症状: 復旧後に `firebase deploy` 実行 → `Enter a value for CLOUDSIGN_CLIENT_ID:`
+  でインタラクティブ入力要求 → 進めない
+- 原因:
+  - `functions/src/contracts/providers/cloudsign.ts` が `defineSecret("CLOUDSIGN_CLIENT_ID")`
+    と `defineSecret("CLOUDSIGN_WEBHOOK_SECRET")` を宣言している
+  - README.md には「Phase 3 スタブで value() 到達しないので deploy ブロックされない」
+    とあったが、実際は CLI が宣言を検出して**初回 secret 登録を要求**してきた
+  - 2026-04-19 作成の contracts コードは**まだ一度も deploy されていない**
+    （直前の deploy は 2026-04-18）
+
+- 対処: `index.ts` から contracts 関連の 3 行を一時コメントアウト
+  - `import { contractsRouter } from "./contracts/routes";`（29行目）
+  - `app.use("/contracts", contractsRouter);`（96行目）
+  - `app.use("/api/contracts", contractsRouter);`（97行目）
+  - commit: `9e5ef9c`
+  - **ヘルパーさん影響なし**（一度も deploy されていない機能のため）
+  - 復活手順は冒頭の「次回チャットで確認」C 項参照
+
+### 問題③: hidden 属性が効かず画面遷移しない
+
+- 症状: Phase B deploy 完了 → ブラウザでログイン画面表示 → メール入力 →
+  「確認」ボタン押下 → **無反応**（API は `{ok:true, canEdit:true}` を返している）
+- 原因:
+  - main.js は `authScreen.hidden = true; mainScreen.hidden = false;` で画面切替
+  - しかし `style.css` で `.auth-screen { display: flex; }` が指定されており、
+    HTML の `hidden` 属性（デフォルト `display: none`）を**上書きしてしまっていた**
+  - 結果: `hidden = true` をセットしても auth-screen が消えず、main-screen の上に
+    重なって認証画面が見え続けていた
+
+- 対処: `style.css` に `[hidden] { display: none !important; }` を追加
+  - commit: `22be2d2`
+  - これで標準の `hidden` 属性が CSS の `display:` 指定より優先される
+
+### ロック方針: テスト中は奥原さんだけアクセス可能
+
+- 奥原さんから「現場の人間が混乱しないように、まず自分だけテストして、
+  スプレッドシートが開かなくなった日に切り替えたい」との要望
+- **対策**:
+  - **URL 秘匿**: `public/index.html`（村つばさトップ）に schedule-editor への
+    リンクを貼らない → URL を直接打たない人にはアクセス手段が無い
+  - **DB ロック**: `admin_users.can_edit_schedule = true` を奥原さん 1 人に絞る
+    ```sql
+    UPDATE admin_users
+    SET can_edit_schedule = false
+    WHERE email IN (
+      'inachichoco@gmail.com',
+      'tsukada.kouji610@gmail.com',
+      'yutaka.ito1994@gmail.com'
+    );
+    ```
+  - 結果: `can_edit_schedule = true` のメールアドレス = `village.tsubasa_4499@icloud.com` のみ
+- **Phase C 完成後の戻し方**:
+  ```sql
+  UPDATE admin_users
+  SET can_edit_schedule = true
+  WHERE email IN (
+    'inachichoco@gmail.com',
+    'tsukada.kouji610@gmail.com',
+    'yutaka.ito1994@gmail.com'
+  );
+  ```
+
+### 動作確認結果（2026-04-26 23:15 頃）
+
+- URL: https://village-tsubasa.web.app/schedule-editor/
+- ログイン: `village.tsubasa_4499@icloud.com` で成功
+- 画面: 2026年4月の予定 **1738件** が AG Grid に表示される
+- 全列正常表示: 日付 / ヘルパー / 利用者 / 開始 / 終了 / 配車 / 内容 / 概要
+
+### この日の最終 commit
+
+| commit | 内容 |
+|---|---|
+| `b9a7037` | Phase B 本体実装 |
+| `ecc9086` | feedback.ts / trainingReport.ts を Cloud Storage から救出して復元 |
+| `9e5ef9c` | contracts ルータ一時無効化（CloudSign secret 未設定対応） |
+| `22be2d2` | hidden 属性が効かないバグ修正（[hidden] CSS 追加） |
+
+### 影響範囲
+- 本リポジトリ内のみ（Functions API / Hosting）
+- 他アプリ（village-admin / user-schedule-app）への影響なし
+- ヘルパーさん（村つばさ利用者）からは見えない（URL 秘匿 + DB ロック）
+
+### 教訓③: ソース消失リスクの恒久対策
+
+- **`functions/lib/` も `functions/src/` も git tracked にすること**
+  - 現状: `lib/` は一部 tracked、一部 untracked と不統一
+  - 推奨: 次回チャットで `functions/.gitignore` を整理して `lib/` を完全 ignore に
+    変更し、ビルドは CI 側に任せる **か**、`lib/` を完全 tracked にして
+    Mac でビルドしたものをそのまま commit する運用に統一
+  - 現行のような「`lib/*.js` のうち一部だけ commit、しかも `src/*.ts` が
+    ない」という状態は最悪のパターン
+- **untracked ファイルは無視せず、`git status` で見た時に判断する習慣を**
+  - 「Untracked files:」セクションに重要なソースが並んでいたら、
+    削除しない限り `git add` する
 
 ---
 
