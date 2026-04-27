@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-26（schedule-editor Phase B 本番リリース + 復旧作業）
+最終更新: 2026-04-27（schedule-editor Phase C 完了 + Phase D 実装）
 
 ---
 
@@ -22,11 +22,33 @@
 > **新チャットの Claude へ**: 以下を作業冒頭で必ず聞いてください。
 > 奥原さんが「やる」と答えたら実施、「やらない」と答えたら該当項目を削除してください。
 
-### A. schedule-editor Phase C（編集機能）開始するか？
-- **次は本命の「スプレッドシート代替の編集機能」です**
-- 内容: AG Grid のセルを直接編集 → 楽観ロック（`schedule.updated_at` 比較）で保存 → エクセル並みの操作感
-- 前提条件: 現状 `can_edit_schedule = true` は奥原さんのみ（テスト中ロック中）。Phase C 完成後、他 3 名（inachichoco / tsukada.kouji610 / yutaka.ito1994）を再 ON にする UPDATE 文も忘れずに。元のリストは下記「2026-04-26 復旧作業」エントリ参照
-- 想定所要時間: 60〜90分
+### A1. Phase D1（論理削除 + ゴミ箱）の deploy・動作確認は済んだか？
+- **手順が下記「Phase D1」エントリの「deploy 手順」に書いてあるので、未 deploy なら一緒に進める**
+- SQL 適用 → コード deploy → 動作確認 → 何か問題あれば修正 → OK なら Phase A2 へ
+- ヘルパーアプリ側で削除済み予定が消えていることも確認
+
+### A2. Phase D2（行追加）の設計を詰める
+- 内容: 新規予定を schedule-editor から追加できるようにする
+- 要相談ポイント:
+  1. **`beneficiary_number`（受給者証番号）** はどう入れる？ 利用者ごとに毎回手入力？ 利用者マスタから自動補完？
+  2. **`source_key`（スプレッドシート同期キー）** は editor 追加行ではどうする？ null でよいか？ 自動生成すべきか？
+  3. **`helper_email`** は `helper_master` から自動補完で問題ないか？
+  4. ダイアログ UI で必須にする項目は？ 日付・利用者は必須でよいか？
+- 設計合意後 60〜90 分で実装可能
+
+### A3. Phase C 完成後の編集権限再付与
+- 現状 `can_edit_schedule = true` は奥原さんのみ（Phase B 時にロックした）
+- Phase D1（最低限）動作確認 OK なら、他 3 名を戻す:
+  ```sql
+  UPDATE admin_users
+  SET can_edit_schedule = true
+  WHERE email IN (
+    'inachichoco@gmail.com',
+    'tsukada.kouji610@gmail.com',
+    'yutaka.ito1994@gmail.com'
+  );
+  ```
+- Phase D2（行追加）まで終わってからにするのも可。タイミングは奥原さん判断
 
 ### B. GAS 全ファイルの git 同期チェック（リスク管理）
 - **`gas/` 配下の全 GAS ファイルが実 GAS 環境と一致しているか棚卸ししますか？**
@@ -48,6 +70,165 @@
     3. `index.ts` のコメントアウトを外す
     4. `npm run build && firebase deploy --only functions:api`
   - もし CloudSign 契約自体がまだなら、このタスクは見送り。ヘルパーさん影響なし（一度も deploy されていないため）
+
+---
+
+## 2026-04-27 [village-tsubasa] schedule-editor Phase D1: 論理削除 + ゴミ箱 + 復元
+
+Phase C のセル編集に続き、行ごとの削除（論理削除）と復元機能を追加。
+**未 deploy**（奥原さんのレビュー後 deploy 予定）。
+
+### 仕様
+
+- 各行右端に「🗑 削除」ボタン → 確認ダイアログ → `deleted_at = now()` をセット
+- ツールバーに「🗑 ゴミ箱を表示」トグル → ゴミ箱モード
+- ゴミ箱モード時:
+  - 過去 90 日に削除された行を新しい順に表示（最大 500 件）
+  - 月切替コントロールはグレーアウト
+  - 各行右端のボタンが「↩ 復元」に変わる
+  - main-screen に薄赤系の背景でモードを区別
+  - セル編集不可（ガード）
+- 復元: 確認ダイアログ → `deleted_at = null` に戻す
+
+### 新規 / 変更ファイル
+
+| 種別 | パス | 内容 |
+|---|---|---|
+| 新規 SQL | `sql/2026-04-27_schedule_editor_phase_d.sql` | `schedule_web_v` を更新（`WHERE s.deleted_at IS NULL` を追加）+ `security_invoker = true` |
+| 新規 | `functions/src/scheduleEditor/delete.ts` | POST /delete: 楽観ロック付き論理削除、`synced_to_sheet = false` リセット |
+| 新規 | `functions/src/scheduleEditor/restore.ts` | POST /restore: `deleted_at = null` に戻す（楽観ロック不要） |
+| 新規 | `functions/src/scheduleEditor/listTrash.ts` | GET /trash: 削除済み一覧（90日デフォルト、最大500件） |
+| 変更 | `functions/src/index.ts` | 新エンドポイント 3 つをマウント |
+| 変更 | `public/schedule-editor/index.html` | ゴミ箱トグルボタン追加 + フッター文言更新 |
+| 変更 | `public/schedule-editor/main.js` | viewMode 切替 + 削除/復元 + 操作カラム + 確認ダイアログ |
+| 変更 | `public/schedule-editor/style.css` | ゴミ箱モード視覚差別化 + アクションボタン |
+
+### `schedule_web_v` の view 更新が大きな影響範囲
+
+- 影響を受けるエンドポイント（全て削除済み行を**自動的に除外**するようになる）:
+  - `/api/schedule-list` (schedule-editor 自身)
+  - `/api/today-schedule` / `/api/today-schedule-all`（ヘルパー一覧）
+  - `/api/tomorrow-schedule` / `/api/tomorrow-schedule-all`
+  - `/api/today-helper-summary` / `/api/tomorrow-helper-summary`
+  - `/api/next-helper-schedule`
+  - 通知系（`scheduledNotifications.ts`）
+- これは**期待動作**（削除した予定はヘルパーアプリにも表示されない）
+- Phase A で `deleted_at` 列を追加して以来、まだ削除操作はしていないため、view 更新時点で表示が変わる行はゼロのはず
+
+### 行追加（D2）は次回セッションへ
+
+- 理由: schedule テーブルの `beneficiary_number` / `source_key` の初期値方針が要相談
+- 当面は新規予定の追加はスプレッドシートで継続可能
+
+### deploy 手順（奥原さん 4/27 朝以降）
+
+1. **SQL 実行（必須・最初）**:
+   - Supabase Dashboard → SQL Editor
+   - `sql/2026-04-27_schedule_editor_phase_d.sql` の内容を貼り付けて Run
+   - エラーが出たら deploy しない（CHANGELOG の rollback SQL で view を元に戻す）
+2. **コード deploy**:
+   ```bash
+   cd ~/village-tsubasa
+   git pull origin claude/setup-multi-app-dev-1y2PR
+   cd functions && npm run build && cd ..
+   firebase deploy --only functions:api,hosting
+   ```
+3. **動作確認**:
+   - https://village-tsubasa.web.app/schedule-editor/
+   - 任意の行で「🗑 削除」→ 確認 → 行が消える
+   - 「🗑 ゴミ箱を表示」→ 削除した行が出る
+   - 「↩ 復元」→ 戻る
+   - 通常表示に戻る → 復元した行が見える
+   - ヘルパーアプリ（today-schedule 等）でも削除した予定は出てこないことを確認
+
+### 関連 commit
+- （Phase D1 完成 commit、本記載時点で push 直前）
+
+### 次回チャットで Claude が確認すべきこと（追加）
+
+#### D. Phase D1 動作確認の結果は？
+- 削除 → ゴミ箱 → 復元の往復が動いたか？
+- ヘルパーアプリ側で削除済み予定が消えているか？
+- 何か問題あれば、それを直してから D2（行追加）に進む
+
+---
+
+## 2026-04-27 [village-tsubasa] schedule-editor Phase C: セル編集 + 楽観ロック保存
+
+Phase B（読み取り専用）に続き、AG Grid のセルを直接編集できるようにした。
+スプレッドシートの代替として実用レベルになった。
+
+### 新規ファイル
+- `functions/src/scheduleEditor/update.ts` — 編集 API ハンドラ
+  - 認可チェック（`admin_users.can_edit_schedule = true`）
+  - 楽観ロック: `expectedUpdatedAt` と DB 上の `updated_at` を比較
+  - 不一致なら 409 Conflict 返却 → フロントが該当月をリロード
+  - フィールドマップ: `helperName` → `name`, `userName` → `client`, etc
+  - 時刻フィールドのスマート整形:
+    - `"915"` → `"09:15"`
+    - `"2340"` → `"23:40"`
+    - `"9:15"` → `"09:15"`
+    - `"9"` → `"09:00"`
+    - 範囲外（`25:00` など）はエラー
+
+### 変更ファイル
+- `functions/src/scheduleList.ts` — レスポンスに `updatedAt` を追加（楽観ロック用）
+- `functions/src/index.ts` — `POST /api/schedule-editor/update` をマウント
+- `public/schedule-editor/main.js`:
+  - 日付以外の 7 列を `editable: true`
+  - `onCellValueChanged` で自動保存
+  - 保存中（茶）/成功（緑）/エラー（赤）の状態を toolbar status に表示
+  - 競合時は自動で月リロード（1.2秒後）
+  - **日付列を `M/D(曜)` 形式の valueFormatter で整形**（ソート・保存は ISO 形式のまま）
+- `public/schedule-editor/style.css` — `.is-saving` / `.is-success` の色付け
+  + 編集中セルのマーカー（背景色 + 茶色枠）
+- `public/schedule-editor/index.html` — フッター文言を「ダブルクリックで編集」に更新
+
+### 編集仕様
+| 列 | 編集可？ | 備考 |
+|---|---|---|
+| 日付 | ❌ | 同期影響大、Phase D 以降 |
+| ヘルパー | ✅ | プレーンテキスト |
+| 利用者 | ✅ | 〃 |
+| 開始 | ✅ | スマート整形（`915` → `09:15`） |
+| 終了 | ✅ | 〃 |
+| 配車 | ✅ | プレーンテキスト |
+| 内容 | ✅ | 〃 |
+| 概要 | ✅ | 〃 |
+
+### 同時編集対策
+1. フロント: 各行の `updatedAt` を保持（rowData の一部）
+2. 保存時: `{id, field, value, expectedUpdatedAt}` を POST
+3. サーバ:
+   - SELECT で現在の `updated_at` を取得 → `expectedUpdatedAt` と比較
+   - UPDATE 時にも `eq("updated_at", expectedUpdatedAt)` を二重で WHERE
+   - 0 行更新 = 競合 → 409 Conflict
+4. フロント: 競合検知 → 該当月を自動リロード
+
+### 動作確認（2026-04-27）
+- 任意セル編集 → Tab 確定 → 「保存しました」緑表示 ✅
+- 時刻 `915` 入力 → `09:15` で保存 ✅
+- 日付列を `4/25(土)` 形式で表示 ✅
+- 1738件 / 月のスケジュールでパフォーマンス問題なし
+
+### 関連 commit
+- `b2b9345` — Phase C 本体実装
+- `b4977b1` — 日付列を `M/D(曜)` 表記に
+- `7f0b89a` — 時刻入力スマート整形
+
+### 影響範囲
+- **`schedule` テーブルへの UPDATE が発生する**（これまで Read-only だった）
+- 影響を受ける可能性がある下流:
+  - GAS「【ビレッジつばさ】全体スケジュール」の `★supabase転送本体.gs`
+    （schedule → スプレッドシート同期）
+  - `synced_to_sheet` フラグは現状 false にリセットしていない
+    → 月次フラッシュ（毎月15日）で再同期されない可能性あり
+  - **Phase D 以降で要確認**（編集行の `synced_to_sheet = false` リセット）
+
+### 制限事項（Phase D 以降）
+- 行追加 / 論理削除 / ゴミ箱 → Phase D
+- コピペ / 一括編集 → Phase E
+- 日付列の編集 → 現状は新規行追加（Phase D）で代替
 
 ---
 

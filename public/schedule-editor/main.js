@@ -1,25 +1,31 @@
 // =============================================================
-// /schedule-editor/ Phase C: セル編集 + 楽観ロック保存
+// /schedule-editor/ Phase D: 論理削除 + ゴミ箱 + 復元
 // =============================================================
 //
 // 機能:
 //   - メールアドレスで認証（admin_users.can_edit_schedule = true のみ通る）
 //   - 月単位でスケジュールを AG Grid に表示
 //   - クイックフィルタ（ヘルパー名 / 利用者名）
-//   - **セル直接編集** + 自動保存（楽観ロック付き）
+//   - **セル直接編集** + 自動保存（楽観ロック付き、Phase C）
+//   - **行ごとの 🗑 削除ボタン**（Phase D）
+//   - **ゴミ箱モード切替**（Phase D）→ 削除済み行を表示・復元可能
 //
-// 楽観ロック:
-//   - 各行の updatedAt を保持
-//   - 保存時に expectedUpdatedAt を送信 → サーバ側で一致確認
-//   - 不一致なら 409 Conflict → 該当月をリロード
+// モード切替:
+//   - 通常モード: schedule_web_v ベース、月単位、編集 + 削除可
+//   - ゴミ箱モード: 過去 90 日に削除された行、編集不可、復元可
 //
-// 編集不可: date（同期影響大、Phase D 以降）
-// 削除・行追加: Phase D 以降
+// 行追加: Phase D2 で対応予定（初期値の方針が要相談）
 
 const AUTH_ENDPOINT = "/api/schedule-editor/auth";
 const SCHEDULE_LIST_ENDPOINT = "/api/schedule-list";
 const UPDATE_ENDPOINT = "/api/schedule-editor/update";
+const DELETE_ENDPOINT = "/api/schedule-editor/delete";
+const RESTORE_ENDPOINT = "/api/schedule-editor/restore";
+const TRASH_ENDPOINT = "/api/schedule-editor/trash";
 const STORAGE_KEY = "schedule-editor.email";
+
+const VIEW_MODE_NORMAL = "normal";
+const VIEW_MODE_TRASH = "trash";
 
 const state = {
   email: "",
@@ -27,6 +33,7 @@ const state = {
   currentMonth: 0,
   rawItems: [],
   isLoading: false,
+  viewMode: VIEW_MODE_NORMAL,
 };
 
 let gridApi = null;
@@ -47,11 +54,13 @@ const authSubmitButton = el("auth-submit");
 const authErrorEl = el("auth-error");
 const userEmailEl = el("user-email");
 const logoutButton = el("logout-button");
+const monthControl = el("month-control");
 const prevMonthBtn = el("prev-month");
 const nextMonthBtn = el("next-month");
 const monthLabel = el("month-label");
 const quickFilterInput = el("quick-filter");
 const reloadButton = el("reload-button");
+const trashToggleBtn = el("trash-toggle");
 const gridContainer = el("grid-container");
 const statusLine = el("status-line");
 
@@ -90,17 +99,29 @@ const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 function formatDateForDisplay(value) {
   if (!value) return "";
-  // value は "YYYY-MM-DD" を想定
   const parts = String(value).split("-");
   if (parts.length !== 3) return String(value);
   const year = Number(parts[0]);
   const month = Number(parts[1]);
   const day = Number(parts[2]);
   if (!year || !month || !day) return String(value);
-  // ローカルタイムでの曜日（タイムゾーン依存だが、日付だけなので問題なし）
   const d = new Date(year, month - 1, day);
   const wd = WEEKDAYS[d.getDay()];
   return `${month}/${day}(${wd})`;
+}
+
+function formatDeletedAtForDisplay(value) {
+  if (!value) return "";
+  try {
+    const d = new Date(value);
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${m}/${day} ${hh}:${mm}`;
+  } catch {
+    return String(value);
+  }
 }
 
 // ─── 認証 ───────────────────────────────────────────────────
@@ -182,24 +203,50 @@ async function fetchSchedule(year, month) {
   return Array.isArray(data.items) ? data.items : [];
 }
 
+async function fetchTrash() {
+  const url = `${TRASH_ENDPOINT}?email=${encodeURIComponent(state.email)}&days=90`;
+  const res = await fetch(url);
+  const data = await res.json().catch(() => null);
+  if (!data || !data.ok) {
+    throw new Error(
+      data && data.message ? data.message : "ゴミ箱の取得に失敗しました",
+    );
+  }
+  return Array.isArray(data.items) ? data.items : [];
+}
+
 async function refreshSchedule() {
   if (state.isLoading) return;
   state.isLoading = true;
   setStatus("読み込み中…");
   try {
-    const items = await fetchSchedule(state.currentYear, state.currentMonth);
+    let items;
+    if (state.viewMode === VIEW_MODE_TRASH) {
+      items = await fetchTrash();
+    } else {
+      items = await fetchSchedule(state.currentYear, state.currentMonth);
+    }
     state.rawItems = items;
     if (gridApi) {
       gridApi.setGridOption("rowData", items);
     }
-    setStatus(`${state.currentYear}年${state.currentMonth}月: ${items.length}件`);
+    if (state.viewMode === VIEW_MODE_TRASH) {
+      setStatus(`ゴミ箱（過去90日）: ${items.length}件`);
+    } else {
+      setStatus(
+        `${state.currentYear}年${state.currentMonth}月: ${items.length}件`,
+      );
+    }
   } catch (err) {
     console.error("[scheduleEditor] fetch error:", err);
     state.rawItems = [];
     if (gridApi) {
       gridApi.setGridOption("rowData", []);
     }
-    setStatus("読み込みに失敗しました。「再読み込み」を押してください", "error");
+    setStatus(
+      "読み込みに失敗しました: " + (err.message || "原因不明"),
+      "error",
+    );
   } finally {
     state.isLoading = false;
   }
@@ -208,6 +255,9 @@ async function refreshSchedule() {
 // ─── セル編集 → 保存 ────────────────────────────────────────
 
 async function saveCellEdit(event) {
+  // ゴミ箱モードでは編集不可（safety net）
+  if (state.viewMode === VIEW_MODE_TRASH) return;
+
   const node = event.node;
   const data = event.data;
   const colId = event.column.getColId();
@@ -218,13 +268,14 @@ async function saveCellEdit(event) {
       ? null
       : String(newValueRaw).trim();
 
-  // 変化なし → スキップ
   if (oldValue === newValue) return;
 
-  // 楽観ロック用の updatedAt を取得
   const expectedUpdatedAt = data.updatedAt;
   if (!expectedUpdatedAt) {
-    setStatus("内部エラー: updatedAt が取得できません。再読み込みしてください", "error");
+    setStatus(
+      "内部エラー: updatedAt が取得できません。再読み込みしてください",
+      "error",
+    );
     node.setDataValue(colId, oldValue);
     return;
   }
@@ -245,14 +296,10 @@ async function saveCellEdit(event) {
     });
     const json = await res.json().catch(() => null);
 
-    if (!json) {
-      throw new Error("不正なレスポンス");
-    }
+    if (!json) throw new Error("不正なレスポンス");
 
     if (json.ok) {
-      // 楽観ロック用の updatedAt を更新
       data.updatedAt = json.updatedAt;
-      // 保存後の値を再描画（normalize 結果が来るため）
       if (json.value !== newValue) {
         node.setDataValue(colId, json.value);
       }
@@ -265,7 +312,6 @@ async function saveCellEdit(event) {
         }
       }, 1500);
     } else {
-      // サーバ側エラー
       node.setDataValue(colId, oldValue);
       if (json.reason === "conflict") {
         setStatus(
@@ -284,12 +330,134 @@ async function saveCellEdit(event) {
   }
 }
 
+// ─── 削除 / 復元 ────────────────────────────────────────────
+
+async function deleteRow(rowData) {
+  const summary = formatRowForConfirm(rowData);
+  if (!window.confirm(`以下の予定を削除します（ゴミ箱に移動）。\n\n${summary}\n\nよろしいですか？`)) {
+    return;
+  }
+
+  setStatus("削除中…", "saving");
+  try {
+    const res = await fetch(DELETE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: rowData.id,
+        email: state.email,
+        expectedUpdatedAt: rowData.updatedAt,
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!json) throw new Error("不正なレスポンス");
+
+    if (json.ok) {
+      setStatus("削除しました（ゴミ箱から復元できます）", "success");
+      // 該当行を grid から取り除く（再取得より早い）
+      if (gridApi) {
+        const txn = { remove: [rowData] };
+        gridApi.applyTransaction(txn);
+      }
+      state.rawItems = state.rawItems.filter((r) => r.id !== rowData.id);
+    } else if (json.reason === "conflict") {
+      setStatus(
+        "他の人が同じ予定を変更しました。再読み込みします…",
+        "error",
+      );
+      setTimeout(refreshSchedule, 1200);
+    } else {
+      setStatus(json.message || "削除に失敗しました", "error");
+    }
+  } catch (err) {
+    console.error("[scheduleEditor] delete error:", err);
+    setStatus("通信エラー: 削除できませんでした", "error");
+  }
+}
+
+async function restoreRow(rowData) {
+  const summary = formatRowForConfirm(rowData);
+  if (!window.confirm(`以下の予定を復元します（ゴミ箱から戻す）。\n\n${summary}\n\nよろしいですか？`)) {
+    return;
+  }
+
+  setStatus("復元中…", "saving");
+  try {
+    const res = await fetch(RESTORE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: rowData.id,
+        email: state.email,
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!json) throw new Error("不正なレスポンス");
+
+    if (json.ok) {
+      setStatus("復元しました", "success");
+      if (gridApi) {
+        const txn = { remove: [rowData] };
+        gridApi.applyTransaction(txn);
+      }
+      state.rawItems = state.rawItems.filter((r) => r.id !== rowData.id);
+    } else {
+      setStatus(json.message || "復元に失敗しました", "error");
+    }
+  } catch (err) {
+    console.error("[scheduleEditor] restore error:", err);
+    setStatus("通信エラー: 復元できませんでした", "error");
+  }
+}
+
+function formatRowForConfirm(row) {
+  const date = formatDateForDisplay(row.date);
+  const helper = row.helperName || "（担当未設定）";
+  const user = row.userName || "（利用者未設定）";
+  const time =
+    row.startTime && row.endTime
+      ? `${row.startTime}〜${row.endTime}`
+      : row.startTime
+      ? `${row.startTime}〜`
+      : "(時間未設定)";
+  return `${date}  ${time}\n${helper} → ${user}\n${row.task || ""} / ${row.summary || ""}`;
+}
+
+// ─── ゴミ箱モード切替 ───────────────────────────────────────
+
+function toggleTrashMode() {
+  state.viewMode =
+    state.viewMode === VIEW_MODE_NORMAL ? VIEW_MODE_TRASH : VIEW_MODE_NORMAL;
+
+  // UI 切替
+  if (state.viewMode === VIEW_MODE_TRASH) {
+    mainScreen.classList.add("is-trash-mode");
+    trashToggleBtn.classList.add("is-active");
+    trashToggleBtn.textContent = "📋 通常表示に戻る";
+    monthControl.style.opacity = "0.4";
+    monthControl.style.pointerEvents = "none";
+  } else {
+    mainScreen.classList.remove("is-trash-mode");
+    trashToggleBtn.classList.remove("is-active");
+    trashToggleBtn.textContent = "🗑 ゴミ箱を表示";
+    monthControl.style.opacity = "";
+    monthControl.style.pointerEvents = "";
+  }
+
+  // カラム定義を切替（編集可否や操作ボタンが変わる）
+  if (gridApi) {
+    gridApi.setGridOption("columnDefs", buildColumnDefs(state.viewMode));
+  }
+  refreshSchedule();
+}
+
 // ─── AG Grid ───────────────────────────────────────────────
 
-function initializeGridIfNeeded() {
-  if (gridApi) return;
+function buildColumnDefs(mode) {
+  const isTrash = mode === VIEW_MODE_TRASH;
+  const editable = !isTrash;
 
-  const columnDefs = [
+  const cols = [
     {
       headerName: "日付",
       field: "date",
@@ -305,37 +473,37 @@ function initializeGridIfNeeded() {
       headerName: "ヘルパー",
       field: "helperName",
       width: 140,
-      editable: true,
+      editable,
     },
     {
       headerName: "利用者",
       field: "userName",
       width: 140,
-      editable: true,
+      editable,
     },
     {
       headerName: "開始",
       field: "startTime",
       width: 90,
-      editable: true,
+      editable,
     },
     {
       headerName: "終了",
       field: "endTime",
       width: 90,
-      editable: true,
+      editable,
     },
     {
       headerName: "配車",
       field: "haisha",
       width: 120,
-      editable: true,
+      editable,
     },
     {
       headerName: "内容",
       field: "task",
       width: 140,
-      editable: true,
+      editable,
     },
     {
       headerName: "概要",
@@ -343,12 +511,65 @@ function initializeGridIfNeeded() {
       flex: 1,
       minWidth: 200,
       tooltipField: "summary",
-      editable: true,
+      editable,
     },
   ];
 
+  if (isTrash) {
+    cols.push({
+      headerName: "削除日時",
+      field: "deletedAt",
+      width: 120,
+      editable: false,
+      sortable: true,
+      valueFormatter: function (params) {
+        return formatDeletedAtForDisplay(params.value);
+      },
+    });
+  }
+
+  cols.push({
+    headerName: "",
+    width: 90,
+    pinned: "right",
+    editable: false,
+    sortable: false,
+    filter: false,
+    resizable: false,
+    cellRenderer: createActionCellRenderer,
+  });
+
+  return cols;
+}
+
+function createActionCellRenderer(params) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "action-cell";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "action-btn";
+  if (state.viewMode === VIEW_MODE_TRASH) {
+    button.classList.add("action-btn--restore");
+    button.textContent = "↩ 復元";
+    button.addEventListener("click", function () {
+      restoreRow(params.data);
+    });
+  } else {
+    button.classList.add("action-btn--delete");
+    button.textContent = "🗑 削除";
+    button.addEventListener("click", function () {
+      deleteRow(params.data);
+    });
+  }
+  wrapper.appendChild(button);
+  return wrapper;
+}
+
+function initializeGridIfNeeded() {
+  if (gridApi) return;
+
   const gridOptions = {
-    columnDefs,
+    columnDefs: buildColumnDefs(state.viewMode),
     rowData: [],
     defaultColDef: {
       sortable: true,
@@ -359,7 +580,7 @@ function initializeGridIfNeeded() {
     headerHeight: 38,
     suppressRowClickSelection: true,
     animateRows: false,
-    singleClickEdit: false, // ダブルクリックで編集に入る
+    singleClickEdit: false,
     stopEditingWhenCellsLoseFocus: true,
     onCellValueChanged: saveCellEdit,
     localeText: {
@@ -368,7 +589,6 @@ function initializeGridIfNeeded() {
     },
   };
 
-  // AG Grid v31 API
   gridApi = window.agGrid.createGrid(gridContainer, gridOptions);
 }
 
@@ -388,11 +608,13 @@ function bindEvents() {
   logoutButton.addEventListener("click", logout);
 
   prevMonthBtn.addEventListener("click", function () {
+    if (state.viewMode === VIEW_MODE_TRASH) return;
     setMonth(state.currentYear, state.currentMonth - 1);
     refreshSchedule();
   });
 
   nextMonthBtn.addEventListener("click", function () {
+    if (state.viewMode === VIEW_MODE_TRASH) return;
     setMonth(state.currentYear, state.currentMonth + 1);
     refreshSchedule();
   });
@@ -400,6 +622,8 @@ function bindEvents() {
   reloadButton.addEventListener("click", function () {
     refreshSchedule();
   });
+
+  trashToggleBtn.addEventListener("click", toggleTrashMode);
 
   quickFilterInput.addEventListener("input", function (event) {
     if (gridApi) {

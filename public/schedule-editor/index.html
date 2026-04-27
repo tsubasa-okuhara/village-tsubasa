@@ -60,7 +60,7 @@
           </span>
         </div>
         <div class="toolbar__row">
-          <div class="month-control">
+          <div class="month-control" id="month-control">
             <button type="button" id="prev-month" class="month-btn">◀</button>
             <span class="month-label" id="month-label">—</span>
             <button type="button" id="next-month" class="month-btn">▶</button>
@@ -73,6 +73,9 @@
               class="quick-filter"
             />
           </div>
+          <button type="button" id="trash-toggle" class="trash-toggle-btn">
+            🗑 ゴミ箱を表示
+          </button>
           <button type="button" id="reload-button" class="reload-btn">
             🔄 再読み込み
           </button>
@@ -85,7 +88,9 @@
       <footer class="page-footer">
         <p>
           💡 セルを <strong>ダブルクリック</strong>で編集できます（日付以外）。
-          変更は <strong>自動保存</strong>。同時編集の競合は自動検知して再読み込みします。
+          変更は <strong>自動保存</strong>。<br />
+          各行の右端 🗑 で削除（ゴミ箱に移動・復元可能）。
+          ゴミ箱画面では「↩ 復元」で戻せます。
         </p>
       </footer>
     </section>

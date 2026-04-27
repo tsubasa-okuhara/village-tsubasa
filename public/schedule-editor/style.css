@@ -273,6 +273,77 @@ body {
   font-weight: 500;
 }
 
+.trash-toggle-btn {
+  padding: 8px 14px;
+  background: #fff;
+  color: var(--brown-strong);
+  border: 1px solid var(--brown);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.trash-toggle-btn:hover {
+  background: var(--beige);
+}
+
+.trash-toggle-btn.is-active {
+  background: var(--brown);
+  color: #fff;
+  border-color: var(--brown-strong);
+}
+
+/* ゴミ箱モード時に main-screen 全体に薄い赤系背景 */
+.main-screen.is-trash-mode .grid-container {
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.18), var(--shadow);
+}
+
+.main-screen.is-trash-mode .toolbar {
+  background: #fef0ec;
+}
+
+/* 操作カラム内のボタン */
+.action-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.action-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--brown);
+  background: #fff;
+  color: var(--brown-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.action-btn:hover {
+  background: var(--beige);
+}
+
+.action-btn.action-btn--delete {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.action-btn.action-btn--delete:hover {
+  background: #fbe9e7;
+}
+
+.action-btn.action-btn--restore {
+  color: #2e8b57;
+  border-color: #2e8b57;
+}
+
+.action-btn.action-btn--restore:hover {
+  background: #e7f5ec;
+}
+
 .reload-btn:hover {
   background: #c0a47b;
 }
