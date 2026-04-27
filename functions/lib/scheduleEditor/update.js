@@ -20,11 +20,56 @@ function normalizeValue(rawField, value) {
     const str = String(value).trim();
     if (str === "")
         return null;
-    // 時刻列は HH:MM か HH:MM:SS のみ許可（AG Grid から HH:MM が来るため両方許容）
+    // 時刻列はスマート整形:
+    //   "915"     → "09:15"
+    //   "2340"    → "23:40"
+    //   "9:15"    → "09:15"
+    //   "09:15"   → "09:15"
+    //   "9"       → "09:00"
+    //   "9:5"     → "09:05"
     if (TIME_FIELDS.has(rawField)) {
-        if (!/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
-            throw new Error("時刻は HH:MM 形式で入力してください");
+        const cleaned = str.replace(/[^\d:]/g, "");
+        let hourStr;
+        let minuteStr;
+        if (cleaned.includes(":")) {
+            const parts = cleaned.split(":");
+            if (parts.length !== 2 || parts[0] === "" || parts[1] === "") {
+                throw new Error("時刻の形式が不正です（例: 9:15 / 09:15 / 915）");
+            }
+            hourStr = parts[0];
+            minuteStr = parts[1];
         }
+        else {
+            if (cleaned.length === 1 || cleaned.length === 2) {
+                // "9" / "23" → 分は 00 とみなす
+                hourStr = cleaned;
+                minuteStr = "00";
+            }
+            else if (cleaned.length === 3) {
+                // "915" → 時=先頭1桁、分=末尾2桁
+                hourStr = cleaned.slice(0, 1);
+                minuteStr = cleaned.slice(1);
+            }
+            else if (cleaned.length === 4) {
+                // "2340" → 時=先頭2桁、分=末尾2桁
+                hourStr = cleaned.slice(0, 2);
+                minuteStr = cleaned.slice(2);
+            }
+            else {
+                throw new Error("時刻の形式が不正です（例: 9:15 / 09:15 / 915）");
+            }
+        }
+        const hour = Number(hourStr);
+        const minute = Number(minuteStr);
+        if (!Number.isInteger(hour) ||
+            !Number.isInteger(minute) ||
+            hour < 0 ||
+            hour > 23 ||
+            minute < 0 ||
+            minute > 59) {
+            throw new Error("時刻は 00:00〜23:59 の範囲で指定してください");
+        }
+        return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
     }
     return str;
 }
