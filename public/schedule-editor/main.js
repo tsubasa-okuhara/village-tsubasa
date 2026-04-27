@@ -86,6 +86,23 @@ function setMonth(year, month) {
   monthLabel.textContent = `${y}年${m}月`;
 }
 
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+function formatDateForDisplay(value) {
+  if (!value) return "";
+  // value は "YYYY-MM-DD" を想定
+  const parts = String(value).split("-");
+  if (parts.length !== 3) return String(value);
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!year || !month || !day) return String(value);
+  // ローカルタイムでの曜日（タイムゾーン依存だが、日付だけなので問題なし）
+  const d = new Date(year, month - 1, day);
+  const wd = WEEKDAYS[d.getDay()];
+  return `${month}/${day}(${wd})`;
+}
+
 // ─── 認証 ───────────────────────────────────────────────────
 
 async function checkAuth(email) {
@@ -280,6 +297,9 @@ function initializeGridIfNeeded() {
       pinned: "left",
       sort: "asc",
       editable: false,
+      valueFormatter: function (params) {
+        return formatDateForDisplay(params.value);
+      },
     },
     {
       headerName: "ヘルパー",
