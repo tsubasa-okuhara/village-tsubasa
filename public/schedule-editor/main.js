@@ -1,17 +1,24 @@
 // =============================================================
-// /schedule-editor/ Phase B: 読み取り専用 AG Grid 表示
+// /schedule-editor/ Phase C: セル編集 + 楽観ロック保存
 // =============================================================
 //
 // 機能:
 //   - メールアドレスで認証（admin_users.can_edit_schedule = true のみ通る）
-//   - 月単位でスケジュールを AG Grid に表示（読み取り専用）
+//   - 月単位でスケジュールを AG Grid に表示
 //   - クイックフィルタ（ヘルパー名 / 利用者名）
-//   - ヘッダクリックでソート、列フィルタも有効
+//   - **セル直接編集** + 自動保存（楽観ロック付き）
 //
-// 編集機能は Phase C で追加予定。
+// 楽観ロック:
+//   - 各行の updatedAt を保持
+//   - 保存時に expectedUpdatedAt を送信 → サーバ側で一致確認
+//   - 不一致なら 409 Conflict → 該当月をリロード
+//
+// 編集不可: date（同期影響大、Phase D 以降）
+// 削除・行追加: Phase D 以降
 
 const AUTH_ENDPOINT = "/api/schedule-editor/auth";
 const SCHEDULE_LIST_ENDPOINT = "/api/schedule-list";
+const UPDATE_ENDPOINT = "/api/schedule-editor/update";
 const STORAGE_KEY = "schedule-editor.email";
 
 const state = {
@@ -50,9 +57,12 @@ const statusLine = el("status-line");
 
 // ─── ユーティリティ ─────────────────────────────────────────
 
-function setStatus(text, isError) {
+function setStatus(text, kind) {
   statusLine.textContent = text || "";
-  statusLine.classList.toggle("is-error", Boolean(isError));
+  statusLine.classList.remove("is-error", "is-success", "is-saving");
+  if (kind === "error") statusLine.classList.add("is-error");
+  else if (kind === "success") statusLine.classList.add("is-success");
+  else if (kind === "saving") statusLine.classList.add("is-saving");
 }
 
 function getTodayParts() {
@@ -172,9 +182,88 @@ async function refreshSchedule() {
     if (gridApi) {
       gridApi.setGridOption("rowData", []);
     }
-    setStatus("読み込みに失敗しました。「再読み込み」を押してください", true);
+    setStatus("読み込みに失敗しました。「再読み込み」を押してください", "error");
   } finally {
     state.isLoading = false;
+  }
+}
+
+// ─── セル編集 → 保存 ────────────────────────────────────────
+
+async function saveCellEdit(event) {
+  const node = event.node;
+  const data = event.data;
+  const colId = event.column.getColId();
+  const oldValue = event.oldValue == null ? null : String(event.oldValue);
+  const newValueRaw = event.newValue;
+  const newValue =
+    newValueRaw == null || String(newValueRaw).trim() === ""
+      ? null
+      : String(newValueRaw).trim();
+
+  // 変化なし → スキップ
+  if (oldValue === newValue) return;
+
+  // 楽観ロック用の updatedAt を取得
+  const expectedUpdatedAt = data.updatedAt;
+  if (!expectedUpdatedAt) {
+    setStatus("内部エラー: updatedAt が取得できません。再読み込みしてください", "error");
+    node.setDataValue(colId, oldValue);
+    return;
+  }
+
+  setStatus("保存中…", "saving");
+
+  try {
+    const res = await fetch(UPDATE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: data.id,
+        email: state.email,
+        field: colId,
+        value: newValue,
+        expectedUpdatedAt: expectedUpdatedAt,
+      }),
+    });
+    const json = await res.json().catch(() => null);
+
+    if (!json) {
+      throw new Error("不正なレスポンス");
+    }
+
+    if (json.ok) {
+      // 楽観ロック用の updatedAt を更新
+      data.updatedAt = json.updatedAt;
+      // 保存後の値を再描画（normalize 結果が来るため）
+      if (json.value !== newValue) {
+        node.setDataValue(colId, json.value);
+      }
+      setStatus("保存しました", "success");
+      setTimeout(function () {
+        if (statusLine.classList.contains("is-success")) {
+          setStatus(
+            `${state.currentYear}年${state.currentMonth}月: ${state.rawItems.length}件`,
+          );
+        }
+      }, 1500);
+    } else {
+      // サーバ側エラー
+      node.setDataValue(colId, oldValue);
+      if (json.reason === "conflict") {
+        setStatus(
+          "他の人が同じ予定を変更しました。再読み込みします…",
+          "error",
+        );
+        setTimeout(refreshSchedule, 1200);
+      } else {
+        setStatus(json.message || "保存に失敗しました", "error");
+      }
+    }
+  } catch (err) {
+    console.error("[scheduleEditor] update error:", err);
+    node.setDataValue(colId, oldValue);
+    setStatus("通信エラー: 保存できませんでした", "error");
   }
 }
 
@@ -190,19 +279,51 @@ function initializeGridIfNeeded() {
       width: 110,
       pinned: "left",
       sort: "asc",
+      editable: false,
     },
-    { headerName: "ヘルパー", field: "helperName", width: 140 },
-    { headerName: "利用者", field: "userName", width: 140 },
-    { headerName: "開始", field: "startTime", width: 90 },
-    { headerName: "終了", field: "endTime", width: 90 },
-    { headerName: "配車", field: "haisha", width: 120 },
-    { headerName: "内容", field: "task", width: 140 },
+    {
+      headerName: "ヘルパー",
+      field: "helperName",
+      width: 140,
+      editable: true,
+    },
+    {
+      headerName: "利用者",
+      field: "userName",
+      width: 140,
+      editable: true,
+    },
+    {
+      headerName: "開始",
+      field: "startTime",
+      width: 90,
+      editable: true,
+    },
+    {
+      headerName: "終了",
+      field: "endTime",
+      width: 90,
+      editable: true,
+    },
+    {
+      headerName: "配車",
+      field: "haisha",
+      width: 120,
+      editable: true,
+    },
+    {
+      headerName: "内容",
+      field: "task",
+      width: 140,
+      editable: true,
+    },
     {
       headerName: "概要",
       field: "summary",
       flex: 1,
       minWidth: 200,
       tooltipField: "summary",
+      editable: true,
     },
   ];
 
@@ -213,12 +334,14 @@ function initializeGridIfNeeded() {
       sortable: true,
       filter: true,
       resizable: true,
-      editable: false, // Phase B は読み取り専用
     },
     rowHeight: 36,
     headerHeight: 38,
     suppressRowClickSelection: true,
     animateRows: false,
+    singleClickEdit: false, // ダブルクリックで編集に入る
+    stopEditingWhenCellsLoseFocus: true,
+    onCellValueChanged: saveCellEdit,
     localeText: {
       noRowsToShow: "予定はありません",
       loadingOoo: "読み込み中…",

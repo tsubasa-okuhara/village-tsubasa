@@ -287,6 +287,16 @@ body {
   color: var(--error);
 }
 
+.toolbar__status.is-saving {
+  color: var(--brown-strong);
+  font-weight: 600;
+}
+
+.toolbar__status.is-success {
+  color: #2e8b57;
+  font-weight: 600;
+}
+
 /* ─── AG Grid ─── */
 .grid-container {
   height: calc(100vh - 290px);
@@ -306,6 +316,12 @@ body {
   --ag-row-hover-color: rgba(213, 187, 147, 0.18);
   --ag-selected-row-background-color: rgba(213, 187, 147, 0.32);
   --ag-border-color: var(--line);
+}
+
+/* 編集可能セルにマウスホバーで枠を表示（編集できることを視覚的に示す） */
+.ag-theme-alpine .ag-cell.ag-cell-inline-editing {
+  background: #fff8e7;
+  border: 1px solid var(--brown);
 }
 
 /* ─── フッター ─── */

@@ -24,7 +24,7 @@ async function fetchScheduleList(year, month) {
     for (let offset = 0;; offset += pageSize) {
         const { data, error } = await supabase
             .from("schedule_web_v")
-            .select("id, date, name, client, start_time, end_time, haisha, task, summary")
+            .select("id, date, name, client, start_time, end_time, haisha, task, summary, updated_at")
             .gte("date", startDate)
             .lt("date", endDate)
             .order("date", { ascending: true })
@@ -50,6 +50,7 @@ async function fetchScheduleList(year, month) {
             haisha: row.haisha,
             task: row.task,
             summary: row.summary,
+            updatedAt: row.updated_at,
         };
     });
 }

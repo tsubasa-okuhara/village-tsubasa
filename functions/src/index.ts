@@ -68,6 +68,7 @@ import {
 } from "./calmCheck";
 
 import { handleScheduleEditorAuth } from "./scheduleEditor/auth";
+import { handleScheduleEditorUpdate } from "./scheduleEditor/update";
 
 const app = express();
 
@@ -188,6 +189,10 @@ app.post("/api/calm-checks/targets/remove", handleRemoveCalmCheckTarget);
 // admin_users.can_edit_schedule = true のメールアドレスだけ通す
 app.get("/schedule-editor/auth", handleScheduleEditorAuth);
 app.get("/api/schedule-editor/auth", handleScheduleEditorAuth);
+
+// スケジュール編集（Phase C）: セル編集 + 楽観ロック保存
+app.post("/schedule-editor/update", handleScheduleEditorUpdate);
+app.post("/api/schedule-editor/update", handleScheduleEditorUpdate);
 
 // 毎朝7時（JST）に今日の予定を通知
 export const notifyTodaySchedule = onSchedule(

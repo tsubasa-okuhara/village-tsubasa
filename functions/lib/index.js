@@ -33,6 +33,7 @@ const trainingReport_1 = require("./trainingReport");
 const push_1 = require("./push");
 const calmCheck_1 = require("./calmCheck");
 const auth_1 = require("./scheduleEditor/auth");
+const update_1 = require("./scheduleEditor/update");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: true,
@@ -128,6 +129,9 @@ app.post("/api/calm-checks/targets/remove", calmCheck_1.handleRemoveCalmCheckTar
 // admin_users.can_edit_schedule = true のメールアドレスだけ通す
 app.get("/schedule-editor/auth", auth_1.handleScheduleEditorAuth);
 app.get("/api/schedule-editor/auth", auth_1.handleScheduleEditorAuth);
+// スケジュール編集（Phase C）: セル編集 + 楽観ロック保存
+app.post("/schedule-editor/update", update_1.handleScheduleEditorUpdate);
+app.post("/api/schedule-editor/update", update_1.handleScheduleEditorUpdate);
 // 毎朝7時（JST）に今日の予定を通知
 exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
     schedule: "0 7 * * *", // JST 07:00

@@ -12,6 +12,7 @@ type ScheduleListItem = {
   haisha: string | null;
   task: string | null;
   summary: string | null;
+  updatedAt: string | null;
 };
 
 type ScheduleListSuccessResponse = {
@@ -41,6 +42,7 @@ type ScheduleRow = {
   haisha: string | null;
   task: string | null;
   summary: string | null;
+  updated_at: string | null;
 };
 
 export function parseYearMonthParams(req: Request): ParsedYearMonth | null {
@@ -70,7 +72,7 @@ export async function fetchScheduleList(
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase
       .from("schedule_web_v")
-      .select("id, date, name, client, start_time, end_time, haisha, task, summary")
+      .select("id, date, name, client, start_time, end_time, haisha, task, summary, updated_at")
       .gte("date", startDate)
       .lt("date", endDate)
       .order("date", { ascending: true })
@@ -100,6 +102,7 @@ export async function fetchScheduleList(
       haisha: row.haisha,
       task: row.task,
       summary: row.summary,
+      updatedAt: row.updated_at,
     };
   });
 }
