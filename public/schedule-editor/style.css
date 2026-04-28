@@ -294,13 +294,13 @@ body {
   border-color: var(--brown-strong);
 }
 
-/* ゴミ箱モード時に main-screen 全体に薄い赤系背景 */
+/* ゴミ箱モード時の視覚差別化（薄灰色） */
 .main-screen.is-trash-mode .grid-container {
-  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.18), var(--shadow);
+  box-shadow: 0 0 0 3px rgba(130, 130, 130, 0.22), var(--shadow);
 }
 
 .main-screen.is-trash-mode .toolbar {
-  background: #fef0ec;
+  background: #ececec;
 }
 
 /* 操作カラム内のボタン */
