@@ -13,7 +13,105 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-28（GAS 全体マップ確定 + transferServiceRecords.gs 重複削除 + RULES 加筆 + スケジュール転送ボタン.gs 実環境照合済み + schedule-editor に「強制リセット」ボタン追加）
+最終更新: 2026-04-29（ヘルパーセルフマッチング・プロジェクト 設計検討開始 + 黄色行=未割当の Supabase 流入を実証）
+
+---
+
+## 2026-04-29 [village-tsubasa] ヘルパーセルフマッチング・プロジェクト 設計検討開始（実装は次回以降）
+
+### 構想
+
+ヘルパー名未割当の支援を、ヘルパー側から自分で「入れます」と手を挙げる仕組みを作る。
+
+- **第1段階（今回着手予定）**: 管理者経由型
+  - ヘルパー: village-tsubasa で未割当支援を一覧 → チェックを入れる
+  - 管理者: village-admin に通知が届く（画面バッジ + 1日1回サマリメール）
+  - 管理者: 利用者に電話 / LINE で確認 → OK ならヘルパーに連絡 → schedule.helper_email を確定
+- **第2段階（将来 / 自立型）**: ヘルパー → 利用者の直接マッチング、管理者は介在せず最終確定だけ承認
+- **優先順位**: 管理者の評価で決める（admin_users の評価値 or 別テーブル）
+
+### 設計の決定事項
+
+| 項目 | 決定 |
+|---|---|
+| データモデル | 新テーブル `schedule_claims`（schedule_id + helper_email + status + 優先順位スコア + 時刻）を追加。`schedule` 本体は不変 |
+| 管理者通知 | 画面バッジ（即時）+ 1日1回サマリメール |
+| ヘルパー候補定義 | パターン A のみ：`helper_email IS NULL AND name 空 AND client あり AND start_time あり` |
+
+### 実データ検証で判明した重要な事実
+
+#### GAS の Supabase 転送フィルタ — 確定情報
+
+`gas/village-schedule-sync/★supabase転送本体.gs:35-40` の `SKIP_BG_COLORS` は **グレー 4 色のみ**:
+
+```js
+const SKIP_BG_COLORS = {
+  '#434343': true,
+  '#666666': true,
+  '#999999': true,
+  '#b7b7b7': true
+};
+```
+
+| 色 | 意味 | Supabase 転送 |
+|---|---|---|
+| `#00ffff`（水色） | ヘルパー割当済 | ✅ 送る |
+| `#ffff00`（黄色） | **ヘルパー未割当（未定）** | ✅ **送る** ← 当初仮説に反する |
+| `#434343` `#666666` `#999999` `#b7b7b7`（グレー） | 「車対応のみ」など特殊行 | ❌ 送らない |
+
+→ **黄色（未定）行は Supabase に流れている**。ヘルパーアプリで `helper_email IS NULL` を SQL で取れば候補が拾える。当初の仮説（GAS が黄色を弾いている可能性）は誤りだった。
+
+#### `schedule` テーブルの helper_email IS NULL データ — 3 パターン
+
+実データのサンプリング結果、以下 3 パターンに分類できる:
+
+- **A. 純粋な未割当**: `client` あり / `name` 空 / `helper_email` null / 時刻あり
+  - 例: 稲葉晃作様 8:40-9:45（5/1）/ 石井翔真様 16:20-17:20（5/1）
+  - → **ヘルパーが手を挙げる候補に出す**
+- **B. 名前だけある（メール未登録ヘルパー）**: `client` あり / `name = "真望"` 等 / `helper_email` null / 時刻あり
+  - 例: 真望 / 稲山蓮九様 7:35-7:50
+  - → **候補に出さない**（既に決まっているが、当該ヘルパーのメールが Supabase に未登録なだけ）
+  - → 別途、奥原さんに「真望さんは何者か？メール登録すべきか？」要確認
+- **C. 特殊メモ・不完全行**: `client` 空 or 時刻 null
+  - 例: 「大田生活実習所　休み」（client に休みメモ）/ 若林慶様（時刻 null）
+  - → **候補に出さない**（運用上のメモ用途）
+
+#### 候補リスト用 SQL フィルタ（次回そのまま使う）
+
+```sql
+SELECT id, date, start_time, end_time, client, ...
+FROM schedule
+WHERE
+  helper_email IS NULL
+  AND deleted_at IS NULL
+  AND date >= CURRENT_DATE
+  AND (name IS NULL OR TRIM(name) = '')   -- パターン B 除外
+  AND client IS NOT NULL                  -- パターン C 除外
+  AND TRIM(client) <> ''
+  AND start_time IS NOT NULL              -- パターン C 除外
+ORDER BY date, start_time;
+```
+
+#### `schedule` テーブルの列名 — 注意
+
+`schedule` の列名は **`date` / `name` / `client`**（`service_date` ではない）。
+`service_date` は `schedule_tasks_move` テーブル側の列名。混同しやすいので
+`functions/src/scheduleEditor/create.ts:180-191` のカラムリストを参照。
+
+### 次回のステップ
+
+1. SQL #1 で `helper_email IS NULL AND date >= CURRENT_DATE` の規模感を確認
+2. パターン B の「真望」さんの正体を奥原さんに確認
+3. パターン C の運用見直しを奥原さんに確認
+4. `schedule_claims` テーブル DDL を SQL ファイルで提案 → 奥原さんレビュー → Supabase で実行
+5. ヘルパー側 API + UI を村つばさリポで実装
+6. 管理者側のバッジ + メール通知は **village-admin リポ** で別途実装
+
+### 影響範囲
+
+- **本日時点ではコード変更ゼロ、検証と設計検討のみ**
+- 本リポ / village-admin / user-schedule-app / GAS / Supabase / Firebase Functions、いずれにも変更なし
+- ヘルパーさん含む利用者・運営者影響ゼロ
 
 ---
 
@@ -52,27 +150,69 @@
   - `firebase deploy --only hosting`
 - Functions の deploy は **不要**（API 変更なし）
 
-## 🔔 次回チャットで Claude が奥原さんに確認すべきこと
+## 🔔 次回チャットで Claude が奥原さんに確認すべきこと（2026-04-29 朝 更新）
 
 > **新チャットの Claude へ**: 以下を作業冒頭で必ず聞いてください。
 > 奥原さんが「やる」と答えたら実施、「やらない」と答えたら該当項目を削除してください。
 
-### A1. Phase D1 / D2 の deploy・動作確認は済んだか？
-- D1（論理削除 + ゴミ箱 + 復元）は 2026-04-28 朝に deploy 済み・動作確認済み
-- **D2（新規追加）は本セッションの最後に commit + push、deploy はまだ**
-  - deploy 手順は下記「Phase D2」エントリ参照
-  - 動作確認チェックリストもそこにある
+### ✅ 4/28 の作業で完了したもの（参考・対応不要）
+- Phase D2（新規追加モーダル）deploy + 動作確認完了
+- GAS 全プロジェクトの git 同期監査完了（schedule-reverse-sync / village-schedule-sync の 2 standalone を git 化、伊藤さん管理の bound「無題のプロジェクト」は方針通り取り込まず）
+- `gas/transferServiceRecords.gs` 重複削除
+- `docs/RULES.md` Rule 4 に bound vs standalone 区別を加筆
+- `docs/gas/README.md` 全面改訂（3 GAS の関係性マップ）
 
-### A2. Phase E（コピペ・一括編集）に進むか？
-- これで CRUD は揃った。次の便利機能候補:
-  - 同一行を複数日に複製（クリップボード形式）
-  - 列フィルタの記憶・お気に入り
-  - 月またぎコピー
-- まだやらなくても十分実用レベルなので、現場で 1〜2 週間使ってみてから判断するのも可
+### 🚧 残タスク
 
-### A3. Phase D2 / D1 完成後の編集権限再付与
+#### A. schedule-editor 「🛟 強制リセット」ボタン deploy（commit `9e42991` 済、deploy 未確認）
+- スマホで詰まった時の救済策として実装済（commit/push 済）
+- deploy 手順: `cd ~/village-tsubasa && firebase deploy --only hosting`（Functions は無変更なので Hosting だけ）
+- 動作確認: ボタンが「🔄 再読み込み」の右隣に薄オレンジで表示 → クリック → 確認ダイアログ → OK → リロードされてログイン状態は保持
+
+#### B. 【新規プロジェクト】ヘルパーセルフマッチング — 検証 & 設計フェーズ
+
+**奥原さんの構想**:
+- 第1段階（管理者経由）: ヘルパーが「未割当の支援」を見て「入れます」をチェック → 管理者に通知 → 管理者が利用者に確認 → マッチしたらヘルパーに連絡（既存の運用フローをアプリ上に乗せる）
+- 第2段階（自立型 / 将来）: 管理者を介さずヘルパー → 利用者の直接マッチング、優先順位付きの推薦
+- 優先順位は **管理者の評価** で決める
+
+**4/28 夜に決まったこと**:
+- データモデル: 案2 採用（新テーブル `schedule_claims`、schedule_id + helper_email + status + 優先順位スコア + 時刻）
+- 管理者通知: 案推奨（village-admin の画面バッジ + 1日1回サマリメール）
+- 候補スケジュールの定義: パターン A のみ（後述）
+
+**4/28 夜に検証したこと**:
+- 仮説「黄色行（未割当）は GAS が Supabase に送らないかも」→ **誤り**。GAS の `SKIP_BG_COLORS` はグレー4種のみ。黄色は通常通り送られる
+- → ヘルパー候補リストは Supabase の `schedule` テーブルから直接取れる
+- 実データから 3 パターン発見:
+  - **A. 純粋な未割当**: client あり、name 空、helper_email null、時刻あり（候補に出す）
+  - **B. 名前だけある（メール未登録）**: client あり、name "真望" 等、helper_email null（候補に出さない、既割当扱い）
+  - **C. 特殊メモ・不完全行**: 「大田生活実習所　休み」、時刻 null 等（候補に出さない）
+
+**フィルタ条件（候補リスト用）**:
+```sql
+WHERE
+  helper_email IS NULL
+  AND deleted_at IS NULL
+  AND date >= CURRENT_DATE
+  AND (name IS NULL OR TRIM(name) = '')   -- パターン B 除外
+  AND client IS NOT NULL                  -- パターン C 除外
+  AND TRIM(client) <> ''
+  AND start_time IS NOT NULL
+```
+
+**次に進める順番**:
+1. 上記フィルタで未来の候補件数を確認（規模感）
+2. パターン B の「真望」さんは何者か奥原さんに確認（実在のヘルパー？フィクション？メール登録すべき？）
+3. パターン C の「休み」行などは個別 schedule に入れる運用を見直すか確認
+4. `schedule_claims` テーブルの DDL を提案 → Supabase で実行
+5. ヘルパー側 API + UI 実装（候補一覧 + 「入れます」ボタン）
+6. village-admin 側のバッジ + メール通知（村つばさリポではなく **village-admin リポ** での作業に切り替え）
+
+#### C. 編集権限を他 3 名に戻す（保留中）
 - 現状 `can_edit_schedule = true` は奥原さんのみ（Phase B 時にロックした）
-- Phase D1（最低限）動作確認 OK なら、他 3 名を戻す:
+- 奥原さんから「まだやらなくていい、時が来た時で」と保留中（4/28 夜）
+- スプレッドシートが固まった等で困った時に再開
   ```sql
   UPDATE admin_users
   SET can_edit_schedule = true
@@ -82,19 +222,13 @@
     'yutaka.ito1994@gmail.com'
   );
   ```
-- Phase D2（行追加）まで終わってからにするのも可。タイミングは奥原さん判断
 
-### B. GAS 全ファイルの git 同期チェック（リスク管理）
-- **`gas/` 配下の全 GAS ファイルが実 GAS 環境と一致しているか棚卸ししますか？**
-  - 背景: 2026-04-26 に `gas/transferServiceRecords.gs` が実環境と乖離していた問題（formatDate の全角カッコ対応漏れ）が判明。同種の乖離が他の GAS にもある可能性。これは 2026-04-19 の `main.js` 354行ロスト未遂と同パターン
-  - 対象 GAS（推定、CHANGELOG / SCHEMA より）:
-    - 「サービス記録転送」（今回修正済み）
-    - 「スケジュール逆同期」（`コード.gs` / `sheet_auto_create.gs`）
-    - 「【ビレッジつばさ】全体スケジュール」（`★supabase転送本体.gs`）
-  - やり方: 各 GAS の Apps Script からコードをエクスポート → git のファイルと diff → 差分があれば奥原さん側のコードを正として git 側を更新
-  - 推定所要時間: 1ファイル 10〜15分
+#### D. Phase E（コピペ・一括編集）— 保留中
+- 奥原さんから「2 は様子見てから進める」と保留（4/28 夜）
+- 候補機能: 同一行を複数日に複製 / 列フィルタの記憶 / 月またぎコピー
+- 現場で 1〜2 週間使ってから判断する方針
 
-### C. 電子契約（contracts）ルータの復活
+#### E. 電子契約（contracts）ルータの復活
 - **CloudSign の Client ID / Webhook Secret は取得できましたか？**
   - 背景: 2026-04-26 の Phase B デプロイ時、CloudSign secret 未設定で `firebase deploy` がインタラクティブ入力を要求してきたため、`functions/src/index.ts` の contracts ルータを一時コメントアウトした
   - 該当箇所: `import { contractsRouter } ...`（29行目付近）と `app.use("/contracts", ...)` `app.use("/api/contracts", ...)`（97行目付近）
