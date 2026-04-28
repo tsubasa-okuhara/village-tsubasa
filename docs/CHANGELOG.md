@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-28（schedule-editor Phase D2 + GAS「スケジュール逆同期」プロジェクトを git 管理に取り込み）
+最終更新: 2026-04-28（schedule-editor Phase D2 + GAS 「スケジュール逆同期」+「全体スケジュール」スタンドアロン版 取り込み完了）
 
 ---
 
@@ -69,6 +69,54 @@
     3. `index.ts` のコメントアウトを外す
     4. `npm run build && firebase deploy --only functions:api`
   - もし CloudSign 契約自体がまだなら、このタスクは見送り。ヘルパーさん影響なし（一度も deploy されていないため）
+
+---
+
+## 2026-04-28 [village-tsubasa] GAS「【ビレッジつばさ】全体スケジュール」スタンドアロン版を git に追加 + GAS 構成整理
+
+「全体スケジュール」スプレッドシートに関わる Apps Script は **3 種類** あることが
+今回の整理で判明:
+
+| 役割 | 名前 | 所有者 | git 取り込み |
+|---|---|---|---|
+| スプレッドシートにバインド | **無題のプロジェクト** | **伊藤さん** | ❌ 取り込まない（他者管理） |
+| 奥原のスタンドアロン #1 | **【ビレッジつばさ】全体スケジュール** | 奥原 | ✅ `village-schedule-sync/` |
+| 奥原のスタンドアロン #2 | **スケジュール逆同期** | 奥原 | ✅ `schedule-reverse-sync/` |
+
+### 今回の追加
+
+- `gas/village-schedule-sync/コード.gs`（実環境では空ファイル）
+- `gas/village-schedule-sync/appsscript.json`（既知の Web App 設定と同じパターン）
+- `gas/README.md` を全面改訂し、3 種類の Apps Script 関係性 + ファイル対応表を明示
+
+### 重要な方針
+
+- **「無題のプロジェクト」（伊藤さんがバインド script として運用）は git に取り込まない**
+  - 理由: 他者管理のものを git 化すると即古くなり「git にあるから安心」と誤認するリスク
+  - バックアップが必要かどうかは伊藤さんと別途相談する
+- **奥原のスタンドアロン 2 つは git で保管**（ロスト防止）
+
+### URL
+
+- 奥原 standalone「【ビレッジつばさ】全体スケジュール」:
+  `script.google.com/home/projects/11ogu_Oy_47o8Ox7lye1YVtz0ypfMKKOt0vpuN83JdHpYyIXM_08dasxT/edit`
+- 伊藤 bound「無題のプロジェクト」:
+  `script.google.com/u/0/home/projects/1JO5ftmtOJn9bdffXgRCVz21DvNkIU6KDRAJCDB_LVOBsRW8XNrjhA8ad/edit`
+
+### 残タスク（次回チャット）
+
+- `gas/transferServiceRecords.gs`（フラット配置）の扱い:
+  - 内容が `village-schedule-sync/★サービス記録内容転送.gs` とほぼ同一
+  - 「サービス記録転送」 GAS プロジェクトが独立して存在しているなら
+    `gas/service-record-transfer/` に移動
+  - 存在しない（= 統合済み）なら本ファイルを削除
+  - **次回 Apps Script ホーム画面のスクショで確認 → 判断**
+
+### 影響範囲
+- 本リポジトリ内のみ（git 保管追加だけ、本番 GAS 環境への変更なし）
+
+### 関連 commit
+- （commit 直前）
 
 ---
 
