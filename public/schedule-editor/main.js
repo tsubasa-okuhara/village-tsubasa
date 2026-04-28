@@ -61,6 +61,7 @@ const nextMonthBtn = el("next-month");
 const monthLabel = el("month-label");
 const quickFilterInput = el("quick-filter");
 const reloadButton = el("reload-button");
+const hardResetButton = el("hard-reset-button");
 const trashToggleBtn = el("trash-toggle");
 const createButton = el("create-button");
 const gridContainer = el("grid-container");
@@ -205,6 +206,35 @@ function logout() {
   mainScreen.hidden = true;
   authEmailInput.value = "";
   clearAuthError();
+}
+
+// 動かなくなった時の最後の手段: ブラウザキャッシュ・SW・sessionStorage を全消去して再読み込み
+async function hardReset() {
+  const ok = window.confirm(
+    "強制リセットを実行します。\n\n・ブラウザのキャッシュを全て削除\n・Service Worker を解除\n・ページを再読み込み\n\n（ログイン情報は残るので再入力は不要です）\n\nよろしいですか？"
+  );
+  if (!ok) return;
+
+  setStatus("リセット中...", "info");
+  try {
+    if (typeof caches !== "undefined" && caches && caches.keys) {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    }
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    try {
+      sessionStorage.clear();
+    } catch (e) {}
+  } catch (err) {
+    console.warn("hard reset cleanup failed:", err);
+  }
+  // URL に時刻を付けてキャッシュバスト → location.replace で履歴に残さない
+  const url = new URL(window.location.href);
+  url.searchParams.set("_t", String(Date.now()));
+  window.location.replace(url.pathname + url.search + url.hash);
 }
 
 // ─── データ取得 ─────────────────────────────────────────────
@@ -746,6 +776,8 @@ function bindEvents() {
   reloadButton.addEventListener("click", function () {
     refreshSchedule();
   });
+
+  hardResetButton.addEventListener("click", hardReset);
 
   trashToggleBtn.addEventListener("click", toggleTrashMode);
 

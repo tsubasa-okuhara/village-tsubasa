@@ -13,9 +13,44 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-28（GAS 全体マップ確定 + transferServiceRecords.gs 重複削除 + RULES 加筆 + スケジュール転送ボタン.gs 実環境照合済み）
+最終更新: 2026-04-28（GAS 全体マップ確定 + transferServiceRecords.gs 重複削除 + RULES 加筆 + スケジュール転送ボタン.gs 実環境照合済み + schedule-editor に「強制リセット」ボタン追加）
 
 ---
+
+## 2026-04-28 [village-tsubasa] schedule-editor に「🛟 強制リセット」ボタンを追加
+
+### 背景
+
+- スマホで schedule-editor を使用中にページが固まることがある
+- 通常の「🔄 再読み込み」は API 再取得のみで、ブラウザのキャッシュ／Service Worker が原因の場合は救済できない
+- 詰まった時の最後の手段として、PC で言う「キャッシュ削除とハード読み込み」相当の操作を 1 ボタンで実行できるようにする
+
+### 変更内容
+
+- `public/schedule-editor/index.html`: ツールバーに `#hard-reset-button` を追加（既存 `🔄 再読み込み` の右隣）
+- `public/schedule-editor/style.css`: `.hard-reset-btn`（薄オレンジ、警告色寄り）スタイルを追加
+- `public/schedule-editor/main.js`: `hardReset()` 関数を新設
+
+### `hardReset()` の動作
+
+1. 確認ダイアログ表示（誤クリック防止）
+2. `caches.keys()` で取得したすべての Cache Storage を `caches.delete()`
+3. `navigator.serviceWorker.getRegistrations()` で取得した SW を `unregister()`
+4. `sessionStorage.clear()`
+5. URL クエリに `_t=<timestamp>` を付けて `location.replace()` し、ブラウザキャッシュをバスト
+6. localStorage は触らない（メールアドレスを保持して再ログインの手間を省く）
+
+### 影響範囲
+
+- village-tsubasa の `/schedule-editor/` 画面のみ
+- バックエンド（Functions / Supabase）への変更なし
+- 他のヘルパー画面（`/`）には影響なし
+
+### deploy 不要
+
+- 静的ファイルのみの変更だが、Firebase Hosting への deploy が必要
+  - `firebase deploy --only hosting`
+- Functions の deploy は **不要**（API 変更なし）
 
 ## 🔔 次回チャットで Claude が奥原さんに確認すべきこと
 

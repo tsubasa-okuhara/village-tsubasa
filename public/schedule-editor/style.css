@@ -522,6 +522,21 @@ body {
   background: #c0a47b;
 }
 
+.hard-reset-btn {
+  padding: 8px 14px;
+  background: #fff3e0;
+  color: #b35c00;
+  border: 1px solid #e0a878;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.hard-reset-btn:hover {
+  background: #ffe6c8;
+}
+
 .toolbar__status {
   margin: 10px 0 0;
   font-size: 13px;
