@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-27（schedule-editor Phase C 完了 + Phase D 実装）
+最終更新: 2026-04-28（schedule-editor Phase C / D1 完了 + Phase D2 実装）
 
 ---
 
@@ -22,21 +22,20 @@
 > **新チャットの Claude へ**: 以下を作業冒頭で必ず聞いてください。
 > 奥原さんが「やる」と答えたら実施、「やらない」と答えたら該当項目を削除してください。
 
-### A1. Phase D1（論理削除 + ゴミ箱）の deploy・動作確認は済んだか？
-- **手順が下記「Phase D1」エントリの「deploy 手順」に書いてあるので、未 deploy なら一緒に進める**
-- SQL 適用 → コード deploy → 動作確認 → 何か問題あれば修正 → OK なら Phase A2 へ
-- ヘルパーアプリ側で削除済み予定が消えていることも確認
+### A1. Phase D1 / D2 の deploy・動作確認は済んだか？
+- D1（論理削除 + ゴミ箱 + 復元）は 2026-04-28 朝に deploy 済み・動作確認済み
+- **D2（新規追加）は本セッションの最後に commit + push、deploy はまだ**
+  - deploy 手順は下記「Phase D2」エントリ参照
+  - 動作確認チェックリストもそこにある
 
-### A2. Phase D2（行追加）の設計を詰める
-- 内容: 新規予定を schedule-editor から追加できるようにする
-- 要相談ポイント:
-  1. **`beneficiary_number`（受給者証番号）** はどう入れる？ 利用者ごとに毎回手入力？ 利用者マスタから自動補完？
-  2. **`source_key`（スプレッドシート同期キー）** は editor 追加行ではどうする？ null でよいか？ 自動生成すべきか？
-  3. **`helper_email`** は `helper_master` から自動補完で問題ないか？
-  4. ダイアログ UI で必須にする項目は？ 日付・利用者は必須でよいか？
-- 設計合意後 60〜90 分で実装可能
+### A2. Phase E（コピペ・一括編集）に進むか？
+- これで CRUD は揃った。次の便利機能候補:
+  - 同一行を複数日に複製（クリップボード形式）
+  - 列フィルタの記憶・お気に入り
+  - 月またぎコピー
+- まだやらなくても十分実用レベルなので、現場で 1〜2 週間使ってみてから判断するのも可
 
-### A3. Phase C 完成後の編集権限再付与
+### A3. Phase D2 / D1 完成後の編集権限再付与
 - 現状 `can_edit_schedule = true` は奥原さんのみ（Phase B 時にロックした）
 - Phase D1（最低限）動作確認 OK なら、他 3 名を戻す:
   ```sql
@@ -70,6 +69,96 @@
     3. `index.ts` のコメントアウトを外す
     4. `npm run build && firebase deploy --only functions:api`
   - もし CloudSign 契約自体がまだなら、このタスクは見送り。ヘルパーさん影響なし（一度も deploy されていないため）
+
+---
+
+## 2026-04-28 [village-tsubasa] schedule-editor Phase D2: 新規予定の追加（モーダル UI）
+
+Phase D1（削除・ゴミ箱・復元）の deploy・動作確認 OK 後に実装。
+これでスプレッドシートの代替として **CRUD すべて揃った**（Create / Read / Update / Delete）。
+
+### 仕様
+
+- ツールバーに「＋ 新規追加」ボタン
+- クリックでモーダルダイアログを表示
+- 入力項目（必須は日付・利用者）:
+  - 日付（`<input type="date">` で OS 標準のカレンダーピッカー）
+  - 利用者（必須・テキスト）
+  - ヘルパー（任意・テキスト）
+  - 開始時間 / 終了時間（任意・スマート時刻整形 `915` → `09:15`）
+  - 配車・内容・概要・受給者証番号（任意）
+- 「追加する」で API 呼び出し → 成功なら表示中の月に行を追加
+- ESC キーまたは背景クリックでキャンセル
+
+### 自動補完（バックエンド側）
+
+| カラム | 値 |
+|---|---|
+| `id` | Supabase が `gen_random_uuid()` で自動採番 |
+| `helper_email` | 入力された `name` で `helper_master` を検索、見つかれば自動セット |
+| `source_key` | `null`（editor 由来の行はスプレッドシート同期キー無し） |
+| `synced_to_sheet` | `false`（GAS 月次フラッシュで反映） |
+| `created_at` / `updated_at` | Supabase デフォルト |
+| `deleted_at` | `null` |
+
+### バリデーション
+
+- 日付: `YYYY-MM-DD` 形式 + 実在チェック
+- 利用者: 空白不可
+- 時刻: HH:MM 範囲チェック（共有ユーティリティ `normalize.ts` を update.ts と共通化）
+- 範囲外（25:00 など）は 400 エラー
+
+### 新規 / 変更ファイル
+
+| 種別 | パス | 内容 |
+|---|---|---|
+| 新規 | `functions/src/scheduleEditor/normalize.ts` | 時刻 / テキスト / 日付の正規化を集約 |
+| 新規 | `functions/src/scheduleEditor/create.ts` | INSERT + helper_email 自動補完 |
+| 変更 | `functions/src/scheduleEditor/update.ts` | normalize.ts を import、時刻整形ロジック削除（DRY） |
+| 変更 | `functions/src/index.ts` | `POST /api/schedule-editor/create` をマウント |
+| 変更 | `public/schedule-editor/index.html` | 「＋ 新規追加」ボタン + モーダル DOM |
+| 変更 | `public/schedule-editor/main.js` | モーダル開閉 / 送信 / ESC・背景クリック対応 |
+| 変更 | `public/schedule-editor/style.css` | モーダルスタイル + create-btn |
+
+### 想定運用フロー（CHANGELOG 既出のフローを再掲）
+
+1. 利用者が user-schedule-app で予定追加 → id 自動生成、`synced_to_sheet = false`
+2. GAS 月次フラッシュ → スプレッドシートに反映、`synced_to_sheet = true`
+3. 不備があれば管理者が schedule-editor で:
+   - 編集（Phase C） / 削除（Phase D1） / 新規追加（**Phase D2 ✅**）
+4. 編集・追加・削除した行は `synced_to_sheet = false` に戻る → 次の月次フラッシュで反映
+
+### deploy 手順（奥原さん）
+
+```bash
+cd ~/village-tsubasa
+git pull origin claude/setup-multi-app-dev-1y2PR
+cd functions && npm run build && cd ..
+firebase deploy --only functions:api,hosting
+```
+
+SQL の追加変更は無し（schedule_web_v は Phase D1 で更新済み、INSERT は schedule
+テーブル直接なので view 不要）。
+
+### 動作確認チェックリスト
+
+- 「＋ 新規追加」ボタンを押すとモーダルが開く
+- 日付に表示中月の 1 日が初期セットされる
+- 利用者を空のまま「追加する」→「利用者は必須です」エラー
+- 時刻 `915` → `09:15` で保存される
+- 追加成功 → 表示中月のグリッドに行が出る + 緑「追加しました」
+- 別月の日付で追加 → 緑表示は出るが現在のグリッドには出ない（その月に切り替えれば見える）
+- ESC キー / 背景クリックでモーダルが閉じる
+- ヘルパー名を `helper_master` に存在する名前にすると `helper_email` が自動入る
+- ヘルパーアプリ（today-schedule 等）でも追加した予定が正しく表示される
+
+### 影響範囲
+
+- `schedule` テーブルへの INSERT が editor からも行われるようになる（user-schedule-app と GAS に並ぶ第3の経路）
+- `synced_to_sheet = false` でスプレッドシート月次フラッシュ対象に乗る
+
+### 関連 commit
+- （Phase D2 完成 commit、本記載時点で push 直前）
 
 ---
 

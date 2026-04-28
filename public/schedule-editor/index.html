@@ -73,6 +73,9 @@
               class="quick-filter"
             />
           </div>
+          <button type="button" id="create-button" class="create-btn">
+            ＋ 新規追加
+          </button>
           <button type="button" id="trash-toggle" class="trash-toggle-btn">
             🗑 ゴミ箱を表示
           </button>
@@ -94,6 +97,71 @@
         </p>
       </footer>
     </section>
+
+    <!-- 新規追加モーダル -->
+    <div id="create-modal" class="modal-overlay" hidden>
+      <div class="modal-card" role="dialog" aria-labelledby="create-modal-title">
+        <header class="modal-header">
+          <h2 id="create-modal-title">新規予定の追加</h2>
+          <button type="button" id="create-cancel-x" class="modal-close" aria-label="閉じる">×</button>
+        </header>
+
+        <form id="create-form" class="modal-form" novalidate>
+          <div class="modal-row">
+            <label for="create-date">日付 <span class="required">*</span></label>
+            <input type="date" id="create-date" required />
+          </div>
+
+          <div class="modal-row">
+            <label for="create-client">利用者 <span class="required">*</span></label>
+            <input type="text" id="create-client" required placeholder="例: 山田太郎様" />
+          </div>
+
+          <div class="modal-row">
+            <label for="create-helper">ヘルパー</label>
+            <input type="text" id="create-helper" placeholder="例: 池田" />
+          </div>
+
+          <div class="modal-row modal-row--two">
+            <div>
+              <label for="create-start">開始</label>
+              <input type="text" id="create-start" placeholder="例: 915 → 09:15" />
+            </div>
+            <div>
+              <label for="create-end">終了</label>
+              <input type="text" id="create-end" placeholder="例: 1030 → 10:30" />
+            </div>
+          </div>
+
+          <div class="modal-row">
+            <label for="create-haisha">配車</label>
+            <input type="text" id="create-haisha" placeholder="例: スバル / プリウスで〜" />
+          </div>
+
+          <div class="modal-row">
+            <label for="create-task">内容</label>
+            <input type="text" id="create-task" placeholder="例: 移動 / 身体 / 通院" />
+          </div>
+
+          <div class="modal-row">
+            <label for="create-summary">概要</label>
+            <textarea id="create-summary" rows="2" placeholder="例: 自宅→かたつむり"></textarea>
+          </div>
+
+          <div class="modal-row">
+            <label for="create-beneficiary">受給者証番号</label>
+            <input type="text" id="create-beneficiary" placeholder="任意" />
+          </div>
+
+          <p id="create-error" class="modal-error" hidden></p>
+
+          <footer class="modal-footer">
+            <button type="button" id="create-cancel" class="modal-btn modal-btn--cancel">キャンセル</button>
+            <button type="submit" id="create-submit" class="modal-btn modal-btn--primary">追加する</button>
+          </footer>
+        </form>
+      </div>
+    </div>
 
     <script src="main.js"></script>
   </body>

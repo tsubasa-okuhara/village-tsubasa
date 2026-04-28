@@ -273,6 +273,21 @@ body {
   font-weight: 500;
 }
 
+.create-btn {
+  padding: 8px 14px;
+  background: var(--brown);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.create-btn:hover {
+  background: var(--brown-strong);
+}
+
 .trash-toggle-btn {
   padding: 8px 14px;
   background: #fff;
@@ -342,6 +357,165 @@ body {
 
 .action-btn.action-btn--restore:hover {
   background: #e7f5ec;
+}
+
+/* ─── 新規追加モーダル ─── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 30, 25, 0.42);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 60px 16px 16px;
+  z-index: 1000;
+}
+
+.modal-card {
+  background: var(--panel-strong);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: var(--shadow);
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text);
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  background: var(--beige);
+  color: var(--text);
+}
+
+.modal-form {
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-row label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.modal-row .required {
+  color: var(--error);
+  margin-left: 2px;
+}
+
+.modal-row input[type="text"],
+.modal-row input[type="date"],
+.modal-row textarea {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.modal-row input:focus,
+.modal-row textarea:focus {
+  outline: none;
+  border-color: var(--brown);
+  box-shadow: 0 0 0 3px rgba(138, 111, 85, 0.15);
+}
+
+.modal-row--two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.modal-row--two > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-error {
+  margin: 0;
+  padding: 10px 12px;
+  background: #fbe9e7;
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.modal-btn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.modal-btn--cancel {
+  background: #fff;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.modal-btn--cancel:hover {
+  background: var(--beige);
+}
+
+.modal-btn--primary {
+  background: var(--brown);
+  color: #fff;
+}
+
+.modal-btn--primary:hover {
+  background: var(--brown-strong);
+}
+
+.modal-btn--primary:disabled {
+  background: #c5b8aa;
+  cursor: wait;
 }
 
 .reload-btn:hover {

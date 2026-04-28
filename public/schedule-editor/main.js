@@ -22,6 +22,7 @@ const UPDATE_ENDPOINT = "/api/schedule-editor/update";
 const DELETE_ENDPOINT = "/api/schedule-editor/delete";
 const RESTORE_ENDPOINT = "/api/schedule-editor/restore";
 const TRASH_ENDPOINT = "/api/schedule-editor/trash";
+const CREATE_ENDPOINT = "/api/schedule-editor/create";
 const STORAGE_KEY = "schedule-editor.email";
 
 const VIEW_MODE_NORMAL = "normal";
@@ -61,8 +62,26 @@ const monthLabel = el("month-label");
 const quickFilterInput = el("quick-filter");
 const reloadButton = el("reload-button");
 const trashToggleBtn = el("trash-toggle");
+const createButton = el("create-button");
 const gridContainer = el("grid-container");
 const statusLine = el("status-line");
+
+// モーダル要素
+const createModal = el("create-modal");
+const createForm = el("create-form");
+const createDateInput = el("create-date");
+const createClientInput = el("create-client");
+const createHelperInput = el("create-helper");
+const createStartInput = el("create-start");
+const createEndInput = el("create-end");
+const createHaishaInput = el("create-haisha");
+const createTaskInput = el("create-task");
+const createSummaryInput = el("create-summary");
+const createBeneficiaryInput = el("create-beneficiary");
+const createErrorEl = el("create-error");
+const createSubmitBtn = el("create-submit");
+const createCancelBtn = el("create-cancel");
+const createCancelXBtn = el("create-cancel-x");
 
 // ─── ユーティリティ ─────────────────────────────────────────
 
@@ -423,6 +442,111 @@ function formatRowForConfirm(row) {
   return `${date}  ${time}\n${helper} → ${user}\n${row.task || ""} / ${row.summary || ""}`;
 }
 
+// ─── 新規追加モーダル ──────────────────────────────────────
+
+function openCreateModal() {
+  // ゴミ箱モード中は無効
+  if (state.viewMode === VIEW_MODE_TRASH) return;
+
+  // 入力をクリア
+  createForm.reset();
+  createErrorEl.textContent = "";
+  createErrorEl.hidden = true;
+
+  // 日付の初期値: 今表示している月の 1 日（操作中の月に追加することが多い想定）
+  const ymStr = `${state.currentYear}-${String(state.currentMonth).padStart(2, "0")}-01`;
+  createDateInput.value = ymStr;
+
+  createModal.hidden = false;
+  setTimeout(function () {
+    createDateInput.focus();
+  }, 50);
+}
+
+function closeCreateModal() {
+  createModal.hidden = true;
+}
+
+function showCreateError(message) {
+  createErrorEl.textContent = message;
+  createErrorEl.hidden = false;
+}
+
+async function submitCreate(event) {
+  event.preventDefault();
+  createErrorEl.hidden = true;
+
+  const date = createDateInput.value.trim();
+  const client = createClientInput.value.trim();
+
+  if (!date) {
+    showCreateError("日付は必須です");
+    return;
+  }
+  if (!client) {
+    showCreateError("利用者は必須です");
+    return;
+  }
+
+  const payload = {
+    email: state.email,
+    date,
+    client,
+    name: createHelperInput.value.trim() || null,
+    startTime: createStartInput.value.trim() || null,
+    endTime: createEndInput.value.trim() || null,
+    haisha: createHaishaInput.value.trim() || null,
+    task: createTaskInput.value.trim() || null,
+    summary: createSummaryInput.value.trim() || null,
+    beneficiaryNumber: createBeneficiaryInput.value.trim() || null,
+  };
+
+  createSubmitBtn.disabled = true;
+  createSubmitBtn.textContent = "追加中…";
+  setStatus("追加中…", "saving");
+
+  try {
+    const res = await fetch(CREATE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => null);
+    if (!json) throw new Error("不正なレスポンス");
+
+    if (json.ok) {
+      // 表示中の月と一致すれば AG Grid に追加
+      const itemMonth = (json.item.date || "").slice(0, 7); // "YYYY-MM"
+      const currentYm = `${state.currentYear}-${String(state.currentMonth).padStart(2, "0")}`;
+      if (itemMonth === currentYm && gridApi && state.viewMode === VIEW_MODE_NORMAL) {
+        gridApi.applyTransaction({ add: [json.item] });
+        state.rawItems.push(json.item);
+      }
+      setStatus("追加しました", "success");
+      closeCreateModal();
+      setTimeout(function () {
+        if (statusLine.classList.contains("is-success")) {
+          if (state.viewMode === VIEW_MODE_NORMAL) {
+            setStatus(
+              `${state.currentYear}年${state.currentMonth}月: ${state.rawItems.length}件`,
+            );
+          }
+        }
+      }, 1500);
+    } else {
+      showCreateError(json.message || "追加に失敗しました");
+      setStatus("追加に失敗しました", "error");
+    }
+  } catch (err) {
+    console.error("[scheduleEditor] create error:", err);
+    showCreateError("通信エラー: 追加できませんでした");
+    setStatus("通信エラー", "error");
+  } finally {
+    createSubmitBtn.disabled = false;
+    createSubmitBtn.textContent = "追加する";
+  }
+}
+
 // ─── ゴミ箱モード切替 ───────────────────────────────────────
 
 function toggleTrashMode() {
@@ -624,6 +748,23 @@ function bindEvents() {
   });
 
   trashToggleBtn.addEventListener("click", toggleTrashMode);
+
+  createButton.addEventListener("click", openCreateModal);
+  createCancelBtn.addEventListener("click", closeCreateModal);
+  createCancelXBtn.addEventListener("click", closeCreateModal);
+  createForm.addEventListener("submit", submitCreate);
+
+  // 背景クリックで閉じる
+  createModal.addEventListener("click", function (event) {
+    if (event.target === createModal) closeCreateModal();
+  });
+
+  // ESC で閉じる
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !createModal.hidden) {
+      closeCreateModal();
+    }
+  });
 
   quickFilterInput.addEventListener("input", function (event) {
     if (gridApi) {

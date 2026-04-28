@@ -69,6 +69,7 @@ import {
 
 import { handleScheduleEditorAuth } from "./scheduleEditor/auth";
 import { handleScheduleEditorUpdate } from "./scheduleEditor/update";
+import { handleScheduleEditorCreate } from "./scheduleEditor/create";
 import { handleScheduleEditorDelete } from "./scheduleEditor/delete";
 import { handleScheduleEditorRestore } from "./scheduleEditor/restore";
 import { handleScheduleEditorListTrash } from "./scheduleEditor/listTrash";
@@ -197,13 +198,17 @@ app.get("/api/schedule-editor/auth", handleScheduleEditorAuth);
 app.post("/schedule-editor/update", handleScheduleEditorUpdate);
 app.post("/api/schedule-editor/update", handleScheduleEditorUpdate);
 
-// スケジュール編集（Phase D）: 論理削除 / 復元 / ゴミ箱一覧
+// スケジュール編集（Phase D1）: 論理削除 / 復元 / ゴミ箱一覧
 app.post("/schedule-editor/delete", handleScheduleEditorDelete);
 app.post("/api/schedule-editor/delete", handleScheduleEditorDelete);
 app.post("/schedule-editor/restore", handleScheduleEditorRestore);
 app.post("/api/schedule-editor/restore", handleScheduleEditorRestore);
 app.get("/schedule-editor/trash", handleScheduleEditorListTrash);
 app.get("/api/schedule-editor/trash", handleScheduleEditorListTrash);
+
+// スケジュール編集（Phase D2）: 行追加
+app.post("/schedule-editor/create", handleScheduleEditorCreate);
+app.post("/api/schedule-editor/create", handleScheduleEditorCreate);
 
 // 毎朝7時（JST）に今日の予定を通知
 export const notifyTodaySchedule = onSchedule(

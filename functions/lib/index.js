@@ -34,6 +34,7 @@ const push_1 = require("./push");
 const calmCheck_1 = require("./calmCheck");
 const auth_1 = require("./scheduleEditor/auth");
 const update_1 = require("./scheduleEditor/update");
+const create_1 = require("./scheduleEditor/create");
 const delete_1 = require("./scheduleEditor/delete");
 const restore_1 = require("./scheduleEditor/restore");
 const listTrash_1 = require("./scheduleEditor/listTrash");
@@ -135,13 +136,16 @@ app.get("/api/schedule-editor/auth", auth_1.handleScheduleEditorAuth);
 // スケジュール編集（Phase C）: セル編集 + 楽観ロック保存
 app.post("/schedule-editor/update", update_1.handleScheduleEditorUpdate);
 app.post("/api/schedule-editor/update", update_1.handleScheduleEditorUpdate);
-// スケジュール編集（Phase D）: 論理削除 / 復元 / ゴミ箱一覧
+// スケジュール編集（Phase D1）: 論理削除 / 復元 / ゴミ箱一覧
 app.post("/schedule-editor/delete", delete_1.handleScheduleEditorDelete);
 app.post("/api/schedule-editor/delete", delete_1.handleScheduleEditorDelete);
 app.post("/schedule-editor/restore", restore_1.handleScheduleEditorRestore);
 app.post("/api/schedule-editor/restore", restore_1.handleScheduleEditorRestore);
 app.get("/schedule-editor/trash", listTrash_1.handleScheduleEditorListTrash);
 app.get("/api/schedule-editor/trash", listTrash_1.handleScheduleEditorListTrash);
+// スケジュール編集（Phase D2）: 行追加
+app.post("/schedule-editor/create", create_1.handleScheduleEditorCreate);
+app.post("/api/schedule-editor/create", create_1.handleScheduleEditorCreate);
 // 毎朝7時（JST）に今日の予定を通知
 exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
     schedule: "0 7 * * *", // JST 07:00
