@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-28（schedule-editor Phase C / D1 完了 + Phase D2 実装）
+最終更新: 2026-04-28（schedule-editor Phase D2 + GAS「スケジュール逆同期」プロジェクトを git 管理に取り込み）
 
 ---
 
@@ -69,6 +69,55 @@
     3. `index.ts` のコメントアウトを外す
     4. `npm run build && firebase deploy --only functions:api`
   - もし CloudSign 契約自体がまだなら、このタスクは見送り。ヘルパーさん影響なし（一度も deploy されていないため）
+
+---
+
+## 2026-04-28 [village-tsubasa] GAS「スケジュール逆同期」プロジェクトを git 管理に取り込み
+
+GAS 全ファイル git 同期チェックの一環。これまで Apps Script 環境にしか
+存在しなかった「スケジュール逆同期」プロジェクトのソースを git に登録した。
+**ロジック変更ではなくソースの保管のみ**（Rule 4 の事前共有は不要）。
+
+### 背景
+
+- 2026-04-26 の `transferServiceRecords.gs` 修正時に、`gas/` ディレクトリには
+  そのファイルしか入っていないこと（他に「スケジュール逆同期」「全体スケジュール」
+  の 2 プロジェクトが本番でだけ動いていること）が発覚
+- 同種の git 未追跡パターンは過去 3 回（2026-04-19 main.js / 2026-04-26
+  transferServiceRecords / 2026-04-26 feedback.ts）発生しており、ロスト
+  リスクが高い
+
+### 取り込んだファイル（5 個 / `gas/schedule-reverse-sync/`）
+
+| ファイル | 役割 |
+|---|---|
+| `appsscript.json` | マニフェスト（webapp = ANYONE_ANONYMOUS） |
+| `コード.gs` | doPost / doGet エンドポイント、`handleAdd` / `handleEdit` / `handleDelete` |
+| `records_export.gs` | 居宅介護・移動支援の実績記録票生成（テンプレートに流し込み） |
+| `sheet_auto_create.gs` | 月次自動化（毎月15日 00:05）+ `flushScheduleToSheet_` で Supabase → シート流し込み |
+| `月間スケジュール作成.gs` | 週シート 6 枚生成 + 日本祝日判定（`getJapaneseHolidays_`） |
+
+### 同時整備
+
+- `gas/README.md` を新設し、3 プロジェクトの位置付け / ファイル対応表 /
+  スクリプトプロパティ仕様 / Web App デプロイ設定 / 月次トリガーの設置方法 /
+  Apps Script ⇄ git の同期ワークフロー を記載
+- 将来的には clasp 導入で自動 diff 可能（README に明記）
+
+### 残作業
+
+- **「【ビレッジつばさ】全体スケジュール」プロジェクト**（`★supabase転送本体.gs`）
+  はまだ取り込めていない。次セッションで取り込み予定
+- **「サービス記録転送」プロジェクト**（既存の `gas/transferServiceRecords.gs`）
+  も他にファイルがあるか確認が必要
+
+### 影響範囲
+
+- 本リポジトリ内のみ（git 管理に追加しただけで、本番 GAS 環境への影響なし）
+- 既に動いているスクリプトを変更したわけではない
+
+### 関連 commit
+- （commit 直前）
 
 ---
 
