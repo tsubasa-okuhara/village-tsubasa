@@ -13,7 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-28（schedule-editor Phase D2 + GAS 「スケジュール逆同期」+「全体スケジュール」スタンドアロン版 取り込み完了）
+最終更新: 2026-04-28（GAS 全体マップ確定 + transferServiceRecords.gs 重複削除 + RULES 加筆）
 
 ---
 
@@ -69,6 +69,42 @@
     3. `index.ts` のコメントアウトを外す
     4. `npm run build && firebase deploy --only functions:api`
   - もし CloudSign 契約自体がまだなら、このタスクは見送り。ヘルパーさん影響なし（一度も deploy されていないため）
+
+---
+
+## 2026-04-28 [village-tsubasa] gas/transferServiceRecords.gs 削除 + RULES.md 加筆
+
+### 削除: `gas/transferServiceRecords.gs`
+
+- 2026-04-26 に commit したファイルだが、内容は
+  `gas/village-schedule-sync/★サービス記録内容転送.gs`（奥原 standalone
+  「【ビレッジつばさ】全体スケジュール」内）と機能重複していた
+- 「サービス記録転送」という独立した GAS プロジェクトは **存在しない** ことが確認できた
+  （シート名であり、関数 `transferServiceRecords()` は standalone 内に存在）
+- 重複ファイルを残すと:
+  - 次の人が「git にあるから安心」と勘違いするリスク
+  - 古い形式（`runCheckFromButton` 公開、`onOpen` メニュー）を真似してしまうリスク
+- → 安全側で削除
+
+### `docs/RULES.md` Rule 4 を加筆
+
+GAS の取扱について、以下の区別を明文化:
+
+- **奥原管理（git で保管・触ってOK）**:
+  - 「スケジュール逆同期」 standalone
+  - 「【ビレッジつばさ】全体スケジュール」 standalone
+- **伊藤さん管理（触らない・git に取り込まない）**:
+  - 「全体スケジュール」スプレッドシートにバインドされた **「無題のプロジェクト」**
+- 全体マップは `gas/README.md` 参照
+
+これで次のチャットの Claude も、bound vs standalone の区別 / 他者管理範囲を
+理解した上で作業できる。
+
+### 影響範囲
+
+- 本リポジトリ内のみ
+- 本番 GAS / Firebase / Supabase いずれにも変更なし
+- ヘルパーさんの閲覧・操作に影響ゼロ
 
 ---
 

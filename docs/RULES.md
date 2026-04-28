@@ -61,7 +61,10 @@
 - `SUPABASE_SCHEMA.md` の **⚠️ / ✅ 付きテーブル** に対する INSERT/UPDATE の挙動を変える
 - 特に **`service_notes_move.sent_at`** / **`service_notes_home.final_note`・`memo`** / **`training_reports` の既存列** / **`schedule` テーブル** — これらは明確に複数アプリが触る
 - `schedule_web_v` ビューの列構成を変える
-- GAS（「スケジュール逆同期」「全体スケジュール」）のロジックを変える
+- GAS のロジックを変える:
+  - **奥原管理（git で保管・触ってOK）**: 「スケジュール逆同期」 / 「【ビレッジつばさ】全体スケジュール」standalone
+  - **伊藤さん管理（触らない）**: 「全体スケジュール」スプレッドシートにバインドされた **「無題のプロジェクト」**（git にも取り込まない）
+  - 全体マップは `gas/README.md` 参照
 - Firebase Functions の Scheduler ジョブ（`notifyTodaySchedule` / `notifyTomorrowSchedule`）を変える
 
 チャットの場合は **AskUserQuestion** で奥原さんに選択肢を出して確認。
