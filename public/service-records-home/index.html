@@ -295,6 +295,54 @@
         margin-top: 2px;
       }
 
+      .nested-checklist__amount-group {
+        display: none;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 10px 12px;
+        border: 1px dashed #efe3d8;
+        border-radius: 10px;
+        background: #fffaf6;
+      }
+
+      .nested-checklist__amount-group.is-visible {
+        display: grid;
+      }
+
+      .nested-checklist__amount-label {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: var(--muted);
+      }
+
+      .nested-checklist__amount-options {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .nested-checklist__amount-option {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid #efe3d8;
+        border-radius: 10px;
+        background: #fff;
+        cursor: pointer;
+      }
+
+      .nested-checklist__amount-option input {
+        width: auto;
+        margin: 0;
+      }
+
+      .nested-checklist__amount-option input:checked + span {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
       .is-hidden {
         display: none;
       }
@@ -364,6 +412,10 @@
         .segmented-control,
         .checkbox-grid {
           grid-template-columns: 1fr;
+        }
+
+        .nested-checklist__amount-options {
+          grid-template-columns: 1fr 1fr;
         }
       }
     </style>
