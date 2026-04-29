@@ -4,10 +4,22 @@
 // 目的: ⚪︎×シート (1djiBf7s_JKgkp1Df1K40rCoqyewFBdfBaUnMtGKZLw)
 //       の内容を Supabase の user_helper_compatibility テーブルに UPSERT する。
 //
-// 実行手順:
+// 実行手順 (初回):
 //   1. migrateCompatibilityDryRun() を実行 → ログでミスマッチを確認
 //   2. ミスマッチがあれば helper_master を整備 (姓だけに統一など)
-//   3. migrateCompatibilityApply() を実行 → 本番適用
+//   3. migrateCompatibilityApply() を実行 → 本番初回 UPSERT
+//
+// 実行手順 (週次自動同期 セットアップ):
+//   4. installWeeklyCompatibilityTrigger() を 1 回だけ実行
+//      → 毎週月曜 03:00 JST に migrateCompatibilityWeekly() が自動実行される
+//   5. 停止したい場合: uninstallWeeklyCompatibilityTrigger()
+//
+// 関数一覧:
+//   migrateCompatibilityDryRun()              — 解析のみ、書き込みなし
+//   migrateCompatibilityApply()               — 厳格モード (未登録ヘルパーで abort)
+//   migrateCompatibilityWeekly()              — 週次トリガー用 (lenient 続行)
+//   installWeeklyCompatibilityTrigger()       — 週次トリガー設定 (1 回実行)
+//   uninstallWeeklyCompatibilityTrigger()     — 週次トリガー削除
 //
 // シート構造 (奥原確認済み):
 //   行 1: 更新チェック (バックグラウンド系列, 無視)
@@ -43,9 +55,59 @@ function migrateCompatibilityApply() {
   return runCompatibilityMigration_(false);
 }
 
+// 週次トリガー用: 未マッチがあっても abort せず、known ヘルパー分だけ sync する
+// （新ヘルパー列が追加された日から helper_master 整備完了までも止まらない）
+function migrateCompatibilityWeekly() {
+  Logger.log('==== 週次自動同期 開始 ====');
+  return runCompatibilityMigration_(false, true /* lenient */);
+}
+
+// 週次トリガー（毎週月曜 3:00 JST）を設定する。1 回だけ実行すれば OK
+function installWeeklyCompatibilityTrigger() {
+  // 既存トリガーを掃除（重複防止）
+  let removed = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (
+      t.getHandlerFunction() === 'migrateCompatibilityWeekly' ||
+      t.getHandlerFunction() === 'migrateCompatibilityApply'
+    ) {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+  if (removed > 0) {
+    Logger.log('既存の対応可否同期トリガー %s 個を削除しました', removed);
+  }
+
+  // 毎週月曜 3:00 JST に migrateCompatibilityWeekly を実行
+  ScriptApp.newTrigger('migrateCompatibilityWeekly')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(3)
+    .inTimezone('Asia/Tokyo')
+    .create();
+
+  Logger.log('✅ 週次トリガー設定完了: 毎週月曜 03:00 JST に migrateCompatibilityWeekly を実行');
+}
+
+// 必要なら週次トリガーを停止
+function uninstallWeeklyCompatibilityTrigger() {
+  let removed = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (
+      t.getHandlerFunction() === 'migrateCompatibilityWeekly' ||
+      t.getHandlerFunction() === 'migrateCompatibilityApply'
+    ) {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+  Logger.log('週次トリガー %s 個を削除しました', removed);
+}
+
 // ===== Core =====
 
-function runCompatibilityMigration_(dryRun) {
+function runCompatibilityMigration_(dryRun, lenient) {
   const ctx = setupSupabaseContext_();
   const sheet = openCompatibilitySheet_();
   const matrix = readCompatibilityMatrix_(sheet);
@@ -60,10 +122,16 @@ function runCompatibilityMigration_(dryRun) {
   }
 
   if (result.unknownHelpers.length > 0) {
-    Logger.log('❌ ABORT: %s 名のヘルパー列が helper_master に未登録のため、apply を中断しました。', result.unknownHelpers.length);
-    Logger.log('未登録ヘルパー: %s', JSON.stringify(result.unknownHelpers));
-    Logger.log('対処: helper_master に登録するか、シートのヘルパー列を helper_master と一致する名前に揃えてから再実行してください。');
-    throw new Error('Aborting due to unknown helpers in spreadsheet');
+    if (lenient) {
+      Logger.log('⚠️ %s 名のヘルパー列が helper_master 未登録ですが、lenient モードのため known ヘルパー分だけ続行します。',
+        result.unknownHelpers.length);
+      Logger.log('未登録ヘルパー（要対処）: %s', JSON.stringify(result.unknownHelpers));
+    } else {
+      Logger.log('❌ ABORT: %s 名のヘルパー列が helper_master に未登録のため、apply を中断しました。', result.unknownHelpers.length);
+      Logger.log('未登録ヘルパー: %s', JSON.stringify(result.unknownHelpers));
+      Logger.log('対処: helper_master に登録するか、シートのヘルパー列を helper_master と一致する名前に揃えてから再実行してください。');
+      throw new Error('Aborting due to unknown helpers in spreadsheet');
+    }
   }
 
   if (result.unknownStatusCells.length > 0) {
