@@ -183,6 +183,74 @@ bash ~/village-tsubasa/scripts/repo-health-check.sh
 - 実行フェーズに入ったものは `CURRENT_STATE.md` や別の正式なロードマップに昇格
 - 実行しないと決めたものは **🗄️ 却下アーカイブ** セクションに移動（判断理由付き）
 
+## ルール11. Hosting メニューの「Page Not Found」修正フロー
+
+ヘルパー向けホーム（`https://village-tsubasa.web.app/`）の業務メニューカードをタップして "Page Not Found" になる事象が報告されたら、**必ず以下の手順で対応**する。途中の確認ステップを飛ばさない。
+
+### Step 1. 原因の網羅的な特定（報告されたメニュー以外も全部確認）
+
+```bash
+grep -n 'href="/' public/index.html | grep -v '^[[:space:]]*<!--'
+ls -d public/*/
+```
+
+`public/index.html` のすべての内部リンク（`href="/xxx/"`）に対応するフォルダが `public/` 配下にあるか照合。**報告されたメニュー以外も全部確認して、まとめて報告する**（過去事例: `/expense/` の修正中に `/feedback/` も同じ症状だった）。
+
+### Step 2. 実体（遷移先）の特定
+
+- リポジトリ内の別ディレクトリにある → 公開ディレクトリにコピー
+- Streamlit Cloud / GitHub Pages 等の**外部 URL** にホストされている → `docs/CHANGELOG.md` 内で URL を grep（過去の追加履歴に記録があるはず）
+- それでも不明 → 奥原さんに `AskUserQuestion` で確認
+
+### Step 3. 修正方針を選択
+
+| 案 | 内容 | 推奨ケース |
+|---|---|---|
+| A: ホーム側リンクを外部 URL に張り替え | `public/index.html` のリンクを直接書き換え | 命名規則の統一を諦めて良い場合 |
+| **B: ローカルにリダイレクトページを置く** | `public/xxx/index.html` を作って外部 URL へ転送 | **既存メニューが `/xxx/` 形式で統一されている場合（こちらが原則）** |
+
+### Step 4. リダイレクトページ実装（案 B のテンプレ）
+
+実装の手本: [public/expense/index.html](public/expense/index.html)（2026-04-30 追加）。最低限の構成:
+
+- `<meta http-equiv="refresh" content="0; url=<EXTERNAL_URL>" />` で即遷移
+- `<script>window.location.replace("<EXTERNAL_URL>")</script>` で二重に保険
+- 中央寄せ + ローディングスピナー + 「<機能名>ページに移動しています…」テキスト
+- 自動遷移しなかった場合のフォールバックリンクを必ず入れる（スマホで真っ白防止）
+
+### Step 5. デプロイ（必ず preview → 動作確認 → 本番の順）
+
+```bash
+# 1. preview channel デプロイ
+firebase hosting:channel:deploy preview-<機能名>-redirect --only village-tsubasa --expires 7d
+
+# 2. 出力された preview URL（https://village-tsubasa--preview-...web.app/<機能名>/）を
+#    奥原さんに渡して、実機で動作確認してもらう
+
+# 3. 「OK 本番に進めて」の明示的な確認を得てから本番反映
+firebase deploy --only hosting:village-tsubasa
+```
+
+**禁止**: preview を飛ばしていきなり本番デプロイ。本番影響のある操作は必ず明示的な確認を取る。
+
+### Step 6. service-worker のキャッシュ対応
+
+現在の `public/service-worker.js` は **precache を持たない passive worker** なので、リダイレクトページ単独追加なら `?v=YYYYMMDD` 付与は不要。ただし以下の場合は必要:
+
+- SW が precache 保持型に改修された後
+- 既存の `public/index.html` 等、キャッシュ対象になっている可能性のあるファイルを書き換えた場合
+
+その場合は `<link>` / `<script>` の URL に `?v=YYYYMMDD` を付けて差し替える。
+
+### Step 7. 記録 & 反映
+
+1. `docs/CHANGELOG.md` にエントリ追記（ルール5）
+2. commit + push
+   ```
+   fix(hosting): /<機能名>/ リダイレクトページ追加で <機能名>メニューの 404 を修正
+   ```
+3. main にマージ。必要なら並行作業ブランチに cherry-pick で取り込む
+
 ---
 
 ## 疑問が出たら
@@ -198,3 +266,4 @@ bash ~/village-tsubasa/scripts/repo-health-check.sh
 - **2026-04-18** 初版作成（奥原翼）
 - **2026-04-21** ルール9「週次のリポジトリ健康診断」を追加（奥原翼 + Claude Opus）。`scripts/repo-health-check.sh` を併設。背景: 4/19 の `main.js` 354行ロスト未遂と 4/21 の Desktop 整理で大量の重複/孤立リポが見つかった反省から
 - **2026-04-21** ルール10「アイデア蓄積の自動化」を追加（奥原翼 + Claude Opus）。`docs/FUTURE_IDEAS.md` を新設。背景: 「1年後に大田区の福祉事業者にサービス提供」という中期ビジョンを含め、日々の思いつきを忘れずに蓄積するため
+- **2026-04-30** ルール11「Hosting メニューの『Page Not Found』修正フロー」を追加（奥原翼 + Claude Opus）。手本実装: `public/expense/index.html`。背景: 同日 `/expense/` の 404 修正で確立した preview→確認→本番の流れを runbook 化し、再発時のオペレーションを標準化するため
