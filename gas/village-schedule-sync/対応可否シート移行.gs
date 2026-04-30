@@ -1,7 +1,7 @@
 // ==========================================================
 // 対応可否シート → user_helper_compatibility 初回移行 (one-shot tool)
 //
-// 目的: ⚪︎×シート (1djiBf7s_JKgkp1Df1K40rCoqyewFBdfBaUnMtGKZLw)
+// 目的: ⚪︎×シート (1djiBf7s_JKgkp1dGf1K40rCoqyewFBdfBaUnMtGKZLw)
 //       の内容を Supabase の user_helper_compatibility テーブルに UPSERT する。
 //
 // 実行手順 (初回):
@@ -42,7 +42,7 @@
 // 「(二人付)」マーカーは正規化時に除去 (二人付け案件は schedule 側で判定)
 // ==========================================================
 
-const COMPAT_SHEET_ID = '1djiBf7s_JKgkp1Df1K40rCoqyewFBdfBaUnMtGKZLw';
+const COMPAT_SHEET_ID = '1djiBf7s_JKgkp1dGf1K40rCoqyewFBdfBaUnMtGKZLw';
 const COMPAT_HEADER_ROW = 2;       // 1-indexed: ヘルパー名行
 const COMPAT_USER_COL = 2;         // 1-indexed: B 列 = 利用者名
 const COMPAT_DATA_START_ROW = 3;   // 1-indexed: データ開始行
