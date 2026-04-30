@@ -63,12 +63,22 @@
   - `functions/src/nextHelperSchedule.ts`
   - `functions/src/scheduledNotifications.ts`
 ### ✅ `helper_master`
-- **役割**: ヘルパー名とメールアドレスの対応マスタ
-- **参考**: `sql/2026-03-29_create_helper_master.sql`
+- **役割**: ヘルパー名・メールアドレス + 資格・運転可否のマスタ
+- **参考**: `sql/2026-03-29_create_helper_master.sql` + `sql/2026-04-29_helper_compatibility.sql`（資格列追加）
 - **列**:
   - `helper_name` (pk): `schedule.name` と一致させるヘルパー表示名
   - `helper_email`: 通知・予定紐付け用メール
-- **使われ方**: `schedule_web_v` の join で補完に使われる
+  - `qualification` (text, nullable): ヘルパーの主資格名（テキスト）。実値の例: `'介護福祉士'` / `'初任者研修'` / `'重度訪問介護'`。**資格レベルの優先順位は 介護福祉士 > 初任者研修 > 重度訪問介護**
+  - `can_drive` (bool, default false): 車の運転可否（2026-04-29 追加）
+  - `license_juuhou` (bool, default false): 重度訪問介護 修了
+  - `license_koudou` (bool, default false): 行動援護 修了
+  - `license_kyotaku` (bool, default false): 居宅介護 修了
+  - `license_idou` (bool, default false): 移動支援 修了
+  - `capabilities_updated_at` (timestamptz, nullable): 本人が最後に資格・運転可否を更新した日時
+- **使われ方**:
+  - `schedule_web_v` の join で補完に使われる
+  - ヘルパーセルフマッチング用に `license_*` 列が利用される（Phase 1A 開発中、`user_helper_compatibility` と組み合わせ）
+  - 居宅実績記録票の HTML 表示で `qualification` の値による色分けに使う想定（介護福祉士・初任者研修=青、重度訪問介護=赤）
 ---
 ## 2. 移動支援（move）系
 ### ⚠️ `schedule_tasks_move`
