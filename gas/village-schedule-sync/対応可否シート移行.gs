@@ -15,11 +15,14 @@
 //   5. 停止したい場合: uninstallWeeklyCompatibilityTrigger()
 //
 // 関数一覧:
-//   migrateCompatibilityDryRun()              — 解析のみ、書き込みなし
-//   migrateCompatibilityApply()               — 厳格モード (未登録ヘルパーで abort)
-//   migrateCompatibilityWeekly()              — 週次トリガー用 (lenient 続行)
-//   installWeeklyCompatibilityTrigger()       — 週次トリガー設定 (1 回実行)
-//   uninstallWeeklyCompatibilityTrigger()     — 週次トリガー削除
+//   公開（関数選択ドロップダウンに出る）:
+//     migrateCompatibilityDryRun()           — 解析のみ、書き込みなし
+//     migrateCompatibilityApply()            — 厳格モード (未登録ヘルパーで abort)
+//     installWeeklyCompatibilityTrigger()    — 週次トリガー設定 (1 回実行)
+//     uninstallWeeklyCompatibilityTrigger()  — 週次トリガー削除
+//   非公開（末尾 _、トリガー or 内部呼出専用）:
+//     migrateCompatibilityWeekly_()          — 週次トリガー本体 (lenient 続行)
+//     その他の内部関数                        — runCompatibilityMigration_ など
 //
 // シート構造 (奥原確認済み):
 //   行 1: 更新チェック (バックグラウンド系列, 無視)
@@ -45,7 +48,7 @@ const COMPAT_USER_COL = 2;         // 1-indexed: B 列 = 利用者名
 const COMPAT_DATA_START_ROW = 3;   // 1-indexed: データ開始行
 const COMPAT_DATA_START_COL = 3;   // 1-indexed: C 列以降がデータ
 
-// ===== Public functions =====
+// ===== Public functions (関数選択ドロップダウンに出る) =====
 
 function migrateCompatibilityDryRun() {
   return runCompatibilityMigration_(true);
@@ -55,19 +58,13 @@ function migrateCompatibilityApply() {
   return runCompatibilityMigration_(false);
 }
 
-// 週次トリガー用: 未マッチがあっても abort せず、known ヘルパー分だけ sync する
-// （新ヘルパー列が追加された日から helper_master 整備完了までも止まらない）
-function migrateCompatibilityWeekly() {
-  Logger.log('==== 週次自動同期 開始 ====');
-  return runCompatibilityMigration_(false, true /* lenient */);
-}
-
 // 週次トリガー（毎週月曜 3:00 JST）を設定する。1 回だけ実行すれば OK
 function installWeeklyCompatibilityTrigger() {
   // 既存トリガーを掃除（重複防止）
   let removed = 0;
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (
+      t.getHandlerFunction() === 'migrateCompatibilityWeekly_' ||
       t.getHandlerFunction() === 'migrateCompatibilityWeekly' ||
       t.getHandlerFunction() === 'migrateCompatibilityApply'
     ) {
@@ -79,15 +76,15 @@ function installWeeklyCompatibilityTrigger() {
     Logger.log('既存の対応可否同期トリガー %s 個を削除しました', removed);
   }
 
-  // 毎週月曜 3:00 JST に migrateCompatibilityWeekly を実行
-  ScriptApp.newTrigger('migrateCompatibilityWeekly')
+  // 毎週月曜 3:00 JST に migrateCompatibilityWeekly_ を実行
+  ScriptApp.newTrigger('migrateCompatibilityWeekly_')
     .timeBased()
     .onWeekDay(ScriptApp.WeekDay.MONDAY)
     .atHour(3)
     .inTimezone('Asia/Tokyo')
     .create();
 
-  Logger.log('✅ 週次トリガー設定完了: 毎週月曜 03:00 JST に migrateCompatibilityWeekly を実行');
+  Logger.log('✅ 週次トリガー設定完了: 毎週月曜 03:00 JST に migrateCompatibilityWeekly_ を実行');
 }
 
 // 必要なら週次トリガーを停止
@@ -95,6 +92,7 @@ function uninstallWeeklyCompatibilityTrigger() {
   let removed = 0;
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (
+      t.getHandlerFunction() === 'migrateCompatibilityWeekly_' ||
       t.getHandlerFunction() === 'migrateCompatibilityWeekly' ||
       t.getHandlerFunction() === 'migrateCompatibilityApply'
     ) {
@@ -103,6 +101,15 @@ function uninstallWeeklyCompatibilityTrigger() {
     }
   });
   Logger.log('週次トリガー %s 個を削除しました', removed);
+}
+
+// ===== Trigger-only / Internal (関数選択ドロップダウンに出さない、末尾 _) =====
+
+// 週次トリガー本体: 未マッチがあっても abort せず、known ヘルパー分だけ sync する
+// （新ヘルパー列が追加された日から helper_master 整備完了までも止まらない）
+function migrateCompatibilityWeekly_() {
+  Logger.log('==== 週次自動同期 開始 ====');
+  return runCompatibilityMigration_(false, true /* lenient */);
 }
 
 // ===== Core =====
