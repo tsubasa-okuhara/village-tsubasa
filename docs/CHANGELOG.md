@@ -13,9 +13,20 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-21（FUTURE_IDEAS.md + ルール10 追加）
+最終更新: 2026-04-30（/expense/ リダイレクトページ追加）
 
 ---
+
+## 2026-04-30 [village-tsubasa] /expense/ リダイレクトページを追加して経費メニューの 404 を修正
+
+- `public/expense/index.html` を新規作成（リダイレクトページ）
+  - `<meta http-equiv="refresh">` と `window.location.replace()` の二重で `https://v-sche-receipt.streamlit.app/` へ即遷移
+  - 一瞬表示用のローディングスピナー + 「経費提出ページに移動しています…」メッセージ（中央寄せ最低限の CSS）
+  - 自動遷移しなかった場合のフォールバック用テキストリンクも併設
+- `public/index.html:255` の `/expense/` リンクは据え置き（他メニューと URL 命名規則を統一）
+- 背景: ヘルパー向けホームの「経費提出」カードをタップすると Page Not Found になっていた。経費アプリ本体は Streamlit Cloud（別アプリ）でホストされているが、他メニューが `/xxx/` 形式で統一されているため案 B（リダイレクトページ）で吸収
+- **影響範囲**: village-tsubasa Hosting のみ。経費提出フローの実装（`app.py` / `database.py` / `image_utils.py` / `ocr_utils.py`）には変更なし
+- 関連コミット: （後続コミットで追記）
 
 ## 2026-04-21 [village-tsubasa] FUTURE_IDEAS.md とルール10（アイデア蓄積の自動化）を追加
 

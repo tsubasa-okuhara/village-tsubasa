@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#d8c0a0" />
+    <meta http-equiv="refresh" content="0; url=https://v-sche-receipt.streamlit.app/" />
+    <title>経費提出に移動しています…</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8f4ef;
+        --text: #463830;
+        --muted: #7b6c63;
+        --accent: #d8c0a0;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      }
+
+      .redirect {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .redirect__card {
+        max-width: 360px;
+        width: 100%;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.94);
+        border-radius: 18px;
+        padding: 32px 24px;
+        box-shadow: 0 20px 42px rgba(144, 113, 98, 0.12);
+      }
+
+      .redirect__title {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 12px;
+      }
+
+      .redirect__body {
+        font-size: 14px;
+        color: var(--muted);
+        margin: 0 0 20px;
+        line-height: 1.6;
+      }
+
+      .redirect__spinner {
+        width: 36px;
+        height: 36px;
+        margin: 0 auto 16px;
+        border: 3px solid rgba(216, 192, 160, 0.3);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+
+      .redirect__link {
+        display: inline-block;
+        font-size: 13px;
+        color: #8a6d4f;
+        text-decoration: underline;
+        word-break: break-all;
+      }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <main class="redirect">
+      <div class="redirect__card">
+        <div class="redirect__spinner" aria-hidden="true"></div>
+        <p class="redirect__title">経費提出ページに移動しています…</p>
+        <p class="redirect__body">
+          自動で切り替わらない場合は、下のリンクをタップしてください。
+        </p>
+        <a class="redirect__link" href="https://v-sche-receipt.streamlit.app/">
+          v-sche-receipt.streamlit.app
+        </a>
+      </div>
+    </main>
+    <script>
+      window.location.replace("https://v-sche-receipt.streamlit.app/");
+    </script>
+  </body>
+</html>
