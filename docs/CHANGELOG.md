@@ -13,9 +13,67 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-04-29（ヘルパーセルフマッチング・プロジェクト 設計検討開始 + 黄色行=未割当の Supabase 流入を実証）
+最終更新: 2026-04-30（⚪︎×シート → user_helper_compatibility 初回移行 - dry-run まで完了、apply 待ち）
 
 ---
+
+## 2026-04-30 [village-tsubasa] ヘルパーセルフマッチング Phase 1A: dry-run 完了、apply 前の整備フェーズで一時停止
+
+### 進捗
+
+1. ✅ DDL 実行済み（commit `f4a14e9`、実行確認済み）
+   - `user_helper_compatibility` テーブル作成
+   - `helper_master` に `can_drive` / `license_juuhou` / `license_koudou` / `license_kyotaku` / `license_idou` / `capabilities_updated_at` 列追加
+2. ✅ GAS スクリプト書き込み（commit `b38eddc` まで）
+   - `gas/village-schedule-sync/対応可否シート移行.gs` 作成
+   - 関数名規約整理（`_` suffix で内部関数を非公開化、commit `dee956a`）
+   - 対応可否シート ID のタイポ修正（`Df` → `dGf`、commit `b38eddc`）
+3. ✅ Apps Script Editor に貼り付け済み
+4. ✅ Project 名を「【ビレッジつばさ】全体スケジュールバックグランド」に rename（または rename 中）
+5. ✅ **dry-run 実行完了**（2026-04-30 10:03 JST）
+
+### dry-run 結果
+
+```
+シート上のヘルパー列: 61 名
+  helper_master と一致: 28 名
+  ⚠️ 未マッチ: 33 名
+  → 未マッチ一覧: 木野遙仁, 岩瀬, 足立, 岩﨑, 岩﨑祐, 鈴木, 稔, 河野, 久保,
+    赤代, 永島, 大堀, 品川, 田中, 真奈美, 城所, 矢部, 天原, 松本, 伊藤沙織,
+    永島, 笹川友理, 立花, 石川, ふきの, 馬場, 榎, 菅原, 井原, 坂口, 新規,
+    新規, 井上
+シート上の利用者: 168 名
+UPSERT 予定セル数: 4704
+ステータス分布: {1: 188, 2: 141, ⚪︎: 1378, ×: 2916, △: 81}
+⚠️ 不明な値のセル: 1910 個
+  → 先頭サンプル: ＮＧ (全角 NG), ✖ (全角 X) などの変種
+```
+
+### 残タスク（次回チャットで続き）
+
+#### A. 不明な値 1910 件のうち、明らかに既知の変種を normalizer に追加
+- `ＮＧ` (全角 NG, U+FF2E + U+FF27) → `N`
+- `✖` (全角 X, U+2716) → `×`
+- 上記は実態として存在する記法。`gas/village-schedule-sync/対応可否シート移行.gs:284` 付近の `normalizeStatus_()` に追加する
+
+#### B. 未マッチ 33 ヘルパーの整備（奥原さん作業）
+- helper_master に登録不足のヘルパーを追加 or
+- 既存 helper_master の `helper_name` を ⚪︎×シートの列見出しに合わせて改名（姓のみ統一）
+- 注意: 「新規」が 2 件あるのは、シート上のプレースホルダ列（実在しないヘルパー）の可能性大 → 削除 or rename
+
+#### C. apply 実行
+- A, B が完了したら `migrateCompatibilityApply()` を実行
+- 4704 件 UPSERT（known ヘルパー 28 名 × 利用者 168 名）
+
+#### D. 週次トリガー設定
+- `installWeeklyCompatibilityTrigger()` を 1 回実行
+- 毎週月曜 03:00 JST に lenient モードで自動同期
+
+### 影響範囲
+
+- **本日時点で本番アプリに影響なし**（dry-run のみ、書き込みなし）
+- DDL は実行済みだが、テーブルが空なので既存運用への影響なし
+- Supabase の helper_master 列追加も既存クエリに無影響
 
 ## 2026-04-29 [village-tsubasa] ヘルパーセルフマッチング・プロジェクト 設計検討開始（実装は次回以降）
 
