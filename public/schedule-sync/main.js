@@ -340,11 +340,20 @@ function groupScheduleItems(items) {
     const key = buildScheduleGroupKey(item);
     const helperName = String(item.helperName || "").trim();
     const existing = groupedMap.get(key);
+    const entry = {
+      helperName: helperName,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      haisha: item.haisha,
+      task: item.task,
+      summary: item.summary,
+    };
 
     if (!existing) {
       const nextItem = {
         ...item,
         helperNames: helperName ? [helperName] : [],
+        helperEntries: [entry],
       };
 
       groupedMap.set(key, nextItem);
@@ -355,6 +364,8 @@ function groupScheduleItems(items) {
     if (helperName && !existing.helperNames.includes(helperName)) {
       existing.helperNames.push(helperName);
     }
+
+    existing.helperEntries.push(entry);
 
     if (!existing.task && item.task) {
       existing.task = item.task;
@@ -469,24 +480,60 @@ function renderDayModal(date, items) {
 
   dayModalBodyElement.innerHTML = items
     .map(function (item) {
+      const entries = Array.isArray(item.helperEntries) ? item.helperEntries : [];
+
+      if (entries.length <= 1) {
+        return `
+          <article class="schedule-card schedule-card--modal">
+            <div class="schedule-card__headline">${escapeHtml(getHelperLabel(item))}</div>
+            <div class="schedule-card__line">
+              <span class="schedule-card__icon" aria-hidden="true">👤</span>
+              <span class="schedule-card__value is-strong">: ${escapeHtml(getDisplayValue(item.userName, "利用者未設定"))}</span>
+            </div>
+            <div class="schedule-card__line">
+              <span class="schedule-card__icon" aria-hidden="true">🕒</span>
+              <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(formatTimeRange(item), "時間未設定"))}</span>
+            </div>
+            <div class="schedule-card__line">
+              <span class="schedule-card__icon" aria-hidden="true">🚗</span>
+              <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.haisha, "—"))}</span>
+            </div>
+            <div class="schedule-card__line">
+              <span class="schedule-card__icon" aria-hidden="true">📝</span>
+              <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.task, "—"))}</span>
+            </div>
+          </article>
+        `;
+      }
+
+      const blocks = entries.map(function (entry) {
+        return `
+          <div class="schedule-card__helper-block">
+            <div class="schedule-card__headline">担当：${escapeHtml(entry.helperName || "未設定")}</div>
+            <div class="schedule-card__line">
+              <span class="schedule-card__icon" aria-hidden="true">🕒</span>
+              <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(formatTimeRange(entry), "時間未設定"))}</span>
+            </div>
+            <div class="schedule-card__line">
+              <span class="schedule-card__icon" aria-hidden="true">🚗</span>
+              <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(entry.haisha, "—"))}</span>
+            </div>
+            <div class="schedule-card__line">
+              <span class="schedule-card__icon" aria-hidden="true">📝</span>
+              <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(entry.task, "—"))}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+
       return `
-        <article class="schedule-card schedule-card--modal">
-          <div class="schedule-card__headline">${escapeHtml(getHelperLabel(item))}</div>
+        <article class="schedule-card schedule-card--modal schedule-card--multi">
           <div class="schedule-card__line">
             <span class="schedule-card__icon" aria-hidden="true">👤</span>
             <span class="schedule-card__value is-strong">: ${escapeHtml(getDisplayValue(item.userName, "利用者未設定"))}</span>
           </div>
-          <div class="schedule-card__line">
-            <span class="schedule-card__icon" aria-hidden="true">🕒</span>
-            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(formatTimeRange(item), "時間未設定"))}</span>
-          </div>
-          <div class="schedule-card__line">
-            <span class="schedule-card__icon" aria-hidden="true">🚗</span>
-            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.haisha, "—"))}</span>
-          </div>
-          <div class="schedule-card__line">
-            <span class="schedule-card__icon" aria-hidden="true">📝</span>
-            <span class="schedule-card__value">: ${escapeHtml(getDisplayValue(item.task, "—"))}</span>
+          <div class="schedule-card__helpers">
+            ${blocks}
           </div>
         </article>
       `;
