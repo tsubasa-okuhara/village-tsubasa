@@ -13,7 +13,58 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-05-02（今日の予定に合同ヘルパー表示を追加、本番デプロイ済み）
+最終更新: 2026-05-03（声のポスト /feedback/ /feedback-admin/ フロント救出 + 本番デプロイ済み）
+
+---
+
+## 2026-05-03 [village-tsubasa] 「声のポスト」(/feedback/, /feedback-admin/) フロント救出
+
+### 背景
+- 本番 `https://village-tsubasa.web.app/feedback/` が **Page Not Found** になっていた
+- バックエンド `functions/src/feedback.ts` は 2026-04-26 commit `ecc9086` で本番 zip から救出済みで動作中
+- フロントエンド `public/feedback/` `public/feedback-admin/` が **git に一度も add されていなかった**
+- 過去事故（2026-04-19 main.js 354 行ロスト未遂、2026-04-26 feedback.ts/trainingReport.ts ロスト）と **同じ「git に上げ忘れた」パターン** の再発
+
+### Firebase Hosting リリース履歴 解析結果
+| 日付 | 短縮 ID | ファイル数 |
+|---|---|---|
+| 2026/04/14 14:10 | `d195bb` | 57 ↑ feedback 系初追加 |
+| **2026/04/20 13:13** | **`fa4333bb924a986d`** | **61** ピーク（feedback + feedback-admin 揃ってた） |
+| 2026/04/25 19:45 | `f42890` | 54 ↓ **何か 7 ファイル削除（事故ポイント）** |
+| 2026/04/26 22:50 | `34f494` | 57 +3 復活（feedback も含まれず） |
+| 2026/04/27 〜 5/02 | 〜`5f6429` | 57 feedback 系欠落のまま |
+
+### 復旧手順
+1. Firebase Hosting REST API で全バージョンを列挙し、4/20 のピーク版（フル ID `fa4333bb924a986d`）を特定
+2. preview channel `preview-feedback-recover` を作成（`firebase hosting:channel:create`）
+3. REST API `POST /v1beta1/sites/.../channels/.../releases?versionName=...` で 4/20 版を preview channel に release
+4. preview URL から `curl` で 4 ファイルをダウンロード:
+   - `public/feedback/index.html` (10997 bytes, 389 行)
+   - `public/feedback/main.js` (5274 bytes, 158 行)
+   - `public/feedback-admin/index.html` (8407 bytes, 310 行)
+   - `public/feedback-admin/main.js` (9115 bytes, 263 行)
+5. git に commit + push（commit `4a44167`）→ `firebase deploy --only hosting:village-tsubasa`
+6. curl で本番に HTTP/2 200 を確認（content-length 一致）
+
+### 動作確認
+- ✅ `https://village-tsubasa.web.app/feedback/` 200 OK
+- ✅ `https://village-tsubasa.web.app/feedback-admin/` 200 OK
+- バックエンド API `/api/feedback`, `/api/feedback/update-status`, `/api/feedback/resolved` も既に稼働中
+
+### 影響範囲
+- 約 1 週間（4/25 〜 5/3）「声のポスト」が利用不可だった
+- バックエンドは生きていたので投稿データのロスト等は無し
+- 本リポ内のみの修正（API / Cloud Functions / Supabase スキーマには影響なし）
+
+### 関連 commit
+- `4a44167` fix(public): 4/25 deploy で消失した feedback / feedback-admin を 4/20 版 (fa4333bb924a986d) から救出して git に追加
+
+### TODO（次回チャットで実装したい）
+- `scripts/check-menu-links.sh` を新規作成し、`public/index.html` の全メニューリンクが対応する `public/<dir>/index.html` を持つか deploy 前にチェック
+- `scripts/check-functions-imports.sh` を新規作成し、`functions/src/index.ts` の `import` 文に対してソースファイルが git に存在することをチェック
+- `scripts/safe-deploy.sh` で上記を自動実行してから `firebase deploy`
+
+→ 同型事故（git に上げ忘れたまま deploy）の再発防止
 
 ---
 

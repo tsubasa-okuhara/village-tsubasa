@@ -4,60 +4,37 @@
 > CHANGELOG と違って、過去の記録ではなく **進行中の状態** を書く。
 > 一段落したら CHANGELOG に正式に書き写して、ここはクリア / 次のテーマに更新。
 
-最終更新: 2026-05-02 23:30（feedback フロント救出を新規追加）
+最終更新: 2026-05-03 09:00（feedback フロント救出完了、次は再発防止スクリプト）
 
 ---
 
-## 🔴 進行中（今すぐの最優先タスク）: 「声のポスト」(/feedback/) フロント救出
+## 🟡 次のタスク: 同型事故の再発防止スクリプトを実装
 
-### 状況
-- 本番 `https://village-tsubasa.web.app/feedback/` が **Page Not Found**
-- バックエンド `functions/src/feedback.ts` は **2026-04-26 commit `ecc9086`** で本番 zip から救出済み・正常稼働
-- フロントエンド `public/feedback/` `public/feedback-admin/` が **git に一度も add されていない**
-- 過去事故（2026-04-19 main.js 354 行ロスト未遂、2026-04-26 feedback.ts/trainingReport.ts ロスト）と **同じ「git に上げ忘れた」パターン** の再発
+### 背景
+2026-05-03 に「声のポスト」を救出した経験から、**「git に上げ忘れたまま deploy」** が複数回発生していることが判明（4/19 main.js, 4/26 feedback.ts/trainingReport.ts, 5/3 feedback フロント）。
 
-### Firebase Hosting リリース履歴 解析結果
-| 日付 | 短縮 ID | ファイル数 | 推測 |
-|---|---|---|---|
-| 2026/04/06〜10 | 各種 | 48 | feedback 追加前 |
-| 2026/04/14 14:10 | `d195bb` | 57 ↑ | feedback 系初追加（+9） |
-| **2026/04/20 13:13** | **`4a986d`** | **61** ↑ | **feedback-admin も追加（ピーク） ← 復元元第一候補** |
-| 2026/04/25 19:45 | `f42890` | 54 ↓ | **何か 7 ファイル削除（事故ポイント）** |
-| 2026/04/26 22:50 | `34f494` | 57 | +3 復活（feedback だけ？） |
-| 2026/04/27 〜 5/01 | 〜`5f6429` | 57 | feedback 系欠落のまま |
+### 実装したいガード
+1. `scripts/check-menu-links.sh` — `public/index.html` の `<a href="/xxx/">` 全てに対して `public/xxx/index.html` の存在を deploy 前にチェック
+2. `scripts/check-functions-imports.sh` — `functions/src/index.ts` の `import` 文に対してソースファイルが git に存在することをチェック
+3. `scripts/safe-deploy.sh` — 上記を全部走らせてから `firebase deploy` を呼ぶラッパー
 
-### Mac 側 Claude Code に渡す手順
-**Step 1: Mac ローカル楽観チェック**
+### 実装イメージ
 ```bash
-cd /Users/mewself/Desktop/village-tsubasa
-ls public/ | grep -i feed
-git status -s public/
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+missing=0
+grep -oE 'href="/[a-zA-Z0-9_-]+/"' public/index.html | sort -u | while read -r m; do
+  path=$(echo "$m" | sed 's|href="/|public/|;s|/"$||')
+  if [ ! -f "$path/index.html" ]; then
+    echo "❌ MISSING: $path/index.html"
+    missing=$((missing+1))
+  fi
+done
+[ "$missing" -gt 0 ] && exit 1 || exit 0
 ```
 
-**Step 2 (Mac に残ってた場合): そのまま git に取り込む**
-```bash
-git add public/feedback/ public/feedback-admin/
-git commit -m "fix(public): 失われていた feedback / feedback-admin を Mac ローカルから救出して git に追加"
-git push
-firebase deploy --only hosting:village-tsubasa
-```
-
-**Step 3 (Mac にも無かった場合): Firebase Hosting 過去版を preview channel に複製**
-```bash
-firebase hosting:clone village-tsubasa:4a986d village-tsubasa:preview-feedback-recover --expires 1d
-```
-→ preview URL から DevTools で feedback/ feedback-admin/ のファイル取得 → git に commit → deploy
-
-⚠️ **絶対に本番 rollback はしない**（5/2 デプロイ済みの複数ヘルパー個別ブロック表示等、最近の機能が巻き戻る）
-
-### 完了判定
-- [ ] `https://village-tsubasa.web.app/feedback/` が 200 で開く
-- [ ] `https://village-tsubasa.web.app/feedback-admin/` が 200 で開く
-- [ ] `git ls-files public/feedback/` でファイルが列挙される
-- [ ] `scripts/check-menu-links.sh` 新規作成（メニューリンク先の存在チェック）
-- [ ] `bash scripts/check-menu-links.sh` が exit 0
-- [ ] `CHANGELOG.md` 追記
-- [ ] `git push` 済み
+優先度: 中（次回チャット冒頭で着手すれば 30 分で完了）
 
 ---
 
