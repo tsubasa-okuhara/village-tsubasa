@@ -66,6 +66,83 @@
 
 → 同型事故（git に上げ忘れたまま deploy）の再発防止
 
+### 🔧 今回ハマったトラブルと解決手順（次回ショートカット用）
+
+#### 1. `firebase` CLI 関連
+
+| エラー | 原因 | 解決 |
+|---|---|---|
+| `Authentication Error: Your credentials are no longer valid` | Firebase 認証トークン期限切れ | `firebase login --reauth` → ブラウザで承認（Gemini=N、テレメトリ=N） |
+| `firebase hosting:clone village-tsubasa:<VERSION_ID> ...` → `Could not find the channel <VERSION_ID>` | `hosting:clone` のソースは **チャンネル名** しか受け付けない（バージョン ID は不可） | REST API 経由で `POST /v1beta1/sites/.../channels/<channel>/releases?versionName=sites/.../versions/<full-id>` を叩く |
+| `firebase hosting:channel:deploy ... --expires 1d` → `unknown option '--expires'` | `hosting:channel:deploy` には `--expires` 無し | `hosting:channel:create` と `hosting:channel:deploy` のオプションは別物。デフォルト 7 日で消える |
+| `firebase` コマンドが not found（特に新ターミナル） | PATH に npm global / nvm bin が無い | 新ターミナル開く / `~/.zshrc` を `source` し直す / フルパス（`/opt/homebrew/bin/firebase` 等）で叩く |
+
+#### 2. `gcloud` / Application Default Credentials (ADC)
+
+| エラー | 原因 | 解決 |
+|---|---|---|
+| `Reauthentication required. Please enter your password` | gcloud 認証の reauth 周期に到達 | パスワード打鍵が嫌なら Ctrl+C → `gcloud auth login`（ブラウザ認証）に切り替え |
+| `firebasehosting.googleapis.com API requires a quota project` (HTTP 403) | ADC に quota project が紐付いてない | `gcloud auth application-default login` → `gcloud auth application-default set-quota-project village-tsubasa` |
+| 上記設定後も同じ 403 | `gcloud auth print-access-token` が返すトークンに quota project 情報が乗らない | curl リクエストに **`-H "X-Goog-User-Project: village-tsubasa"`** を追加 |
+| ADC は OK なのに gcloud `set-quota-project` が `Reauthentication is needed` | `gcloud auth login`（CLI 用）と `gcloud auth application-default login`（ADC 用）は **別物**。両方やる必要あり | `gcloud auth application-default login` をブラウザで実施 |
+
+#### 3. REST API（Firebase Hosting）
+
+| エラー | 原因 | 解決 |
+|---|---|---|
+| `Invalid JSON payload received. Unknown name "versionName" at 'release': Cannot find field` | `versionName` を **body に入れた** が、正しくは **クエリパラメータ** | `?versionName=sites/.../versions/<full-id>` で URL に付ける |
+| `releases?pageSize=100` で目当てのバージョンが見つからない | 1 ページ 100 件まで。古いバージョンは次ページ | レスポンスの `nextPageToken` を `&pageToken=...` で渡して継続取得 |
+| Console の短縮 ID（例 `4a986d`）から full ID を引きたい | full ID の **末尾 6 文字** が短縮 ID（例 `fa4333bb924a986d` → `4a986d`） | `grep <短縮 ID> /tmp/versions.json` で full ID 取得 |
+
+#### 4. zsh / shell 環境
+
+| エラー | 原因 | 解決 |
+|---|---|---|
+| `zsh: command not found: #` | zsh デフォルトで `interactive_comments` 無効、`#` がコマンド扱い | コマンドペースト時はコメント行（`# ...`）を**含めない**。または `setopt interactive_comments` |
+| `for path in $(...)` 後に `mkdir`, `curl`, `ls` 全部 `command not found` | ループ内の `path` 変数が PATH を上書きした事故 | `export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"` で復旧、または新ターミナル |
+| 一見 deploy 成功してるのに本番で `Page Not Found` | Safari の HTTP キャッシュ | `curl -I` で本番を直接叩いて HTTP/2 200 + content-length を確認。Safari は `⌘+Option+E` でキャッシュクリア |
+
+#### 5. 過去バージョンを安全に「中身だけ」復元したいときの黄金パターン
+
+```bash
+# (1) ADC 整える
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project village-tsubasa
+gcloud auth application-default set-quota-project village-tsubasa
+
+# (2) 全バージョン列挙して目的の short ID から full ID を取得
+TOKEN=$(gcloud auth print-access-token)
+curl -s -H "Authorization: Bearer $TOKEN" -H "X-Goog-User-Project: village-tsubasa" \
+  "https://firebasehosting.googleapis.com/v1beta1/sites/village-tsubasa/versions?pageSize=100" \
+  > /tmp/versions.json
+grep <SHORT_ID> /tmp/versions.json   # → full ID 取得
+
+# (3) preview channel 作成 → 過去バージョンを release
+firebase hosting:channel:create preview-recover --site village-tsubasa
+TOKEN=$(gcloud auth print-access-token)
+curl -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Goog-User-Project: village-tsubasa" \
+  -H "Content-Type: application/json" \
+  "https://firebasehosting.googleapis.com/v1beta1/sites/village-tsubasa/channels/preview-recover/releases?versionName=sites/village-tsubasa/versions/<FULL_ID>"
+
+# (4) preview URL から欲しいファイルだけ curl で取得
+PREVIEW_URL="https://village-tsubasa--preview-recover-XXXXXXXX.web.app"
+curl -s "$PREVIEW_URL/path/to/file.html" -o public/path/to/file.html
+
+# (5) git に commit + push + 通常 deploy
+git add public/...
+git commit -m "fix(public): 過去版から救出"
+git push
+firebase deploy --only hosting:village-tsubasa
+
+# (6) 後始末
+firebase hosting:channel:delete preview-recover --site village-tsubasa --force
+```
+
+⚠️ **絶対にやってはいけないこと**: 本番 site を直接 `rollback`。最近の deploy で入れた機能が一気に巻き戻る。**必ず preview channel 経由**。
+
 ---
 
 ## 2026-05-02 [village-tsubasa] 「今日の予定」に合同ヘルパー表示を追加
