@@ -75,10 +75,12 @@
   - `license_kyotaku` (bool, default false): 居宅介護 修了
   - `license_idou` (bool, default false): 移動支援 修了
   - `capabilities_updated_at` (timestamptz, nullable): 本人が最後に資格・運転可否を更新した日時
+  - `employment_type` (text, nullable, 2026-05-04 追加): 雇用形態。値は `'常勤'` / `'非常勤'` / null。`null` は「未設定」として扱い、village-admin の勤務形態一覧表では集計上「非常勤」とみなす。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`
 - **使われ方**:
   - `schedule_web_v` の join で補完に使われる
   - ヘルパーセルフマッチング用に `license_*` 列が利用される（Phase 1A 開発中、`user_helper_compatibility` と組み合わせ）
   - 居宅実績記録票の HTML 表示で `qualification` の値による色分けに使う想定（介護福祉士・初任者研修=青、重度訪問介護=赤）
+  - 2026-05-04: village-admin の監査用「勤務形態一覧表」で `employment_type` を参照
 ---
 ## 2. 移動支援（move）系
 ### ⚠️ `schedule_tasks_move`
@@ -512,6 +514,7 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - カラム自体は残してあるので、将来必要になれば GAS 側で `sbMarkSynced_()` を有効化すれば使える
 ---
 ## 更新履歴
+- 2026-05-04: `helper_master.employment_type` (text, nullable) を追加。村のつばさ admin の監査用「勤務形態一覧表」で常勤/非常勤を表示するため。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`。ルール 2「nullable な列追加」に該当
 - 2026-04-11: 初版作成
 - 2026-04-11: `schedule` テーブルの列定義・参照箇所・RLS 上の注意点を追記（村上翼 / village-admin チャットからの情報反映）
 - 2026-04-11: move / home 系（`schedule_tasks_move`, `service_notes_move`, `move_check_logs`, `home_schedule_tasks`, `service_notes_home`, `service_action_logs_home`）を `functions/src/` から読み取って詳細化

@@ -13,7 +13,51 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-05-03（声のポスト /feedback/ /feedback-admin/ フロント救出 + 本番デプロイ済み）
+最終更新: 2026-05-04（村のつばさ admin に監査書類メニュー、helper_master 拡張、データクリーンアップ）
+
+---
+
+## 2026-05-04 [village-admin + Supabase + GAS] 監査書類 + 実績記録票修正 + データ整合化
+
+### 1. 監査書類メニュー新設 (village-admin)
+- `/audit/` 配下にメニューページ
+  - シフト表（月次マトリクス、居宅/移動 タブ切替）
+  - 勤務形態一覧表（常勤換算 ÷173.8 標準）
+- バックエンド: `village-admin/functions/src/dashboard/audit/`
+- 居宅/移動分類: `task` フィールドの「→」「⇒」有無で判定
+
+### 2. helper_master.employment_type 列追加（Supabase スキーマ変更 ⚠️）
+- `village-tsubasa/sql/2026-05-03_helper_employment_type.sql`
+- `helper_master` に `employment_type text NULL` を追加
+- 値: `'常勤'` / `'非常勤'` / null（= 未設定 → 集計時は「非常勤」扱い）
+- 影響範囲: village-admin の勤務形態一覧表で参照。他アプリは未参照（破壊的変更なし）
+- ルール 2「nullable な列追加」遵守
+
+### 3. 実績記録票 (records-home) 修正
+- 曜日表示の 1 日ずれバグ修正（UTC 構築に統一）
+- Excel タイトル区分別化（身体 / 家事 / 通院 で別タイトル）
+- Excel 合計セル追加（テンプレ rows 42-46 に区分別 計画/100%/算定）
+- `normalizeServiceCategory` に「居宅」「入浴」→「身体」マッピング追加
+- 居宅 4 区分以外を表示から除外（警告は維持）
+
+### 4. データクリーンアップ (Supabase)
+- `home_schedule_tasks` の misrouted 行（移動系 task が混入）31 件を整理
+  - 12 件 (unwritten) → DELETE
+  - 19 件 (written) → task を `身体` or `通院` に UPDATE（note 内容から判定）
+
+### 5. GAS 「サービス記録転送」スクリプトに防御層追加（奥原さん実装）
+- `runPrepareServiceRecordTransfer` フローに `checkHomeServiceTypeForTransfer_` を組み込み
+- B 列背景色 #ff9900（居宅）かつ受給者番号 prefix が 07/30/50 の場合、F 列が `身体/家事/通院/重度訪問` でなければ N 列にエラーメッセージ + F セルを赤背景
+- 再発防止の Tier 1 防御
+
+### 6. ドキュメント
+- `village-admin/CHANGELOG.md` に 2026-05-04 エントリ追加
+- `tools/jissystem-input/USER_GUIDE.md` 新規追加（HiMacroEx 用 Excel DL のエンドユーザー向け使い方）
+
+### 影響範囲
+- village-admin: コード変更（要本番デプロイ）
+- village-tsubasa: スキーマ追加（既存アプリへの影響なし、他アプリは employment_type を参照しない）
+- user-schedule-app: 影響なし
 
 ---
 
