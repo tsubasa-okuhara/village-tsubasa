@@ -1,0 +1,12 @@
+# このディレクトリには、奥原さんが Windows 上で HiMacroEx で録画した
+# .hmx ファイルが入る。
+#
+# 録画手順は ../README.md の「HiMacroEx スクリプトの録画手順」セクション参照。
+#
+# 期待されるファイル:
+#   01_select_user.hmx
+#   02_input_date.hmx
+#   03_select_kaji.hmx
+#   04_input_start.hmx
+#   05_input_end.hmx
+#   06_save.hmx
