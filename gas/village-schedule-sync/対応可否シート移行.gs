@@ -18,6 +18,7 @@
 //   公開（関数選択ドロップダウンに出る）:
 //     migrateCompatibilityDryRun()           — 解析のみ、書き込みなし
 //     migrateCompatibilityApply()            — 厳格モード (未登録ヘルパーで abort)
+//     printUnmatchedHelpersReport()          — 未マッチヘルパー 33 名の整理用 (補助)
 //     installWeeklyCompatibilityTrigger()    — 週次トリガー設定 (1 回実行)
 //     uninstallWeeklyCompatibilityTrigger()  — 週次トリガー削除
 //   非公開（末尾 _、トリガー or 内部呼出専用）:
@@ -31,11 +32,11 @@
 //
 // 値の正規化:
 //   ⚪︎/○/◯/〇/⚪ → '⚪︎'
-//   ×/✕/x/X/✗   → '×'
+//   ×/✕/✗/✖/x/X/ｘ/Ｘ → '×'
 //   △/▲          → '△'
 //   1/１          → '1'
 //   2/２          → '2'
-//   N/n/NG/ng    → 'N'
+//   N/n/NG/ng/ＮＧ/Ｎｇ → 'N'
 //   空欄/不明     → '×' (奥原指定: 未定義は × 扱い)
 //
 // 利用者名: "藍 涼之介" → "藍涼之介様" (schedule.client 形式に合わせる)
@@ -56,6 +57,67 @@ function migrateCompatibilityDryRun() {
 
 function migrateCompatibilityApply() {
   return runCompatibilityMigration_(false);
+}
+
+// シートに居て helper_master に居ないヘルパー（未マッチ）を分析し、
+// どの master 名と統合できそうか・どれを新規追加すべきかを Logger に出す
+// → dry-run で 33 名出ていた未マッチを片付ける用の補助関数
+function printUnmatchedHelpersReport() {
+  const ctx = setupSupabaseContext_();
+  const sheet = openCompatibilitySheet_();
+  const matrix = readCompatibilityMatrix_(sheet);
+  const helperMap = fetchHelperEmailMap_(ctx);
+
+  const masterNames = Object.keys(helperMap);
+  const sheetHelpers = matrix.helperHeaders
+    .filter(function (h) { return h.shortName; })
+    .map(function (h) { return h.shortName; });
+  const unmatched = sheetHelpers.filter(function (n) { return !helperMap[n]; });
+
+  Logger.log('===== 未マッチヘルパー分析レポート =====');
+  Logger.log('シート上のヘルパー列: %s 名', sheetHelpers.length);
+  Logger.log('helper_master 登録: %s 名', masterNames.length);
+  Logger.log('未マッチ: %s 名', unmatched.length);
+  Logger.log('');
+  Logger.log('--- 推奨アクション一覧 ---');
+  Logger.log('シート列 | 候補 (master 側の名前) | 推奨');
+
+  const placeholders = ['新規', '空', '未定', 'なし', '-', '—'];
+
+  unmatched.forEach(function (name) {
+    if (placeholders.indexOf(name) !== -1) {
+      Logger.log('%s | (なし) | プレースホルダ。シートから列削除を検討', name);
+      return;
+    }
+
+    // 1) master 名のなかで先頭が一致するもの (sheet="岩瀬" → master="岩瀬太郎")
+    const prefixMatches = masterNames.filter(function (m) {
+      return m !== name && m.indexOf(name) === 0;
+    });
+    // 2) master 名のなかで含むもの (sheet="佳織" → master="伊藤佳織")
+    const containsMatches = masterNames.filter(function (m) {
+      return m !== name && m.indexOf(name) > 0;
+    });
+    // 3) 逆: シート名が master 名を含む (sheet="伊藤信一" → master="伊藤")
+    const reverseMatches = masterNames.filter(function (m) {
+      return m !== name && m.length >= 2 && name.indexOf(m) !== -1;
+    });
+
+    const candidates = []
+      .concat(prefixMatches)
+      .concat(containsMatches)
+      .concat(reverseMatches);
+
+    if (candidates.length > 0) {
+      Logger.log('%s | %s | master と統合（どちらかに名前を揃える）', name, candidates.join(', '));
+    } else {
+      Logger.log('%s | (なし) | helper_master に新規追加 or シート列削除', name);
+    }
+  });
+
+  Logger.log('');
+  Logger.log('===== END =====');
+  Logger.log('対応完了後 migrateCompatibilityDryRun() で再検証 → 0 件になったら migrateCompatibilityApply()');
 }
 
 // 週次トリガー（毎週月曜 3:00 JST）を設定する。1 回だけ実行すれば OK
@@ -296,9 +358,12 @@ function normalizeStatus_(raw) {
   if (
     text === '×' ||
     text === '✕' ||
+    text === '✗' ||
+    text === '✖' ||      // U+2716 heavy multiplication X
     text === 'x' ||
     text === 'X' ||
-    text === '✗'
+    text === 'ｘ' ||      // 全角小文字 x
+    text === 'Ｘ'         // 全角大文字 X
   ) {
     return { status: '×', isKnown: true };
   }
@@ -308,11 +373,14 @@ function normalizeStatus_(raw) {
   if (text === '1' || text === '１') return { status: '1', isKnown: true };
   // 2
   if (text === '2' || text === '２') return { status: '2', isKnown: true };
-  // N 系
+  // N 系（NG / Ng / nG / 全角 ＮＧ も含む）
+  const upper = text
+    .toUpperCase()
+    .replace(/Ｎ/g, 'N')
+    .replace(/Ｇ/g, 'G');
   if (
-    text === 'N' ||
-    text === 'n' ||
-    text.toUpperCase() === 'NG'
+    upper === 'N' ||
+    upper === 'NG'
   ) {
     return { status: 'N', isKnown: true };
   }
