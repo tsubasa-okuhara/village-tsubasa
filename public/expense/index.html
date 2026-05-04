@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>経費提出ページに移動しています… - ビレッジひろば</title>
+    <meta http-equiv="refresh" content="0; url=https://v-sche-receipt.streamlit.app/" />
+    <link rel="canonical" href="https://v-sche-receipt.streamlit.app/" />
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", sans-serif;
+        background: #fdf7f1;
+        color: #4b3a30;
+      }
+      .wrap {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        gap: 18px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #b04e2e;
+        background: #fde6d6;
+        border-radius: 999px;
+        letter-spacing: 0.06em;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.18rem;
+        font-weight: 800;
+      }
+      p {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.7;
+        max-width: 28rem;
+      }
+      .spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #f0d8c4;
+        border-top-color: #b04e2e;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      a.fallback {
+        color: #b04e2e;
+        font-weight: 700;
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <span class="badge">経費</span>
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>経費提出ページに移動しています…</h1>
+      <p>
+        自動で切り替わらない場合は
+        <a class="fallback" href="https://v-sche-receipt.streamlit.app/">こちらをタップ</a>
+        してください。
+      </p>
+    </div>
+    <script>
+      window.location.replace("https://v-sche-receipt.streamlit.app/");
+    </script>
+  </body>
+</html>
