@@ -13,6 +13,7 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
+
 ---
 
 ## 2026-05-06 [village-tsubasa] ヘルパーセルフマッチング Phase 1 実装（API + UI 完成、deploy 待ち）
@@ -98,7 +99,21 @@
 5. （任意）ヘルパーへの確定通知（Phase 1 の「マッチ確定通知」、push 通知 or アプリ内通知）
 
 
-最終更新: 2026-05-04（村のつばさ admin に監査書類メニュー、helper_master 拡張、データクリーンアップ）
+最終更新: 2026-05-06（home_schedule_tasks に重複防止 partial UNIQUE INDEX を追加）
+
+---
+
+## 2026-05-06 [Supabase] home_schedule_tasks に重複防止 partial UNIQUE INDEX
+- 追加: `uniq_home_schedule_tasks_manual` (service_date, start_time, end_time, user_name, helper_name, task) WHERE schedule_id IS NULL
+- 背景: GAS `★サービス記録内容転送.gs` の `Prefer: resolution=ignore-duplicates` がテーブルに UNIQUE 制約が無いため実質効いておらず、永沢嵩大様 2026-05-01 分が 11 時間差で 2 回 INSERT された事故（2026-05-02 22:25 と 2026-05-03 09:24）
+- 対応: schedule_id IS NULL（手動投入のみ）の範囲に partial UNIQUE INDEX を張り、DB レベルで重複を拒否。合同シフト（同利用者・時間帯で別ヘルパー）は helper_name が違うので共存可
+- 適用前確認: 全期間・schedule_id IS NULL 範囲で重複 0 件を Supabase SQL Editor で確認済（2026-05-06）
+- 影響範囲:
+  - village-tsubasa: 影響なし（同テーブルは UPDATE のみ）
+  - village-admin: 影響なし（同テーブルは SELECT のみ）
+  - GAS `village-schedule-sync/★サービス記録内容転送.gs`: 既存の resolution=ignore-duplicates が初めて真に効く（コード変更不要）。再実行しても 23505 で静かに無視される
+- 設計判断: 当初は admin 側に重複検知 + 削除 UI を作る案だったが、DB 門番で根本解決できるため YAGNI で UI 不採用
+- 関連 SQL: sql/2026-05-06_uniq_home_schedule_tasks_manual.sql
 
 ---
 

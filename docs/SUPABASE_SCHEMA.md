@@ -209,6 +209,12 @@
 - **備考**:
   - テーブル名の prefix/suffix が `schedule_tasks_move` と非対称 (`schedule_tasks_move` vs `home_schedule_tasks`)。将来統一する場合は要注意
   - CREATE 文はリポジトリに無い
+- **インデックス**:
+  - `uniq_home_schedule_tasks_manual` (partial UNIQUE, 2026-05-06 追加)
+    - 列: (service_date, start_time, end_time, user_name, helper_name, task)
+    - 条件: `WHERE schedule_id IS NULL`
+    - 目的: GAS `★サービス記録内容転送.gs` の再実行で同一業務キーの重複 INSERT が起きるのを DB レベルで拒否
+    - 関連 SQL: `sql/2026-05-06_uniq_home_schedule_tasks_manual.sql`
 ### ⚠️ `service_notes_home`
 - **役割**: 居宅介護の完成サービス記録（Excel 出力の元データ）
 - **列**:
@@ -547,6 +553,7 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - カラム自体は残してあるので、将来必要になれば GAS 側で `sbMarkSynced_()` を有効化すれば使える
 ---
 ## 更新履歴
+- 2026-05-06: `home_schedule_tasks` に partial UNIQUE INDEX `uniq_home_schedule_tasks_manual` を追加。キー: (service_date, start_time, end_time, user_name, helper_name, task)、条件: `WHERE schedule_id IS NULL`。GAS `★サービス記録内容転送.gs` の重複 INSERT を DB レベルで拒否。永沢様 2026-05-01 分の重複事故（11時間差で2回投入）への根本対策。CREATE 文: `sql/2026-05-06_uniq_home_schedule_tasks_manual.sql`。ルール 2「追加は OK / 既存変更しない」に該当（既存列・既存制約は無変更、partial INDEX 追加のみ）
 - 2026-05-04: `helper_master.employment_type` (text, nullable) を追加。村のつばさ admin の監査用「勤務形態一覧表」で常勤/非常勤を表示するため。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`。ルール 2「nullable な列追加」に該当
 - 2026-04-11: 初版作成
 - 2026-04-11: `schedule` テーブルの列定義・参照箇所・RLS 上の注意点を追記（村上翼 / village-admin チャットからの情報反映）
