@@ -25,7 +25,17 @@ jobs:
           node-version: 20
 
       - name: Install Firebase CLI
-        run: npm install -g firebase-tools
+        run: npm install -g firebase-tools@13
+
+      - name: Verify FIREBASE_TOKEN secret
+        run: |
+          if [ -z "${FIREBASE_TOKEN:-}" ]; then
+            echo "ERROR: FIREBASE_TOKEN secret is empty or not set."
+            exit 1
+          fi
+          echo "FIREBASE_TOKEN present (${#FIREBASE_TOKEN} chars)"
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
       - name: Check menu links exist
         run: |
