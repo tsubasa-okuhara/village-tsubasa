@@ -26,6 +26,7 @@ import {
 
 import { serviceRecordsMoveRouter } from "./service-records-move/routes";
 import { serviceRecordsStructuredRouter } from "./service-records-structured/routes";
+import { selfMatchingRouter } from "./self-matching/routes";
 // import { contractsRouter } from "./contracts/routes";
 // ↑ CloudSign secret 未設定のため一時無効化（次回チャットで CloudSign 設定後に復活）
 
@@ -97,6 +98,9 @@ app.use("/api/service-records-move", serviceRecordsMoveRouter);
 
 app.use("/service-records-structured", serviceRecordsStructuredRouter);
 app.use("/api/service-records-structured", serviceRecordsStructuredRouter);
+
+app.use("/self-matching", selfMatchingRouter);
+app.use("/api/self-matching", selfMatchingRouter);
 
 // 電子契約（設計書: docs/CONTRACTS_DESIGN.md, 実装: functions/src/contracts/）
 // CloudSign secret 未設定のため一時無効化

@@ -13,6 +13,91 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
+---
+
+## 2026-05-06 [village-tsubasa] ヘルパーセルフマッチング Phase 1 実装（API + UI 完成、deploy 待ち）
+
+### 何を作ったか
+
+**新機能「空き時間で支援に入る」 (`/self-matching/`)**: ヘルパーが「未割当の予定」を見て「入れます」と手を挙げられるページ。管理者が利用者に確認した上で正式に決定する Phase 1（管理者経由型）の最低限フローが動く状態。
+
+対象ヘルパーは `helper_master.enable_self_matching = true` の **7 名**（三枝/中野/久保田/伊藤信一/村岡/林/樋口）に限定。それ以外のヘルパーが画面を開いても 403 で弾かれる。
+
+### Supabase 変更
+
+1. **`helper_master` に `enable_self_matching` 列追加**（boolean, NOT NULL, default false）
+   ```sql
+   alter table helper_master
+   add column if not exists enable_self_matching boolean not null default false;
+   update helper_master set enable_self_matching = true
+   where helper_email in (
+     'yuki200164@gmail.com', 'zhongtiannasu@gmail.com', '141213zero@gmail.com',
+     'shinichi.hr22@gmail.com', 'mrokrs1212@gmail.com', '8ha8ya4shi@gmail.com',
+     'dannyfrommorikiko@gmail.com'
+   );
+   ```
+   → 7 名のみ `true`、他 30 名は `false`
+
+2. **新テーブル `schedule_claims` 作成**（RLS ON、policy 未設定 → service_role のみアクセス）
+   - 列: `id` (uuid PK) / `schedule_id` (uuid FK→schedule, on delete cascade) / `helper_email` (text) / `status` (CHECK pending/approved/rejected/withdrawn, default pending) / `priority_score` / `note` / `created_at` / `updated_at` / `decided_at` / `decided_by`
+   - UNIQUE: `(schedule_id, helper_email)` で二重申請防止
+   - インデックス: `idx_schedule_claims_pending` / `idx_schedule_claims_helper_email` / `idx_schedule_claims_schedule`
+   - トリガー: `trg_schedule_claims_updated_at` BEFORE UPDATE で `updated_at = now()`
+
+### Cloud Functions 変更（village-tsubasa リポ）
+
+新ディレクトリ `functions/src/self-matching/`:
+- `listCandidates.ts` — `GET /api/self-matching/candidates?helper_email=...`
+- `claimSchedule.ts` — `POST /api/self-matching/claim`
+- `withdrawClaim.ts` — `POST /api/self-matching/withdraw`
+- `routes.ts` — Express Router 配線
+
+`functions/src/index.ts`:
+- `selfMatchingRouter` を import + `app.use("/api/self-matching", selfMatchingRouter)` (旧形式 `/self-matching` も併設)
+
+候補抽出フィルタ:
+- `helper_email IS NULL`（パターンA: 純粋な未割当）
+- `name` が空文字（パターンB除外）
+- `client` 非空（パターンC除外）
+- `start_time` 非 null
+- `deleted_at IS NULL`
+- `date >= CURRENT_DATE`
+
+### Public (Hosting) 変更
+
+新ディレクトリ `public/self-matching/`:
+- `index.html` — メールアドレス入力 → 候補一覧 → 「入れます」/「取り下げる」ボタン
+- `main.js` — fetch 呼び出し + localStorage でメール記憶
+- `style.css` — 既存ページと統一感のあるトーン
+
+`public/index.html`:
+- メニュー一覧の「サービス記録」上に新規メニューカード「空き時間で支援に入る」を追加
+
+### 動作確認の前提
+
+- Supabase 側 DDL は済（commit 不要、SQL Editor で実行済み）
+- Functions のコード変更は未 deploy。`firebase deploy --only functions:api` が必要
+- Hosting のコード変更も未 deploy。`firebase deploy --only hosting:village-tsubasa` が必要
+- 7 名のヘルパーがアクセスして OK。他 30 名はアクセスしても 403
+
+### 影響範囲
+
+- **village-admin**: 管理者承認 UI は別途実装が必要（次のフェーズ）。今は schedule_claims に pending データがたまる状態。
+- **user-schedule-app**: 影響なし。利用者アプリは触らない。
+- **GAS**: 影響なし。スプレッドシート同期は変更していない。
+- **既存 API/画面**: 影響なし。新規エンドポイント・新規画面のみ追加。
+
+### 次のフェーズ（次回チャット）
+
+1. Functions + Hosting の deploy
+2. 7 名のヘルパーの 1 人で動作確認（実際に手を挙げる → schedule_claims に pending が入るか）
+3. **village-admin 側で承認 UI** を実装（別リポ）
+   - 未承認 claim 一覧（`status='pending'`）
+   - approve / reject ボタン → schedule.helper_email を確定
+4. （任意）対応可否（○×）データを Supabase に取り込む。GAS `migrateCompatibilityApply()` を `enable_self_matching=true` のヘルパーに絞る案 A 改修
+5. （任意）ヘルパーへの確定通知（Phase 1 の「マッチ確定通知」、push 通知 or アプリ内通知）
+
+
 最終更新: 2026-05-04（村のつばさ admin に監査書類メニュー、helper_master 拡張、データクリーンアップ）
 
 ---

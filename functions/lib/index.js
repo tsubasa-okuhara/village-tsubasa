@@ -23,6 +23,7 @@ const scheduleSync_1 = require("./scheduleSync");
 const scheduledNotifications_1 = require("./scheduledNotifications");
 const routes_1 = require("./service-records-move/routes");
 const routes_2 = require("./service-records-structured/routes");
+const routes_3 = require("./self-matching/routes");
 // import { contractsRouter } from "./contracts/routes";
 // ↑ CloudSign secret 未設定のため一時無効化（次回チャットで CloudSign 設定後に復活）
 const generateSummary_1 = require("./service-records-home/generateSummary");
@@ -54,6 +55,8 @@ app.use("/service-records-move", routes_1.serviceRecordsMoveRouter);
 app.use("/api/service-records-move", routes_1.serviceRecordsMoveRouter);
 app.use("/service-records-structured", routes_2.serviceRecordsStructuredRouter);
 app.use("/api/service-records-structured", routes_2.serviceRecordsStructuredRouter);
+app.use("/self-matching", routes_3.selfMatchingRouter);
+app.use("/api/self-matching", routes_3.selfMatchingRouter);
 // 電子契約（設計書: docs/CONTRACTS_DESIGN.md, 実装: functions/src/contracts/）
 // CloudSign secret 未設定のため一時無効化
 // app.use("/contracts", contractsRouter);

@@ -124,6 +124,11 @@
 **ヘルパー検索系（1）**
 - `GET  /api/helpers/lookup` — email → 名前の逆引き
 
+**セルフマッチング系（3）**（2026-05-06 追加、Phase 1）
+- `GET  /api/self-matching/candidates` — 未割当予定の候補一覧（`helper_email` 必須、`enable_self_matching=true` のヘルパーのみ）
+- `POST /api/self-matching/claim` — 「入れます」申請（schedule_claims に INSERT）
+- `POST /api/self-matching/withdraw` — 自分の pending 申請を取り下げ
+
 **ヘルスチェック（1）**
 - `GET  /healthz` — `"ok"` を返すだけ
 
@@ -148,6 +153,7 @@
 | `/training-reports-admin/` | 研修報告・資料管理（管理者） |
 | `/calm-check/` | 落ち着き確認フォーム |
 | `/expense/` | 経費提出（ヘルパー向け） |
+| `/self-matching/` | 空き時間で支援に入る（未割当予定に「入れます」と申請、2026-05-06 追加、Phase 1） |
 | `/contracts/` | 雇用契約 一覧（2026-04-19 追加、Phase 4 雛形） |
 | `/contracts/sign.html` | 契約署名画面（Phase 4 雛形、実フローは Phase 3.2 以降） |
 | `/contracts/viewer.html` | 締結済契約の閲覧（Phase 4 雛形） |

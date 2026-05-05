@@ -62,6 +62,37 @@
   - `functions/src/helperSummary.ts`
   - `functions/src/nextHelperSchedule.ts`
   - `functions/src/scheduledNotifications.ts`
+### ⚠️ `schedule_claims`
+- **役割**: ヘルパーセルフマッチング Phase 1 のコアテーブル。ヘルパーが「未割当予定に入れます」と意思表明した記録を保持
+- **作成日**: 2026-05-06（DDL は SQL Editor で直接実行、`schedule_claims` テーブル + 5 インデックス + updated_at トリガー + RLS ON）
+- **列**:
+  - `id` (uuid, PK, default `gen_random_uuid()`)
+  - `schedule_id` (uuid, NOT NULL): `schedule(id)` への FK、`on delete cascade`
+  - `helper_email` (text, NOT NULL): 申請したヘルパーのメール
+  - `status` (text, NOT NULL, default `'pending'`, CHECK in `'pending'/'approved'/'rejected'/'withdrawn'`)
+  - `priority_score` (numeric, nullable, default 0): 将来の優先度スコア用
+  - `note` (text, nullable): ヘルパーが添える任意メッセージ
+  - `created_at` / `updated_at` (timestamptz, NOT NULL, default `now()`)
+  - `decided_at` (timestamptz, nullable): 管理者の承認/却下時刻
+  - `decided_by` (text, nullable): 判定した管理者の email
+- **制約**:
+  - PK: `id`
+  - UNIQUE: `(schedule_id, helper_email)` — 同じヘルパーが同じ予定に二重申請不可
+  - FK: `schedule_id → schedule(id) on delete cascade`
+- **インデックス**:
+  - `idx_schedule_claims_pending` (status, created_at) WHERE `status = 'pending'` — 管理者画面の未処理取得用
+  - `idx_schedule_claims_helper_email` (helper_email, status)
+  - `idx_schedule_claims_schedule` (schedule_id)
+- **RLS**: ON（policy 未設定 → service_role のみアクセス可。Cloud Functions は service_role を使うため正常動作）
+- **トリガー**: `trg_schedule_claims_updated_at` BEFORE UPDATE → `set_schedule_claims_updated_at()` で `updated_at` を自動更新
+- **参照箇所**:
+  - `functions/src/self-matching/listCandidates.ts` (SELECT)
+  - `functions/src/self-matching/claimSchedule.ts` (INSERT)
+  - `functions/src/self-matching/withdrawClaim.ts` (UPDATE: status→'withdrawn')
+  - village-admin (別リポ予定): 管理者承認 UI からの SELECT/UPDATE
+- **備考**:
+  - `helper_email` への FK は付けていない（`helper_master` の PK が `helper_name` であり、既存テーブルの慣習に合わせて素 text）
+  - 論理削除運用なし（必要なら status='withdrawn'/'rejected' をソフトデリート的に使う）
 ### ✅ `helper_master`
 - **役割**: ヘルパー名・メールアドレス + 資格・運転可否のマスタ
 - **参考**: `sql/2026-03-29_create_helper_master.sql` + `sql/2026-04-29_helper_compatibility.sql`（資格列追加）
@@ -76,9 +107,11 @@
   - `license_idou` (bool, default false): 移動支援 修了
   - `capabilities_updated_at` (timestamptz, nullable): 本人が最後に資格・運転可否を更新した日時
   - `employment_type` (text, nullable, 2026-05-04 追加): 雇用形態。値は `'常勤'` / `'非常勤'` / null。`null` は「未設定」として扱い、village-admin の勤務形態一覧表では集計上「非常勤」とみなす。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`
+  - `enable_self_matching` (boolean, not null, default false, 2026-05-06 追加): セルフマッチング機能の参加可否フラグ。`true` のヘルパーだけが `/self-matching/` 画面で未割当予定に「入れます」を出せる。初期値は false。7 名（三枝/中野/久保田/伊藤信一/村岡/林/樋口）を `true` に設定済み
 - **使われ方**:
   - `schedule_web_v` の join で補完に使われる
   - ヘルパーセルフマッチング用に `license_*` 列が利用される（Phase 1A 開発中、`user_helper_compatibility` と組み合わせ）
+  - `enable_self_matching` がセルフマッチング画面のゲート判定に使われる（Phase 1 で導入。`functions/src/self-matching/listCandidates.ts` / `claimSchedule.ts`）
   - 居宅実績記録票の HTML 表示で `qualification` の値による色分けに使う想定（介護福祉士・初任者研修=青、重度訪問介護=赤）
   - 2026-05-04: village-admin の監査用「勤務形態一覧表」で `employment_type` を参照
 ---
