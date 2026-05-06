@@ -43,7 +43,7 @@ const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: true,
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
+    allowedHeaders: ["Content-Type", "Authorization"],
 }));
 app.use(express_1.default.json());
 app.get("/healthz", (_req, res) => {
