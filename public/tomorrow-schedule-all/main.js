@@ -49,6 +49,10 @@ function formatTimeRange(item) {
     return `${startTime}〜${endTime}`;
   }
 
+  if (startTime) {
+    return `${startTime}〜`;
+  }
+
   return "時間未設定";
 }
 
@@ -74,31 +78,108 @@ function renderEmpty() {
   emptyCardElement.classList.toggle("is-visible", shouldShowEmpty);
 }
 
+function groupScheduleItems(items) {
+  const groups = [];
+  const map = new Map();
+
+  (Array.isArray(items) ? items : []).forEach(function (item) {
+    const userName = String(item.userName || "").trim();
+    const startTime = String(item.startTime || "").trim();
+    const key = `${userName}${startTime}`;
+    const existing = map.get(key);
+    const entry = {
+      helperName: String(item.helperName || "").trim(),
+      startTime: item.startTime,
+      endTime: item.endTime,
+      haisha: item.haisha,
+      task: item.task,
+      summary: item.summary,
+    };
+
+    if (!existing) {
+      const group = {
+        userName: item.userName,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        helperEntries: [entry],
+      };
+      map.set(key, group);
+      groups.push(group);
+      return;
+    }
+
+    existing.helperEntries.push(entry);
+  });
+
+  return groups;
+}
+
+function renderHelperBlock(entry) {
+  return `
+    <div class="schedule-helper-block">
+      <div class="schedule-helper">${escapeHtml(getDisplayValue(entry.helperName))}</div>
+      <div class="schedule-details">
+        <div class="schedule-row">
+          <div class="schedule-label">🕒 時間</div>
+          <div class="schedule-value">${escapeHtml(formatTimeRange(entry))}</div>
+        </div>
+        <div class="schedule-row">
+          <div class="schedule-label">🚗 配車</div>
+          <div class="schedule-value">${escapeHtml(getDisplayValue(entry.haisha))}</div>
+        </div>
+        <div class="schedule-row">
+          <div class="schedule-label">📝 内容</div>
+          <div class="schedule-value">${escapeHtml(getDisplayValue(entry.task))}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderItems() {
   if (state.status !== "success" || state.items.length === 0) {
     scheduleListElement.innerHTML = "";
     return;
   }
 
-  scheduleListElement.innerHTML = state.items.map(function (item) {
+  const groups = groupScheduleItems(state.items);
+
+  scheduleListElement.innerHTML = groups.map(function (group) {
+    const entries = group.helperEntries;
+
+    if (entries.length <= 1) {
+      const entry = entries[0] || {};
+      return `
+        <article class="schedule-card">
+          <div class="schedule-time">${escapeHtml(formatTimeRange(entry))}</div>
+          <div class="schedule-helper">${escapeHtml(getDisplayValue(entry.helperName))}</div>
+          <div class="schedule-details">
+            <div class="schedule-row">
+              <div class="schedule-label">👤 利用者</div>
+              <div class="schedule-value">${escapeHtml(getDisplayValue(group.userName))}</div>
+            </div>
+            <div class="schedule-row">
+              <div class="schedule-label">🚗 配車</div>
+              <div class="schedule-value">${escapeHtml(getDisplayValue(entry.haisha))}</div>
+            </div>
+            <div class="schedule-row">
+              <div class="schedule-label">📝 内容</div>
+              <div class="schedule-value">${escapeHtml(getDisplayValue(entry.task))}</div>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    const blocks = entries.map(renderHelperBlock).join("");
+
     return `
-      <article class="schedule-card">
-        <div class="schedule-time">${escapeHtml(formatTimeRange(item))}</div>
-        <div class="schedule-helper">${escapeHtml(getDisplayValue(item.helperName))}</div>
-        <div class="schedule-details">
-          <div class="schedule-row">
-            <div class="schedule-label">👤 利用者</div>
-            <div class="schedule-value">${escapeHtml(getDisplayValue(item.userName))}</div>
-          </div>
-          <div class="schedule-row">
-            <div class="schedule-label">🚗 配車</div>
-            <div class="schedule-value">${escapeHtml(getDisplayValue(item.haisha))}</div>
-          </div>
-          <div class="schedule-row">
-            <div class="schedule-label">📝 内容</div>
-            <div class="schedule-value">${escapeHtml(getDisplayValue(item.task))}</div>
-          </div>
+      <article class="schedule-card schedule-card--multi">
+        <div class="schedule-row schedule-card__user">
+          <div class="schedule-label">👤 利用者</div>
+          <div class="schedule-value schedule-value--user">${escapeHtml(getDisplayValue(group.userName))}</div>
         </div>
+        <div class="schedule-helpers">${blocks}</div>
       </article>
     `;
   }).join("");

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>空き時間で支援に入る | ビレッジつばさ</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <a class="back-link" href="/">← ビレッジひろばに戻る</a>
+
+      <section class="panel hero">
+        <p class="eyebrow">Self-Matching</p>
+        <h1>空き時間で支援に入る</h1>
+        <p class="copy">
+          まだヘルパーが決まっていない予定の中から、入れそうなものに「入れます」と手を挙げてください。<br />
+          管理者が利用者さんに確認した上で正式に決定します。
+        </p>
+      </section>
+
+      <section class="panel email-panel">
+        <label class="label" for="helper-email">あなたのメールアドレス</label>
+        <div class="email-row">
+          <input
+            id="helper-email"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            placeholder="例: yourname@example.com"
+          />
+          <button id="load-button" type="button" class="primary-button">読み込む</button>
+        </div>
+        <p id="email-help" class="help-text">
+          初回は入力後「読み込む」をタップ。次回からは自動で保存されています。
+        </p>
+      </section>
+
+      <section id="status-panel" class="panel status-panel" hidden>
+        <p id="status-message"></p>
+      </section>
+
+      <section id="list-panel" class="panel list-panel" hidden>
+        <header class="list-head">
+          <h2 id="list-title">未割当の支援</h2>
+          <button id="refresh-button" type="button" class="ghost-button">🔄 更新</button>
+        </header>
+        <div id="list-meta" class="list-meta"></div>
+        <ul id="candidate-list" class="candidate-list"></ul>
+        <p id="empty-message" class="empty-message" hidden>
+          現時点で「入れます」と手を挙げられる予定はありません。<br />
+          時間が経ってからまた覗いてみてください。
+        </p>
+      </section>
+    </main>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

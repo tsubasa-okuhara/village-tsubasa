@@ -242,6 +242,14 @@ function renderItems() {
     const googleAdded = isCalAdded(state.date, index, "google");
     const appleAdded = isCalAdded(state.date, index, "apple");
 
+    const coHelpers = Array.isArray(item.coHelpers) ? item.coHelpers : [];
+    const coHelpersHtml = coHelpers.length > 0
+      ? `<div class="schedule-row">
+          <div class="schedule-label">🤝 合同</div>
+          <div class="schedule-value">${escapeHtml(coHelpers.join("・"))}</div>
+        </div>`
+      : "";
+
     return `
       <article class="schedule-card">
         <div class="schedule-time">${escapeHtml(formatTimeRange(item))}</div>
@@ -251,6 +259,7 @@ function renderItems() {
             <div class="schedule-label">👤 利用者</div>
             <div class="schedule-value">${escapeHtml(getDisplayValue(item.userName))}</div>
           </div>
+          ${coHelpersHtml}
           <div class="schedule-row">
             <div class="schedule-label">🚗 配車</div>
             <div class="schedule-value">${escapeHtml(getDisplayValue(item.haisha))}</div>

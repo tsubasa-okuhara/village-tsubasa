@@ -24,6 +24,7 @@
   - `source_key` (text): 元データキー（スプレッドシート側との同期キー）
   - `synced_to_sheet` (boolean, default false): スプレッドシートに反映済みか（2026-04-17 追加）。毎月 15 日の GAS トリガーが `false` の行を対象にまとめて流し込む設計
   - `synced_at` (timestamptz, nullable): シート書き込み完了時刻（2026-04-17 追加）。現状 GAS 側で更新していない（シート内の supabaseId 列で同期状態を判定する「シート状態ベース版」に切り替えたため、このカラムはデフォルト値のまま残る）
+  - `deleted_at` (timestamptz, nullable, default null): 論理削除フラグ（2026-04-26 追加）。`/schedule-editor/` から削除した予定はここに削除日時が入り、ゴミ箱画面から復元可能。一覧クエリは `WHERE deleted_at IS NULL` で絞る想定。partial index `idx_schedule_deleted_at` も追加済み
   - `created_at` / `updated_at` (timestamptz)
 - **制約**: pk = `id`。その他の unique/fk は未確認
 - **参照箇所**:
@@ -61,13 +62,62 @@
   - `functions/src/helperSummary.ts`
   - `functions/src/nextHelperSchedule.ts`
   - `functions/src/scheduledNotifications.ts`
+### ⚠️ `schedule_claims`
+- **役割**: ヘルパーセルフマッチング Phase 1 のコアテーブル。ヘルパーが「未割当予定に入れます」と意思表明した記録を保持
+- **作成日**: 2026-05-06（DDL は SQL Editor で直接実行、`schedule_claims` テーブル + 5 インデックス + updated_at トリガー + RLS ON）
+- **列**:
+  - `id` (uuid, PK, default `gen_random_uuid()`)
+  - `schedule_id` (uuid, NOT NULL): `schedule(id)` への FK、`on delete cascade`
+  - `helper_email` (text, NOT NULL): 申請したヘルパーのメール
+  - `status` (text, NOT NULL, default `'pending'`, CHECK in `'pending'/'approved'/'rejected'/'withdrawn'`)
+  - `priority_score` (numeric, nullable, default 0): 将来の優先度スコア用
+  - `note` (text, nullable): ヘルパーが添える任意メッセージ
+  - `created_at` / `updated_at` (timestamptz, NOT NULL, default `now()`)
+  - `decided_at` (timestamptz, nullable): 管理者の承認/却下時刻
+  - `decided_by` (text, nullable): 判定した管理者の email
+- **制約**:
+  - PK: `id`
+  - UNIQUE: `(schedule_id, helper_email)` — 同じヘルパーが同じ予定に二重申請不可
+  - FK: `schedule_id → schedule(id) on delete cascade`
+- **インデックス**:
+  - `idx_schedule_claims_pending` (status, created_at) WHERE `status = 'pending'` — 管理者画面の未処理取得用
+  - `idx_schedule_claims_helper_email` (helper_email, status)
+  - `idx_schedule_claims_schedule` (schedule_id)
+- **RLS**: ON（policy 未設定 → service_role のみアクセス可。Cloud Functions は service_role を使うため正常動作）
+- **トリガー**: `trg_schedule_claims_updated_at` BEFORE UPDATE → `set_schedule_claims_updated_at()` で `updated_at` を自動更新
+- **参照箇所**:
+  - `functions/src/self-matching/listCandidates.ts` (SELECT)
+  - `functions/src/self-matching/claimSchedule.ts` (INSERT)
+  - `functions/src/self-matching/withdrawClaim.ts` (UPDATE: status→'withdrawn')
+  - `functions/src/self-matching/adminPending.ts` (SELECT pending、2026-05-06 追加)
+  - `functions/src/self-matching/adminHistory.ts` (SELECT approved/rejected/withdrawn、2026-05-06 追加)
+  - `functions/src/self-matching/adminApprove.ts` (UPDATE: status→'approved'、`decided_at`/`decided_by` セット、同 schedule の他 pending を 'rejected' に一括更新、2026-05-06 追加)
+  - `functions/src/self-matching/adminReject.ts` (UPDATE: status→'rejected'、`decided_at`/`decided_by` セット、2026-05-06 追加)
+  - village-admin: `public/self-matching.html` + `public/self-matching.js` から village-tsubasa の admin API を Firebase Auth Bearer で叩く（2026-05-06 追加）
+- **備考**:
+  - `helper_email` への FK は付けていない（`helper_master` の PK が `helper_name` であり、既存テーブルの慣習に合わせて素 text）
+  - 論理削除運用なし（必要なら status='withdrawn'/'rejected' をソフトデリート的に使う）
 ### ✅ `helper_master`
-- **役割**: ヘルパー名とメールアドレスの対応マスタ
-- **参考**: `sql/2026-03-29_create_helper_master.sql`
+- **役割**: ヘルパー名・メールアドレス + 資格・運転可否のマスタ
+- **参考**: `sql/2026-03-29_create_helper_master.sql` + `sql/2026-04-29_helper_compatibility.sql`（資格列追加）
 - **列**:
   - `helper_name` (pk): `schedule.name` と一致させるヘルパー表示名
   - `helper_email`: 通知・予定紐付け用メール
-- **使われ方**: `schedule_web_v` の join で補完に使われる
+  - `qualification` (text, nullable): ヘルパーの主資格名（テキスト）。実値の例: `'介護福祉士'` / `'初任者研修'` / `'重度訪問介護'`。**資格レベルの優先順位は 介護福祉士 > 初任者研修 > 重度訪問介護**
+  - `can_drive` (bool, default false): 車の運転可否（2026-04-29 追加）
+  - `license_juuhou` (bool, default false): 重度訪問介護 修了
+  - `license_koudou` (bool, default false): 行動援護 修了
+  - `license_kyotaku` (bool, default false): 居宅介護 修了
+  - `license_idou` (bool, default false): 移動支援 修了
+  - `capabilities_updated_at` (timestamptz, nullable): 本人が最後に資格・運転可否を更新した日時
+  - `employment_type` (text, nullable, 2026-05-04 追加): 雇用形態。値は `'常勤'` / `'非常勤'` / null。`null` は「未設定」として扱い、village-admin の勤務形態一覧表では集計上「非常勤」とみなす。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`
+  - `enable_self_matching` (boolean, not null, default false, 2026-05-06 追加): セルフマッチング機能の参加可否フラグ。`true` のヘルパーだけが `/self-matching/` 画面で未割当予定に「入れます」を出せる。初期値は false。7 名（三枝/中野/久保田/伊藤信一/村岡/林/樋口）を `true` に設定済み
+- **使われ方**:
+  - `schedule_web_v` の join で補完に使われる
+  - ヘルパーセルフマッチング用に `license_*` 列が利用される（Phase 1A 開発中、`user_helper_compatibility` と組み合わせ）
+  - `enable_self_matching` がセルフマッチング画面のゲート判定に使われる（Phase 1 で導入。`functions/src/self-matching/listCandidates.ts` / `claimSchedule.ts`）
+  - 居宅実績記録票の HTML 表示で `qualification` の値による色分けに使う想定（介護福祉士・初任者研修=青、重度訪問介護=赤）
+  - 2026-05-04: village-admin の監査用「勤務形態一覧表」で `employment_type` を参照
 ---
 ## 2. 移動支援（move）系
 ### ⚠️ `schedule_tasks_move`
@@ -163,6 +213,12 @@
 - **備考**:
   - テーブル名の prefix/suffix が `schedule_tasks_move` と非対称 (`schedule_tasks_move` vs `home_schedule_tasks`)。将来統一する場合は要注意
   - CREATE 文はリポジトリに無い
+- **インデックス**:
+  - `uniq_home_schedule_tasks_manual` (partial UNIQUE, 2026-05-06 追加)
+    - 列: (service_date, start_time, end_time, user_name, helper_name, task)
+    - 条件: `WHERE schedule_id IS NULL`
+    - 目的: GAS `★サービス記録内容転送.gs` の再実行で同一業務キーの重複 INSERT が起きるのを DB レベルで拒否
+    - 関連 SQL: `sql/2026-05-06_uniq_home_schedule_tasks_manual.sql`
 ### ⚠️ `service_notes_home`
 - **役割**: 居宅介護の完成サービス記録（Excel 出力の元データ）
 - **列**:
@@ -356,12 +412,67 @@
 - **使用場所**: `functions/src/calmCheck.ts`, `public/calm-check/`
 - **ホーム画面**: `public/index.js` で pending 件数を取得し、連絡確認カード内にアラート表示
 ---
+## 8.5 利用者マスタ系（user-schedule-app）
+
+### 🔎 `client_users`
+- **役割（推定）**: 利用者の認証/識別マスタ。user-schedule-app のログインや
+  本人特定に使われている可能性が高い
+- **発見経緯**: 2026-04-25、RLS 移行 Phase 2 の調査で `~/Desktop/user-schedule-app/index.html:108` から
+  `.from('client_users')` 呼び出しが発見された
+- **列**: 未調査
+- **参照箇所**:
+  - user-schedule-app/index.html L108（操作種別未確認）
+- **CREATE 文**: 不明（リポジトリ内未確認）
+- **TODO**:
+  - [ ] 列構成の確認（Supabase Dashboard）
+  - [ ] index.html の前後コードを読んで操作種別を特定（SELECT のみ？INSERT もある？）
+  - [ ] `calm_check_targets.client_id` が参照する `clients` テーブルとの関係性確認
+- **RLS**: 2026-04-25 時点で OFF。Phase 3 で `FOR ALL TO anon` ポリシー予定
+  （`sql/enable_rls_schedule.sql`）
+
+---
+
+## 8.6 未文書化テーブル（2026-04-25 発見）
+
+以下のテーブルは Supabase に存在するが、本ドキュメントで用途が把握できていない。
+RLS 移行 Phase 0 の診断 SQL で初めて存在が判明。
+
+### 🔎 `helper_priority`
+- **状態**: RLS 既に ON、ただし**「Always True」相当のゆるいポリシー付き**（2026-04-25 Security Advisor で判明）
+- **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
+- **推定**: ヘルパー優先度マスタ？
+- **TODO**: 用途・列構成・参照箇所を奥原さんに確認 → 必要なら厳格なポリシーに置換
+
+### 🔎 `process_log`
+- **状態**: RLS 既に ON、ただし**「Always True」相当のゆるいポリシー付き**（2026-04-25 Security Advisor で判明）
+- **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
+- **推定**: 何らかの処理ログ？
+- **TODO**: 用途・列構成・参照箇所を奥原さんに確認 → 必要なら厳格なポリシーに置換
+
+### ✅ `receipts` / `receipt_categories` / `receipt_audit_log`
+- **状態**: RLS 既に ON
+- **用途**: Streamlit 経費精算アプリ（`v-sche-receipt.streamlit.app`）の格納先
+- **参考**: `supabase_schema.sql` / `supabase_migration_*.sql`（CHANGELOG 2026-04-19）
+- 本リポからは触らない（Streamlit アプリ側で管理）
+
+---
+
 ## 9. village-admin 専用テーブル（別リポジトリ管理）
 以下は `village-admin` リポジトリ側の `sql/create_admin_tables.sql` で管理されているテーブル。village-tsubasa からは参照していないが、同じ Supabase プロジェクトを共有しているため記録:
 ### ✅ `admin_users`
-- **役割**: 管理ダッシュボードにアクセスできる管理者のメール allow-list
-- **参考**: `village-admin/sql/create_admin_tables.sql`
-- **参照箇所**: `village-admin/functions/src/middleware/adminAuth.ts`
+- **役割**: 管理ダッシュボードにアクセスできる管理者のメール allow-list +
+  `/schedule-editor/`（村のつばさ側）の編集権限管理
+- **列**:
+  - `email` (text, NOT NULL, おそらく PK)
+  - `created_at` (timestamptz, NOT NULL, default `now()`)
+  - `can_edit_schedule` (boolean, NOT NULL, default `false`): 2026-04-26 追加。
+    `/schedule-editor/` で編集できるか。`true` の人だけ編集モード、`false` は
+    閲覧のみ。既存の「ダッシュボード閲覧 allow-list」と組み合わせる二段構え
+- **参考**: `village-admin/sql/create_admin_tables.sql`、
+  村のつばさ側の追加列は `sql/2026-04-26_schedule_editor_phase_a.sql`
+- **参照箇所**:
+  - `village-admin/functions/src/middleware/adminAuth.ts`（既存、ダッシュボード認証）
+  - 村のつばさ `functions/src/scheduleEditor/auth.ts`（Phase C で追加予定）
 ### ✅ `admin_error_alerts`
 - **役割**: 管理ダッシュボードのエラーアラート管理
 - **参考**: `village-admin/sql/create_admin_tables.sql`
@@ -422,8 +533,22 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - `service_action_logs_home`
 村上翼さんからの提案: 次回本番反映のタイミングで Supabase ダッシュボードから実スキーマをエクスポートして `sql/` 配下に取り込む。そうすれば RLS / trigger / index の情報も追えるようになる。
 ### RLS（Row Level Security）設定
-- `schedule` は RLS OFF を確認済み（2026-04-17）。ただし anon ロールが INSERT 後の SELECT を返せない事例あり（村上翼さん確認）
-- 他テーブルの RLS 状況は未確認
+- **2026-04-25**: ✅ **全テーブルの RLS 移行完了**（`docs/RLS_MIGRATION_PLAN.md` 参照）
+  - Phase 1: Group A 17テーブル（service_role 専用、ポリシー無し）
+  - Phase 3: Group B 4テーブル（anon 全許可ポリシー、選択肢A）
+    - `schedule` `FOR ALL TO anon`、`helper_master` `FOR SELECT TO anon`、
+      `notifications` `FOR INSERT TO anon`、`client_users` `FOR ALL TO anon`
+  - 既に RLS ON だった5テーブル（`helper_priority` / `process_log` /
+    receipt_*）はそのまま
+  - 全 4 アプリ（利用者・ヘルパー2画面・管理）動作確認 OK
+- 過去の経緯:
+  - 2026-04-17: `schedule` の RLS OFF を確認。anon INSERT 後の SELECT が
+    返らない事例あり（村上翼さん確認）
+  - 2026-04-24: Supabase から `rls_disabled_in_public` /
+    `exposed_sensitive_data` 警告メール到来。段階移行計画を起草
+  - 2026-04-25: Phase 1 初回適用時に管理ダッシュボード破損 → ロールバック →
+    村のつばさ Firebase Secret に anon キーが入っていた事故を発見・修正 →
+    Phase 1 / Phase 3 ともに適用成功
 ### `service_notes_home` の独自フォーマット依存
 - `memo` と `final_note` に独自フォーマットが埋め込まれていて、village-admin 側の `parseMemo` / `parseTimeFromFinalNote` が依存している
 - village-tsubasa 側で保存形式を変更する場合は、村上さんの admin ダッシュボードが壊れるので事前共有が必要
@@ -432,6 +557,8 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - カラム自体は残してあるので、将来必要になれば GAS 側で `sbMarkSynced_()` を有効化すれば使える
 ---
 ## 更新履歴
+- 2026-05-06: `home_schedule_tasks` に partial UNIQUE INDEX `uniq_home_schedule_tasks_manual` を追加。キー: (service_date, start_time, end_time, user_name, helper_name, task)、条件: `WHERE schedule_id IS NULL`。GAS `★サービス記録内容転送.gs` の重複 INSERT を DB レベルで拒否。永沢様 2026-05-01 分の重複事故（11時間差で2回投入）への根本対策。CREATE 文: `sql/2026-05-06_uniq_home_schedule_tasks_manual.sql`。ルール 2「追加は OK / 既存変更しない」に該当（既存列・既存制約は無変更、partial INDEX 追加のみ）
+- 2026-05-04: `helper_master.employment_type` (text, nullable) を追加。村のつばさ admin の監査用「勤務形態一覧表」で常勤/非常勤を表示するため。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`。ルール 2「nullable な列追加」に該当
 - 2026-04-11: 初版作成
 - 2026-04-11: `schedule` テーブルの列定義・参照箇所・RLS 上の注意点を追記（村上翼 / village-admin チャットからの情報反映）
 - 2026-04-11: move / home 系（`schedule_tasks_move`, `service_notes_move`, `move_check_logs`, `home_schedule_tasks`, `service_notes_home`, `service_action_logs_home`）を `functions/src/` から読み取って詳細化
@@ -439,3 +566,8 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - 2026-04-13: `training_reports` テーブル追加（研修報告 + 管理者お知らせ統合）。CREATE 文は `sql/create_training_reports.sql`
 - 2026-04-14: `calm_check_targets` / `calm_checks` テーブル追加（落ち着き確認システム）。CREATE 文は `sql/create_calm_checks.sql`
 - 2026-04-17: `schedule` テーブルに `synced_to_sheet` (boolean) / `synced_at` (timestamptz) を追加。スプレッドシートの `SUPABASE_ID` 列位置を Q列（offset 13）→ W列（offset 19）に変更。GAS 「スケジュール逆同期」に月次自動化（`monthlySheetAutoCreate_` / `flushScheduleToSheet_` / `installMonthlyTrigger_`）を追加。毎月 15 日 00:05 に翌月シート自動生成 + Supabase 未反映分の流し込みを実行。`sheet_auto_create.gs` は「シート状態ベース版」で実装。GAS スクリプトプロパティの SUPABASE_URL が別プロジェクトを指していた事故を修正し、正しい service_role キーに更新
+- 2026-04-24: RLS 段階移行計画を `docs/RLS_MIGRATION_PLAN.md` に起草。診断 SQL (`sql/check_rls_status.sql`)、Phase 1 適用 SQL (`sql/enable_rls_group_a.sql`、23 テーブル対象)、Phase 3 雛形 SQL (`sql/enable_rls_schedule.sql`、選択肢A/B を併記した DRAFT) を追加。Supabase への適用は未実施
+- 2026-04-25: RLS 移行 Phase 2 完了。user-schedule-app の4 HTML を grep して anon アクセスパターン確定。`notifications` を Group A → B に変更（`schedule.html` から anon INSERT されるため）。`client_users` テーブルを発見し §8.5 に追加（user-schedule-app/index.html L108 で参照、CREATE 文・列構成は未調査）。`sql/enable_rls_schedule.sql` を選択肢A 確定版に書き換え（`schedule` / `helper_master` / `notifications` / `client_users` の4テーブル対象）。Supabase への適用は未実施
+- 2026-04-25: RLS 移行 Phase 0（診断）実行。Supabase の public スキーマに **27 オブジェクト**（テーブル26 + ビュー1）存在を確認。RLS ON は5個（`helper_priority` / `process_log` / `receipts` / `receipt_categories` / `receipt_audit_log`）、OFF は22個。新発見テーブル `helper_priority` / `process_log` を §8.6 に追記（用途未確認）。`contracts` 5テーブルは Supabase 未作成（`sql/create_contracts.sql` 未適用）であることが判明 — Phase 1 SQL は `IF EXISTS` で防御的に対応
+- 2026-04-25 夜: ✅ **RLS 移行 全フェーズ完了**。`sql/enable_rls_group_a.sql`（Phase 1、17 テーブル）と `sql/enable_rls_schedule.sql`（Phase 3、4 テーブル＋4 ポリシー）を Supabase で適用。途中で village-admin の Firebase Secret に anon キーが入っていた事故を発見・修正（同 CHANGELOG 参照）。全 4 アプリ動作確認 OK
+- 2026-04-25 夜: Security Advisor クリーンアップ。`schedule_web_v` を `security_invoker = true` に変更（Errors 1→0）、public スキーマの5関数に `SET search_path = pg_catalog, public, pg_temp` 設定（Function Search Path Mutable 警告解消、Warnings 11→6）。残った6警告は Phase 3 の意図的な FOR ALL ポリシーや Firebase Auth 利用のため無関係なものだけで、実質的に追加対応不要

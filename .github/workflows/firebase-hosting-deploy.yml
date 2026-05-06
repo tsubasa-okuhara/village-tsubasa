@@ -1,0 +1,87 @@
+name: Deploy Reminder
+
+on:
+  push:
+    branches:
+      - main
+      - claude/setup-multi-app-dev-1y2PR
+    paths:
+      - 'public/**'
+      - 'firebase.json'
+      - '.firebaserc'
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check menu links exist
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r m; do
+            path=$(echo "$m" | sed 's|href="/|public/|;s|/"$||')
+            if [ ! -f "$path/index.html" ]; then
+              echo "MISSING: $path/index.html (referenced by public/index.html)"
+              missing=$((missing+1))
+            fi
+          done < <(grep -oE 'href="/[a-zA-Z0-9_-]+/"' public/index.html | sort -u)
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing menu link(s) point to missing pages"
+            exit 1
+          fi
+          echo "All menu links OK"
+
+      - name: Create deploy reminder issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          COMPARE_URL: ${{ github.event.compare }}
+        run: |
+          set -euo pipefail
+          short="${SHA:0:7}"
+          msg=$(git log -1 --pretty=%s "$SHA")
+          author=$(git log -1 --pretty=%an "$SHA")
+
+          title="🚀 デプロイ待ち: ${short} (${BRANCH})"
+
+          {
+            echo "\`public/\` に変更が入りました。Firebase Hosting にデプロイしてください。"
+            echo
+            echo "## 変更内容"
+            echo "- **コミット**: \`${short}\`"
+            echo "- **メッセージ**: ${msg}"
+            echo "- **ブランチ**: ${BRANCH}"
+            echo "- **作者**: ${author}"
+            if [ -n "${COMPARE_URL:-}" ]; then
+              echo "- **差分**: ${COMPARE_URL}"
+            fi
+            echo
+            echo "## デプロイ手順"
+            echo '```bash'
+            echo "cd <リポジトリのパス>"
+            echo "git pull"
+            echo "firebase deploy --only hosting:village-tsubasa"
+            echo '```'
+            echo
+            echo "iPhoneからの場合: Termiusで Mac にSSH → 上のコマンドを実行。"
+            echo
+            echo "## 終わったら"
+            echo "このIssueを閉じてください 👍"
+          } > /tmp/issue_body.md
+
+          gh issue create \
+            --repo "$REPO" \
+            --title "$title" \
+            --body-file /tmp/issue_body.md \
+            --assignee tsubasa-okuhara

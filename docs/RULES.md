@@ -61,7 +61,10 @@
 - `SUPABASE_SCHEMA.md` の **⚠️ / ✅ 付きテーブル** に対する INSERT/UPDATE の挙動を変える
 - 特に **`service_notes_move.sent_at`** / **`service_notes_home.final_note`・`memo`** / **`training_reports` の既存列** / **`schedule` テーブル** — これらは明確に複数アプリが触る
 - `schedule_web_v` ビューの列構成を変える
-- GAS（「スケジュール逆同期」「全体スケジュール」）のロジックを変える
+- GAS のロジックを変える:
+  - **奥原管理（git で保管・触ってOK）**: 「スケジュール逆同期」 / 「【ビレッジつばさ】全体スケジュール」standalone
+  - **伊藤さん管理（触らない）**: 「全体スケジュール」スプレッドシートにバインドされた **「無題のプロジェクト」**（git にも取り込まない）
+  - 全体マップは `gas/README.md` 参照
 - Firebase Functions の Scheduler ジョブ（`notifyTodaySchedule` / `notifyTomorrowSchedule`）を変える
 
 チャットの場合は **AskUserQuestion** で奥原さんに選択肢を出して確認。
@@ -108,6 +111,7 @@
 | `schedule_tasks_move` のカラム名 | 正規は `service_date`。`moveCheckService.ts:52` に `date` 参照のバグ疑いあり（2026-04 時点、未修正） |
 | `schedule_web_v` ビュー | `functions/src/schedule*.ts` 複数ファイルから参照。列削除不可 |
 | Supabase service_role キー | GAS スクリプトプロパティ `SUPABASE_SERVICE_KEY` に保存。**誤って別プロジェクトのキーを入れる事故が過去に発生**（2026-04-17 修正）。URL と一緒にチェックする |
+| Firebase Functions Secret のキー名/値ミスマッチ | `village-admin` の `SUPABASE_SERVICE_ROLE_KEY` という Secret 名で **anon キー**が保存されていた事故（2026-04-25 修正）。RLS が OFF の間は気付けない隠れバグ。検証コマンド: `firebase functions:secrets:access SUPABASE_SERVICE_ROLE_KEY --project XXX \| node -e "const t=require('fs').readFileSync(0,'utf8').trim(); const j=JSON.parse(Buffer.from(t.split('.')[1],'base64url').toString()); console.log('role:', j.role, '\| ref:', j.ref);"` で role と ref を確認 |
 
 ## ルール8. 運用の段階化
 

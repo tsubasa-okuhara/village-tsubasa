@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.selfMatchingRouter = void 0;
+const express_1 = require("express");
+const claimSchedule_1 = require("./claimSchedule");
+const listCandidates_1 = require("./listCandidates");
+const withdrawClaim_1 = require("./withdrawClaim");
+exports.selfMatchingRouter = (0, express_1.Router)();
+exports.selfMatchingRouter.get("/candidates", listCandidates_1.handleListSelfMatchingCandidates);
+exports.selfMatchingRouter.post("/claim", claimSchedule_1.handleClaimSchedule);
+exports.selfMatchingRouter.post("/withdraw", withdrawClaim_1.handleWithdrawClaim);

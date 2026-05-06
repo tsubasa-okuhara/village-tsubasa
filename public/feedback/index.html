@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>声のポスト - ビレッジひろば</title>
+    <style>
+      :root {
+        --bg: #fffdf8;
+        --panel: #ffffff;
+        --line: #e4d5bf;
+        --text: #3e342f;
+        --muted: #72655d;
+        --accent: #d5bb93;
+        --accent-strong: #c7a773;
+        --accent-soft: #f3eadc;
+        --success: #587960;
+        --success-soft: #e8f0ea;
+        --danger: #b54d59;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(235, 221, 198, 0.6), transparent 28%),
+          radial-gradient(circle at top right, rgba(247, 240, 225, 0.95), transparent 34%),
+          linear-gradient(180deg, #fffefb 0%, var(--bg) 42%, #f8f3ea 100%);
+      }
+
+      .page {
+        width: min(640px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 24px 0 40px;
+      }
+
+      .back-home-btn {
+        display: inline-block;
+        margin-bottom: 16px;
+        padding: 10px 20px;
+        background: #6b4c3b;
+        color: #fff;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 12px;
+        border: 2px solid #5a3e2f;
+        box-shadow: 0 2px 8px rgba(107, 76, 59, 0.18);
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+      .back-home-btn:hover {
+        background: #5a3e2f;
+        box-shadow: 0 4px 12px rgba(107, 76, 59, 0.28);
+      }
+      .back-home-btn:active {
+        background: #4a3025;
+      }
+
+      .hero {
+        text-align: center;
+        margin-bottom: 28px;
+      }
+      .hero__icon {
+        font-size: 2.4rem;
+        margin-bottom: 8px;
+      }
+      .hero h1 {
+        font-size: 1.5rem;
+        margin: 0 0 8px;
+        color: var(--text);
+      }
+      .hero p {
+        font-size: 0.92rem;
+        color: var(--muted);
+        margin: 0;
+        line-height: 1.6;
+      }
+
+      .privacy-notice {
+        background: var(--accent-soft);
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 24px;
+        font-size: 0.88rem;
+        color: var(--text);
+        line-height: 1.6;
+      }
+      .privacy-notice strong {
+        color: var(--accent-strong);
+      }
+
+      .form-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 8px 24px rgba(126, 103, 86, 0.06);
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+      .form-group label {
+        display: block;
+        font-weight: 700;
+        font-size: 0.92rem;
+        margin-bottom: 8px;
+        color: var(--text);
+      }
+      .form-group .hint {
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-top: 2px;
+        margin-bottom: 8px;
+      }
+
+      .category-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .category-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: var(--accent-soft);
+        border: 2px solid transparent;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--text);
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .category-btn:hover {
+        border-color: var(--accent);
+      }
+      .category-btn.selected {
+        border-color: var(--accent-strong);
+        background: #fff;
+      }
+      .category-btn .cat-icon { font-size: 1.1rem; }
+
+      textarea {
+        width: 100%;
+        min-height: 160px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        resize: vertical;
+        font-family: inherit;
+        color: var(--text);
+        background: #fffefb;
+      }
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent-strong);
+        box-shadow: 0 0 0 3px rgba(197, 167, 115, 0.15);
+      }
+      textarea::placeholder {
+        color: #b5a898;
+      }
+
+      .char-count {
+        text-align: right;
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .char-count.over { color: var(--danger); font-weight: 700; }
+
+      .submit-btn {
+        display: block;
+        width: 100%;
+        padding: 14px;
+        background: var(--accent-strong);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.15s;
+      }
+      .submit-btn:hover { background: #b89660; }
+      .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .result-message {
+        margin-top: 16px;
+        padding: 14px 18px;
+        border-radius: 10px;
+        font-size: 0.92rem;
+        line-height: 1.5;
+        display: none;
+      }
+      .result-message.success {
+        display: block;
+        background: var(--success-soft);
+        color: var(--success);
+      }
+      .result-message.error {
+        display: block;
+        background: #f9e6e9;
+        color: var(--danger);
+      }
+
+      .sending-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(255, 253, 248, 0.85);
+        z-index: 100;
+        place-items: center;
+      }
+      .sending-overlay.active {
+        display: grid;
+      }
+      .sending-content {
+        text-align: center;
+      }
+      .sending-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--line);
+        border-top-color: var(--accent-strong);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 16px;
+      }
+      .sending-text {
+        font-size: 0.95rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .resolved-section {
+        margin-top: 36px;
+        padding-top: 28px;
+        border-top: 1px solid var(--line);
+      }
+      .resolved-title {
+        font-size: 1.15rem;
+        margin: 0 0 6px;
+        color: var(--text);
+      }
+      .resolved-subtitle {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin: 0 0 18px;
+      }
+      .resolved-list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .resolved-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 18px;
+        box-shadow: 0 4px 12px rgba(126, 103, 86, 0.04);
+      }
+      .resolved-card__header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .resolved-card__cat {
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 8px;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+      }
+      .resolved-card__date {
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .resolved-card__voice {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: var(--text);
+        margin-bottom: 10px;
+      }
+      .resolved-card__reply {
+        background: #e8f0ea;
+        border-radius: 8px;
+        padding: 10px 14px;
+        border-left: 3px solid var(--success);
+      }
+      .resolved-card__reply-label {
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: var(--success);
+        margin-bottom: 3px;
+      }
+      .resolved-card__reply-body {
+        font-size: 0.88rem;
+        line-height: 1.6;
+        color: var(--text);
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <a href="/" class="back-home-btn">← ビレッジひろばに戻る</a>
+
+      <div class="hero">
+        <div class="hero__icon">📮</div>
+        <h1>声のポスト</h1>
+        <p>
+          アプリのこと、業務のこと、なんでも気軽に声を届けてください。<br />
+          内容はAIが丁寧に整えてから届くので、安心して書いてくださいね。
+        </p>
+      </div>
+
+      <div class="privacy-notice">
+        <strong>完全匿名です</strong> — 誰が書いたかは一切記録されません。名前やメールアドレスも保存されません。安心してご利用ください。
+      </div>
+
+      <div class="form-card">
+        <div class="form-group">
+          <label>カテゴリ</label>
+          <p class="hint">一番近いものを選んでください</p>
+          <div class="category-grid">
+            <button type="button" class="category-btn selected" data-cat="improvement">
+              <span class="cat-icon">💡</span> 改善の提案
+            </button>
+            <button type="button" class="category-btn" data-cat="bug">
+              <span class="cat-icon">🐛</span> 不具合の報告
+            </button>
+            <button type="button" class="category-btn" data-cat="request">
+              <span class="cat-icon">🙋</span> 機能のリクエスト
+            </button>
+            <button type="button" class="category-btn" data-cat="general">
+              <span class="cat-icon">💬</span> その他
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="feedback-text">メッセージ</label>
+          <p class="hint">思ったままに書いてください。AIが丁寧に整えます。</p>
+          <textarea
+            id="feedback-text"
+            placeholder="例: ○○の画面がちょっと使いにくいと感じました。△△のようになるともっと便利だと思います。"
+            maxlength="2000"
+          ></textarea>
+          <div class="char-count"><span id="char-current">0</span> / 2000</div>
+        </div>
+
+        <button type="button" class="submit-btn" id="submit-btn">声を届ける</button>
+
+        <div class="result-message" id="result-message"></div>
+      </div>
+    </main>
+
+    <section class="resolved-section" id="resolved-section" style="display: none;">
+      <h2 class="resolved-title">みんなの声と対応</h2>
+      <p class="resolved-subtitle">過去に届いた声と、その対応を紹介します。</p>
+      <div id="resolved-list" class="resolved-list"></div>
+    </section>
+
+    <div class="sending-overlay" id="sending-overlay">
+      <div class="sending-content">
+        <div class="sending-spinner"></div>
+        <div class="sending-text">送信中…</div>
+      </div>
+    </div>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

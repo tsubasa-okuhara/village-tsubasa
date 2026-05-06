@@ -26,7 +26,9 @@ import {
 
 import { serviceRecordsMoveRouter } from "./service-records-move/routes";
 import { serviceRecordsStructuredRouter } from "./service-records-structured/routes";
-import { contractsRouter } from "./contracts/routes";
+import { selfMatchingRouter } from "./self-matching/routes";
+// import { contractsRouter } from "./contracts/routes";
+// ↑ CloudSign secret 未設定のため一時無効化（次回チャットで CloudSign 設定後に復活）
 
 import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
 import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
@@ -66,13 +68,20 @@ import {
   handleRemoveCalmCheckTarget,
 } from "./calmCheck";
 
+import { handleScheduleEditorAuth } from "./scheduleEditor/auth";
+import { handleScheduleEditorUpdate } from "./scheduleEditor/update";
+import { handleScheduleEditorCreate } from "./scheduleEditor/create";
+import { handleScheduleEditorDelete } from "./scheduleEditor/delete";
+import { handleScheduleEditorRestore } from "./scheduleEditor/restore";
+import { handleScheduleEditorListTrash } from "./scheduleEditor/listTrash";
+
 const app = express();
 
 app.use(
   cors({
     origin: true,
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 app.use(express.json());
@@ -90,9 +99,13 @@ app.use("/api/service-records-move", serviceRecordsMoveRouter);
 app.use("/service-records-structured", serviceRecordsStructuredRouter);
 app.use("/api/service-records-structured", serviceRecordsStructuredRouter);
 
+app.use("/self-matching", selfMatchingRouter);
+app.use("/api/self-matching", selfMatchingRouter);
+
 // 電子契約（設計書: docs/CONTRACTS_DESIGN.md, 実装: functions/src/contracts/）
-app.use("/contracts", contractsRouter);
-app.use("/api/contracts", contractsRouter);
+// CloudSign secret 未設定のため一時無効化
+// app.use("/contracts", contractsRouter);
+// app.use("/api/contracts", contractsRouter);
 
 app.get("/push/public-key", handleGetPushPublicKey);
 app.get("/api/push/public-key", handleGetPushPublicKey);
@@ -179,6 +192,27 @@ app.post("/calm-checks/targets", handleAddCalmCheckTarget);
 app.post("/api/calm-checks/targets", handleAddCalmCheckTarget);
 app.post("/calm-checks/targets/remove", handleRemoveCalmCheckTarget);
 app.post("/api/calm-checks/targets/remove", handleRemoveCalmCheckTarget);
+
+// スケジュール編集 HTML（/schedule-editor/）の認証
+// admin_users.can_edit_schedule = true のメールアドレスだけ通す
+app.get("/schedule-editor/auth", handleScheduleEditorAuth);
+app.get("/api/schedule-editor/auth", handleScheduleEditorAuth);
+
+// スケジュール編集（Phase C）: セル編集 + 楽観ロック保存
+app.post("/schedule-editor/update", handleScheduleEditorUpdate);
+app.post("/api/schedule-editor/update", handleScheduleEditorUpdate);
+
+// スケジュール編集（Phase D1）: 論理削除 / 復元 / ゴミ箱一覧
+app.post("/schedule-editor/delete", handleScheduleEditorDelete);
+app.post("/api/schedule-editor/delete", handleScheduleEditorDelete);
+app.post("/schedule-editor/restore", handleScheduleEditorRestore);
+app.post("/api/schedule-editor/restore", handleScheduleEditorRestore);
+app.get("/schedule-editor/trash", handleScheduleEditorListTrash);
+app.get("/api/schedule-editor/trash", handleScheduleEditorListTrash);
+
+// スケジュール編集（Phase D2）: 行追加
+app.post("/schedule-editor/create", handleScheduleEditorCreate);
+app.post("/api/schedule-editor/create", handleScheduleEditorCreate);
 
 // 毎朝7時（JST）に今日の予定を通知
 export const notifyTodaySchedule = onSchedule(

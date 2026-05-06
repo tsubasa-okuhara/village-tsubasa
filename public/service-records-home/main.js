@@ -4,7 +4,11 @@ const HOME_SAVE_API = "/api/service-records-home/save";
 
 const HOME_BODY_CARE_PRIMARY_ITEMS = [
   { label: "排泄介助", children: ["トイレ", "おむつ", "ポータブルトイレ利用"] },
-  { label: "食事介助", children: ["全量", "一部介助", "見守り"] },
+  {
+    label: "食事介助",
+    children: ["全介", "一部介助", "見守り"],
+    amountGroup: { label: "食事量", options: ["全量", "少量", "拒否"] },
+  },
   { label: "清拭", children: ["全清拭", "上半身", "下半身", "陰部清浄"] },
   {
     label: "入浴介助",
@@ -319,6 +323,26 @@ function getBodyCareSubItems(checklistElement) {
   return result;
 }
 
+// 食事介助 など amountGroup を持つ主項目で選択された値を { 主項目: 値 } で返す
+function getBodyCareAmounts(checklistElement) {
+  const result = {};
+
+  Array.from(
+    checklistElement.querySelectorAll('input[data-level="amount"]:checked'),
+  ).forEach(function (inputElement) {
+    const parentLabel = String(
+      inputElement.getAttribute("data-parent") || "",
+    ).trim();
+    const value = String(inputElement.value || "").trim();
+
+    if (parentLabel && value) {
+      result[parentLabel] = value;
+    }
+  });
+
+  return result;
+}
+
 function getSelectedItems(checklistElement) {
   if (isBodyCareCategory(state.selectedCategory)) {
     return getBodyCarePrimaryItems(checklistElement);
@@ -327,17 +351,32 @@ function getSelectedItems(checklistElement) {
   return getSimpleCheckedItems(checklistElement);
 }
 
-function getBodyCareItemsForSummary(primaryItems, subItems, otherDetail) {
+function getBodyCareItemsForSummary(
+  primaryItems,
+  subItems,
+  otherDetail,
+  amounts,
+) {
+  const safeAmounts = amounts && typeof amounts === "object" ? amounts : {};
   const itemTexts = primaryItems.map(function (primaryLabel) {
     const childItems = Array.isArray(subItems[primaryLabel])
       ? subItems[primaryLabel]
       : [];
+    const segments = childItems.slice();
+    const amountValue =
+      typeof safeAmounts[primaryLabel] === "string"
+        ? safeAmounts[primaryLabel].trim()
+        : "";
 
-    if (childItems.length === 0) {
+    if (amountValue) {
+      segments.push(`量:${amountValue}`);
+    }
+
+    if (segments.length === 0) {
       return primaryLabel;
     }
 
-    return `${primaryLabel}(${childItems.join("、")})`;
+    return `${primaryLabel}(${segments.join("、")})`;
   });
 
   const normalizedOtherDetail = normalizeOptionalText(otherDetail);
@@ -354,9 +393,11 @@ function deriveAssistLevel(primaryItems, subItems) {
     primaryItems,
     subItems,
     null,
+    null,
   ).join(" ");
 
-  if (detailTexts.includes("全介助")) {
+  // 「全介助」は入浴介助、「全介」は食事介助の語。両方とも全介助レベルとして扱う
+  if (detailTexts.includes("全介助") || detailTexts.includes("全介")) {
     return "全介助";
   }
 
@@ -526,6 +567,7 @@ function buildStructuredLog(
   subItems,
   otherDetail,
   freeMemo,
+  amounts,
 ) {
   if (!isBodyCareCategory(category) || primaryItems.length === 0) {
     return undefined;
@@ -535,6 +577,7 @@ function buildStructuredLog(
     primaryItems,
     subItems,
     otherDetail,
+    amounts,
   );
   const actionDetail = actionItems.join(", ");
 
@@ -557,10 +600,12 @@ function buildMemoText(
   freeMemo,
   primaryItems,
   subItems,
+  amounts,
 ) {
   if (isBodyCareCategory(category)) {
     const normalizedOtherDetail = normalizeOptionalText(otherDetail);
     const normalizedFreeMemo = normalizeOptionalText(freeMemo);
+    const safeAmounts = amounts && typeof amounts === "object" ? amounts : {};
     const lines = [
       `区分: ${category}`,
       `主チェック: ${primaryItems.length > 0 ? primaryItems.join(", ") : "選択なし"}`,
@@ -580,6 +625,25 @@ function buildMemoText(
     if (childLines.length > 0) {
       lines.push("子チェック:");
       lines.push(...childLines);
+    }
+
+    // 食事介助の食事量など、主項目に紐づく独立属性を別 prefix で記録
+    const amountLines = primaryItems
+      .filter(function (primaryLabel) {
+        return (
+          typeof safeAmounts[primaryLabel] === "string" &&
+          safeAmounts[primaryLabel].trim() !== ""
+        );
+      })
+      .map(function (primaryLabel) {
+        if (primaryLabel === "食事介助") {
+          return `食事量: ${safeAmounts[primaryLabel].trim()}`;
+        }
+        return `${primaryLabel}量: ${safeAmounts[primaryLabel].trim()}`;
+      });
+
+    if (amountLines.length > 0) {
+      lines.push(...amountLines);
     }
 
     if (normalizedOtherDetail) {
@@ -624,6 +688,7 @@ function buildFinalNoteText(
   freeMemo,
   primaryItems,
   subItems,
+  amounts,
 ) {
   const userName = getDisplayValue(task?.user_name, "利用者");
   const serviceDate = getDisplayValue(task?.service_date, "本日");
@@ -631,7 +696,7 @@ function buildFinalNoteText(
   const normalizedOtherDetail = normalizeOptionalText(otherDetail);
   const normalizedFreeMemo = normalizeOptionalText(freeMemo);
   const detailTexts = isBodyCareCategory(category)
-    ? getBodyCareItemsForSummary(primaryItems, subItems, otherDetail)
+    ? getBodyCareItemsForSummary(primaryItems, subItems, otherDetail, amounts)
     : checkedItems.slice();
 
   if (normalizedOtherDetail && !isBodyCareCategory(category)) {
@@ -681,6 +746,32 @@ function renderChecklist(
           })
           .join("");
 
+        const amountGroupHtml = item.amountGroup
+          ? `<div class="nested-checklist__amount-group" data-amount-group-for="${escapeHtml(item.label)}">
+              <div class="nested-checklist__amount-label">${escapeHtml(item.amountGroup.label)}</div>
+              <div class="nested-checklist__amount-options">
+                ${item.amountGroup.options
+                  .map(function (optionLabel, optionIndex) {
+                    const amountId = `home-body-amount-${index}-${optionIndex}`;
+                    return `
+                  <label class="nested-checklist__amount-option" for="${escapeHtml(amountId)}">
+                    <input
+                      id="${escapeHtml(amountId)}"
+                      type="radio"
+                      name="home-body-amount-${index}"
+                      value="${escapeHtml(optionLabel)}"
+                      data-level="amount"
+                      data-parent="${escapeHtml(item.label)}"
+                    />
+                    <span>${escapeHtml(optionLabel)}</span>
+                  </label>
+                `;
+                  })
+                  .join("")}
+              </div>
+            </div>`
+          : "";
+
         return `
         <div class="nested-checklist__group">
           <label class="checkbox-item" for="${escapeHtml(primaryId)}">
@@ -697,6 +788,7 @@ function renderChecklist(
               ? `<div class="nested-checklist__children" data-subgroup-for="${escapeHtml(item.label)}">${childrenHtml}</div>`
               : ""
           }
+          ${amountGroupHtml}
         </div>
       `;
       },
@@ -756,6 +848,25 @@ function updateBodyCareChecklistVisibility(
       if (!isVisible) {
         groupElement
           .querySelectorAll('input[type="checkbox"]')
+          .forEach(function (inputElement) {
+            inputElement.checked = false;
+          });
+      }
+    });
+
+  // 食事介助の食事量など amountGroup の表示/非表示も同様に同期
+  checklistElement
+    .querySelectorAll("[data-amount-group-for]")
+    .forEach(function (groupElement) {
+      const groupName = String(
+        groupElement.getAttribute("data-amount-group-for") || "",
+      );
+      const isVisible = primaryItems.includes(groupName);
+      groupElement.classList.toggle("is-visible", isVisible);
+
+      if (!isVisible) {
+        groupElement
+          .querySelectorAll('input[type="radio"]')
           .forEach(function (inputElement) {
             inputElement.checked = false;
           });
@@ -868,7 +979,7 @@ function resetEntryFields(
   finalNoteElement.value = "";
   otherDetailElement.value = "";
   checklistElement
-    .querySelectorAll('input[type="checkbox"]')
+    .querySelectorAll('input[type="checkbox"], input[type="radio"]')
     .forEach(function (inputElement) {
       inputElement.checked = false;
   });
@@ -892,6 +1003,9 @@ function syncDerivedFields(
   const subItems = isBodyCareCategory(state.selectedCategory)
     ? getBodyCareSubItems(checklistElement)
     : {};
+  const amounts = isBodyCareCategory(state.selectedCategory)
+    ? getBodyCareAmounts(checklistElement)
+    : {};
   const composedMemo = buildMemoText(
     state.selectedCategory,
     checkedItems,
@@ -899,6 +1013,7 @@ function syncDerivedFields(
     memoElement.value,
     primaryItems,
     subItems,
+    amounts,
   );
 
   if (!state.finalNoteTouched) {
@@ -910,6 +1025,7 @@ function syncDerivedFields(
       memoElement.value,
       primaryItems,
       subItems,
+      amounts,
     );
   }
 
@@ -918,6 +1034,7 @@ function syncDerivedFields(
     checkedItems,
     primaryItems,
     subItems,
+    amounts,
   };
 }
 
@@ -1244,10 +1361,12 @@ function initializeHomeUi() {
               derived.primaryItems,
               derived.subItems,
               otherDetailElement.value,
+              derived.amounts,
             )
           : derived.checkedItems,
         primaryItems: derived.primaryItems,
         subItems: derived.subItems,
+        amounts: derived.amounts,
         otherDetail: otherDetailElement.value,
         memo: memoElement.value,
       });
@@ -1330,6 +1449,7 @@ function initializeHomeUi() {
         derived.subItems,
         otherDetailElement.value,
         memoElement.value,
+        derived.amounts,
       );
 
       await saveHomeRecord({
