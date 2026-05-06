@@ -38,7 +38,7 @@
 
 ### 機能（レベル1 = Phase 1a）
 
-- メールアドレスゲート（admin@village-support.jp 限定）
+- メールアドレスゲート（許可リスト方式 → 後述の追加修正で 2 件に拡張）
 - 居宅 / 移動 タブで未記録一覧
 - 件数バッジ
 - カードタップでモーダル展開
@@ -84,6 +84,17 @@ Cloud Functions 変更なしのため `--only hosting` で可。
 3. 居宅 / 移動 タブで未記録一覧が表示される
 4. カードタップ → モーダル → メモ入力 → 保存
 5. 既存 `/service-records-home/` で「記録済み」になっていることを確認
+
+### 追記 2026-05-06 19:30 — 許可リスト拡張
+
+初期実装では `admin@village-support.jp` 一意でゲート判定していたが、奥原翼さんの実ヘルパー email は `village.tsubasa_4499@icloud.com` であり、本来表示したいタスクが 0 件になる問題を発見。`ALLOWED_EMAIL` 定数を `ALLOWED_EMAILS` 配列に変更し以下の 2 件を許可:
+
+- `admin@village-support.jp`（管理者ログイン用、helper_master 未登録なのでタスク 0 件）
+- `village.tsubasa_4499@icloud.com`（実ヘルパー、本来の利用想定）
+
+`isEmailAllowed(email)` ヘルパー関数を追加し、`tryEmailFromStorage` と `gateSubmit` 両方で利用。古い localStorage 値が許可リスト外だった場合は自動削除（許可リスト変更時の自動クリア）。
+
+修正対象は `public/qrec-okuhara-9k2b/main.js` のみ。
 
 ---
 
