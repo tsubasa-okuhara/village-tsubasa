@@ -16,7 +16,9 @@
 
 ---
 
-## 2026-05-06 [village-tsubasa + village-admin] セルフマッチング Phase 1 — 管理者承認 UI 実装（deploy 待ち）
+## 2026-05-06 [village-tsubasa + village-admin] セルフマッチング Phase 1 — 管理者承認 UI 実装（deploy 完了）
+
+> **deploy 完了 2026-05-06**: PR #5 を main に squash merge (`71b2351`)。村つばさ functions (`firebase deploy --only functions:api`) と village-admin hosting (`firebase deploy --only hosting`) を本番反映済み。`https://village-admin-bd316.web.app/self-matching.html` で承認 UI が live。
 
 ### 何を作ったか
 
