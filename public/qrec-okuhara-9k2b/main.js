@@ -1,7 +1,7 @@
 // オーナー専用クイック記録 main.js
 //
 // 設計:
-//   - admin@village-support.jp に限定（localStorage で記憶）
+//   - ALLOWED_EMAILS のいずれかに限定（localStorage で記憶）
 //   - 居宅 / 移動 タブで未記録一覧を切り替え
 //   - タップでモーダルを開いて入力 → 保存
 //   - 構造化項目は省略（バックエンドは structuredLog null でも保存可）
@@ -12,8 +12,22 @@
 //   - GET /api/service-records-move/unwritten?helper_email=...
 //   - POST /api/service-records-move/save
 
-const ALLOWED_EMAIL = "admin@village-support.jp";
+// 入力許可メールアドレス（複数可）
+// 入力したメール = helper_email として未記録一覧の絞り込みに使われる
+// 奥原翼さんは:
+//   - admin@village-support.jp = 管理者ログイン用（helper_master 未登録なので 0 件）
+//   - village.tsubasa_4499@icloud.com = 現場ヘルパー用（実タスクあり、普段はこっち）
+const ALLOWED_EMAILS = [
+  "admin@village-support.jp",
+  "village.tsubasa_4499@icloud.com",
+];
 const STORAGE_KEY = "owner_record_email";
+
+function isEmailAllowed(email) {
+  if (!email) return false;
+  const lc = email.toLowerCase();
+  return ALLOWED_EMAILS.some((e) => e.toLowerCase() === lc);
+}
 
 const API_BASE = "/api";
 
@@ -75,11 +89,15 @@ function showMain() {
 
 function tryEmailFromStorage() {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && stored.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
+  if (stored && isEmailAllowed(stored)) {
     state.email = stored;
     showMain();
     loadAll();
     return true;
+  }
+  // 保存済みメールが許可リスト外なら削除（許可リスト変更時の自動クリア）
+  if (stored) {
+    localStorage.removeItem(STORAGE_KEY);
   }
   return false;
 }
@@ -91,7 +109,7 @@ gateSubmit.addEventListener("click", () => {
     gateError.hidden = false;
     return;
   }
-  if (value.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
+  if (!isEmailAllowed(value)) {
     gateError.textContent =
       "このページはオーナー専用です。アクセス権限がありません。";
     gateError.hidden = false;
