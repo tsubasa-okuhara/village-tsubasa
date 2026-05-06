@@ -16,6 +16,77 @@
 
 ---
 
+## 2026-05-06 [village-tsubasa] オーナー専用クイック記録 `/qrec-okuhara-9k2b/`（推測不可な秘密 URL） Phase 1a 実装（hosting 変更のみ、deploy 待ち）
+
+### 何を作ったか
+
+**新ページ「⚡ クイック記録」 (`/qrec-okuhara-9k2b/`（推測不可な秘密 URL）)**: 奥原翼さん（admin@village-support.jp）が現場の合間にスマホからサービス記録を爆速で入力するための専用 UI。
+
+### 動機
+
+- 奥原さん本人が毎日 9〜10 時間現場に出ているため、既存の `/service-records-home/` `/service-records-move/` の詳細フォーム（区分・実施項目14個・構造化ログ等）を 1 件ずつ埋める時間が物理的に取れず、自分が担当した予定の記録が遅延しがち
+- 「自分用に最低限の項目だけで保存できる UI」があれば、移動時間や合間に処理できる
+
+### 設計判断
+
+- **新規バックエンド変更なし**: 既存 API (`/api/service-records-home/{unwritten,save}`, `/api/service-records-move/{unwritten,save}`) を流用
+- **構造化項目は省略**: 既存の `saveHomeRecord` は `structuredLog: null` を許容するため、メモ + 記録本文のみで保存できる。実施項目チェックボックスやリスク項目は省略
+- **Firebase Auth は導入しない**: 既存の村つばさ public 配下と同じく認証なし。代わりに「メールアドレスゲート」で `admin@village-support.jp` のみ機能解放（localStorage で記憶）
+- **メニューには出さない**: トップページ (`public/index.html`) は触らず、URL 秘密運用（誰かに知られても admin email でないと操作できないので二重防御）
+- **居宅 / 移動 を 1 ページタブ切替**: 同じ流れで両方扱える
+- **「保存して次へ」ボタン**: 連続記録モード。保存後すぐに次の未記録予定が開く
+
+### 機能（レベル1 = Phase 1a）
+
+- メールアドレスゲート（admin@village-support.jp 限定）
+- 居宅 / 移動 タブで未記録一覧
+- 件数バッジ
+- カードタップでモーダル展開
+- 自動入力: サービス日 / 時間 / 利用者 / サービス内容
+- 区分ボタン（居宅のみ、身体介護 / 家事援助 / 通院等介助）
+- メモ入力（必須）
+- 記録本文（メモから自動生成、編集可、🔄 再生成ボタン）
+- 「保存して次へ」「保存して閉じる」
+
+### 今後の予定
+
+- **Phase 1b（次回チャット）**: 「📋 前回コピー」機能（同利用者の前回記録 service_notes_home を取得して挿入）。新エンドポイント `GET /api/service-records-home/last-by-user` を追加予定
+- **レベル 2**: Web Speech API による音声入力（ハンズフリー化、移動時間で記録完結）
+- **レベル 3**: 短文キーワード → AI 整形（既存の「AI要約作成」「AI記録案を作成」ロジックを流用）
+
+### ファイル変更
+
+新規 2 ファイル:
+- `public/qrec-okuhara-9k2b/index.html` (479 行 / `<meta name="robots" content="noindex, nofollow, noarchive">` と `referrer no-referrer` 追加済)
+- `public/qrec-okuhara-9k2b/main.js` (495 行)
+- ディレクトリ名を `owner-record` → `qrec-okuhara-9k2b` に変更（推測不可化、Google にもインデックスされない）
+
+既存ファイルへの変更: なし（バックエンド・他フロントは触っていない）
+
+### 影響範囲
+
+- **village-admin**: 影響なし
+- **user-schedule-app**: 影響なし
+- **既存ヘルパー UI** (`/service-records-home/` `/service-records-move/`): 影響なし。同じ API を共有するが、書き込み内容は構造化項目を省略したコンパクトな形式。`status='written'` への更新は同様に走るので、既存 UI に「記録済み」として表示される
+
+### デプロイ手順
+
+```
+firebase deploy --only hosting:village-tsubasa
+```
+
+Cloud Functions 変更なしのため `--only hosting` で可。
+
+### 動作確認
+
+1. `https://village-tsubasa.web.app/qrec-okuhara-9k2b/` にアクセス（URL は奥原さんしか知らない秘密 URL）
+2. メール入力 → `admin@village-support.jp` 以外なら拒否される
+3. 居宅 / 移動 タブで未記録一覧が表示される
+4. カードタップ → モーダル → メモ入力 → 保存
+5. 既存 `/service-records-home/` で「記録済み」になっていることを確認
+
+---
+
 ## 2026-05-06 [village-tsubasa] ヘルパーセルフマッチング Phase 1 実装（API + UI 完成、deploy 待ち）
 
 ### 何を作ったか
