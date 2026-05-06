@@ -1,287 +1,378 @@
-# HANDOFF — village-admin 側で実装する「セルフマッチング承認 UI」
+# HANDOFF — village-admin セルフマッチング承認 UI（Phase 1）
 
-> このドキュメントは **village-admin リポ** での実装作業のために、village-tsubasa 側で
-> 完成した Phase 1 (ヘルパーセルフマッチング) の前提と、admin 側で必要な機能・実装手順を
-> まとめた引き継ぎ書です。
->
-> village-admin の新規チャットで開いてください。本ドキュメントのコピペ + 「これに沿って
-> village-admin に承認 UI を実装してほしい」と渡せば即作業可能です。
-
-最終更新: 2026-05-06 (奥原翼 + Claude Opus / village-tsubasa Phase 1 完了直後)
+> **作成日**: 2026-05-06（奥原翼 + Claude Opus 4.7）
+> **ステータス**: 仕様確定済み → 実装フェーズ
+> **改訂**: 2026-05-06 既存 5/6 仕様書 (`ff7da8b`) と統合。決定事項は今日のチャットを優先採用、既存仕様の有用情報（admin allow-list 3 名・対象ヘルパー 7 名・テスト SQL）を取り込み
 
 ---
 
-## 0. 5分で読む全体像
+## 1. 背景と目的
 
-ヘルパー側 (village-tsubasa) は完成済み:
+ヘルパー側の `/self-matching/`（村つばさ）で、`enable_self_matching = true` のヘルパー 7 名が「未割当の予定に入れます」と申請できる UI が動いている。申請データは `schedule_claims` テーブルに `status='pending'` でたまる。
 
-```
-[ヘルパー]
-   ↓ /self-matching/ ページで「入れます」をタップ
-   ↓ POST /api/self-matching/claim
-   ↓
-[Supabase: schedule_claims テーブル]
-   status='pending' で行が増える
-   ↓
-[ここからが village-admin の仕事]   ← 本ドキュメントのスコープ
-   - 未承認 claim 一覧を表示
-   - approve/reject ボタン
-   - approve したら schedule.helper_email を確定
-   ↓
-[ヘルパー]
-   - 自分の claim が approved に → 確定通知 (将来)
-```
+**現状（2026-05-06 時点）**: 管理者承認 UI が無いため、奥原さんが Supabase SQL Editor で直接 update する運用になっており、現実的でない。本フェーズで **village-admin に承認 UI を追加** し、ワンクリックで承認/却下できるようにする。
 
----
+### 対象ヘルパー（`enable_self_matching=true`、7 名）
 
-## 1. 既に整備済み (前提)
-
-### 1.1 Supabase スキーマ
-
-既に DDL 適用済 (2026-05-06)。`SUPABASE_SCHEMA.md` に詳細あり。
-
-#### `helper_master.enable_self_matching` (boolean, NOT NULL, default false)
-セルフマッチングに参加するヘルパーのフラグ。現在 7 名 true:
-- yuki200164@gmail.com (三枝)
-- zhongtiannasu@gmail.com (中野)
-- 141213zero@gmail.com (久保田)
-- shinichi.hr22@gmail.com (伊藤信一)
-- mrokrs1212@gmail.com (村岡)
-- 8ha8ya4shi@gmail.com (林)
-- dannyfrommorikiko@gmail.com (樋口)
-
-#### `schedule_claims` テーブル
-```
-id              uuid PK (default gen_random_uuid())
-schedule_id     uuid NOT NULL → schedule(id) ON DELETE CASCADE
-helper_email    text NOT NULL
-status          text NOT NULL DEFAULT 'pending'
-                CHECK in ('pending','approved','rejected','withdrawn')
-priority_score  numeric default 0
-note            text
-created_at      timestamptz default now()
-updated_at      timestamptz default now()  ← トリガーで自動更新
-decided_at      timestamptz
-decided_by      text  ← admin の email
-UNIQUE(schedule_id, helper_email)
-```
-
-RLS は ON、policy 未設定。**Cloud Functions は service_role キーで bypass する想定**(既存パターン踏襲)。
-
-### 1.2 ヘルパー側 API (village-tsubasa、既に live)
-
-| Method | Path | 用途 |
-|---|---|---|
-| GET  | `/api/self-matching/candidates?helper_email=...` | 未割当予定 + 自分の claim 状況 |
-| POST | `/api/self-matching/claim` | 「入れます」申請 |
-| POST | `/api/self-matching/withdraw` | 自分の pending claim を取り下げ |
-
-実装: `tsubasa-okuhara/village-tsubasa` の `functions/src/self-matching/`
-
-### 1.3 schedule テーブル (連携先)
-- 列: `id` (uuid), `date`, `name`, `helper_email`, `client`, `start_time`, `end_time`, `task`, `haisha`, `summary`, `beneficiary_number`, `deleted_at` 他
-- 注意: **複数アプリ共有テーブル**(⚠️マーク)。RULES.md ルール4 該当
-- approve 時に `schedule.helper_email` と `schedule.name` を UPDATE する必要あり
-
----
-
-## 2. village-admin 側で作るもの
-
-### 2.1 新規画面: `/self-matching-admin.html`
-
-**目的**: 未承認 claim の一覧表示と approve/reject 操作。
-
-#### 表示要件
-
-| エリア | 内容 |
+| メール | 名前 |
 |---|---|
-| ヘッダー | 「セルフマッチング承認」タイトル + 既存ナビ |
-| stat-card | 未処理件数(`pending` カウント) |
-| メイン | claim カード一覧(新しい順) |
-| 各カード | 申請日時 / ヘルパー名+email / 予定日 / 時間 / 利用者 / task / haisha / サマリ / [✅承認] [❌却下] ボタン |
+| yuki200164@gmail.com | 三枝 |
+| zhongtiannasu@gmail.com | 中野 |
+| 141213zero@gmail.com | 久保田 |
+| shinichi.hr22@gmail.com | 伊藤信一 |
+| mrokrs1212@gmail.com | 村岡 |
+| 8ha8ya4shi@gmail.com | 林 |
+| dannyfrommorikiko@gmail.com | 樋口 |
 
-#### カード内の表示項目
+### 管理者 allow-list（既存 `admin_users` テーブル + `village-admin/functions/src/middleware/adminAuth.ts` と一致させる）
 
-```
-┌─────────────────────────────────────────────────┐
-│ 🕐 2026-05-07 14:23 申請                       │
-│ 🙋 三枝 (yuki200164@gmail.com)                 │
-│                                                 │
-│ 📅 2026-05-10 (土) 09:00〜10:30               │
-│ 👤 田中太郎様                                   │
-│ 📝 身体  🚗 配車なし                            │
-│ 補足: 朝の身支度サポート                        │
-│                                                 │
-│ note(ヘルパー添えメッセージ): 入れます          │
-│                                                 │
-│ 他に 1 名が申請中  ← 同じ schedule への他 claim │
-│                                                 │
-│ [✅ 承認 (この人で確定)]  [❌ 却下]              │
-└─────────────────────────────────────────────────┘
-```
+| メール | 役割 |
+|---|---|
+| admin@village-support.jp | 奥原 |
+| inachichoco@gmail.com | （既存 admin） |
+| yutaka.ito1994@gmail.com | （既存 admin） |
 
-**他のヘルパーも同じ予定に申請している場合**: カード下部に「他の申請者」リストを表示。
-複数候補から1人を選ぶUI、または「全員却下」ボタンも欲しい。
+---
 
-#### フィルタ
+## 2. スコープ
 
-- ステータス: pending(デフォルト) / approved / rejected / withdrawn / 全て
-- 期間: 直近30日(デフォルト) / 全期間
-- ヘルパー名で絞り込み(任意)
+### IN
+- village-tsubasa Cloud Functions に admin 承認用 API を 4 本追加
+  - `GET  /api/self-matching/admin/pending` — 未処理 claim 一覧
+  - `GET  /api/self-matching/admin/history` — 処理済み履歴
+  - `POST /api/self-matching/admin/approve` — claim を承認 + schedule.helper_email 更新 + 同予定の他 claim を rejected
+  - `POST /api/self-matching/admin/reject` — claim を却下
+- village-admin に新規ページ `public/self-matching.html` + `public/self-matching.js`
+- 既存ページのナビに「🤝 セルフマッチング」リンクを追加
+- ダッシュボード（index.html）の集計に「未処理セルフマッチング N件」バッジを追加
 
-### 2.2 新規 API (village-admin の Cloud Functions)
+### OUT（Phase 2 以降）
+- ヘルパー宛の承認/却下メール通知
+- 1日1回の pending サマリメール
+- 重複承認の取消（一旦承認したものを取り消す UI）
+- 優先度スコア（`priority_score`）の活用
+- 利用者との相性表示（`user_helper_compatibility`）
+- 申請メモ（`note`）の表示（今は判断材料に不要、と確認済み）
+- `schedule.name` の自動補完（GAS 同期で吸収）
+- `synced_to_sheet=false` リセット（GAS 月次フラッシュ運用と整合確認後の Phase 2）
 
-ベースURL: `https://asia-northeast1-village-admin-bd316.cloudfunctions.net/api`
-(または village-admin が独自にもつパス)
+---
 
-#### `GET /api/self-matching/claims`
-未承認 claim の一覧を返す。schedule との JOIN 込みで欲しい:
+## 3. データモデル（既存）
 
-```typescript
-// クエリパラメータ
-status?: 'pending' | 'approved' | 'rejected' | 'withdrawn'  // 省略時 'pending'
-fromDate?: string  // 'YYYY-MM-DD' 申請日 from
-toDate?: string    // 申請日 to
-helperEmail?: string  // 絞り込み
+### `schedule_claims`（2026-05-06 作成済み）
 
-// レスポンス
+| 列 | 型 | 役割 |
+|---|---|---|
+| id | uuid PK | |
+| schedule_id | uuid NOT NULL FK→schedule.id | |
+| helper_email | text NOT NULL | 申請者 |
+| status | text NOT NULL CHECK in `'pending'/'approved'/'rejected'/'withdrawn'` | |
+| priority_score | numeric default 0 | 未使用 |
+| note | text nullable | ヘルパーが添える任意メッセージ |
+| created_at / updated_at | timestamptz NOT NULL | |
+| **decided_at** | timestamptz nullable | 承認/却下時刻 — **本フェーズで初使用** |
+| **decided_by** | text nullable | 判定者 email — **本フェーズで初使用** |
+
+UNIQUE (schedule_id, helper_email)、`idx_schedule_claims_pending` あり、RLS ON（service_role のみ）。
+
+### `helper_master`
+- `enable_self_matching = true` のヘルパーのみが claim を出せる（既存ロジック）。
+- `qualification`（`'介護福祉士'` / `'初任者研修'` / `'重度訪問介護'`）を承認 UI で表示。
+
+### `schedule`
+- 承認時に `helper_email` を申請者の値で UPDATE（NULL → 申請者）。
+- `name` / `synced_to_sheet` は **触らない**（GAS 同期に委ねる、Phase 2 で再評価）。
+
+---
+
+## 4. 仕様の核となる決定事項（2026-05-06 確定）
+
+| 質問 | 決定 |
+|---|---|
+| 承認時に `schedule.helper_email` を自動セットするか | **YES**（承認 = 予定確定） |
+| 承認時に `schedule.name` も更新するか | **NO**（GAS 同期に委ねる、要動作確認） |
+| 同予定の他 pending claim はどうするか | **自動で `rejected` にセット**（`decided_at` も） |
+| API / UI の置き場所 | **API: village-tsubasa、UI: village-admin** |
+| `decided_by` の値 | **village-admin の Firebase Auth ログイン email**（`auth.currentUser.email`） |
+| API 認証方式 | **Firebase Auth id_token を Authorization Bearer で送り、village-tsubasa 側で検証 + admin email allow-list で照合** |
+| 表示する申請者の判断材料 | **申請者名・メール・申請日時（必須）+ 資格（`qualification`）のみ**（メモ、利用者相性は出さない） |
+| 履歴の見せ方 | **タブで切り替え（未処理 / 履歴）** |
+
+---
+
+## 5. API 仕様（village-tsubasa: `functions/src/self-matching/`）
+
+### 共通: 管理者認証ミドルウェア `adminAuth.ts`
+
+新規ファイル `functions/src/self-matching/adminAuth.ts`:
+- リクエスト Header `Authorization: Bearer <id_token>` を検証
+- `firebase-admin` の `getAuth().verifyIdToken()` を使う
+- 成功したら `req.adminEmail` に email を載せる
+- email が hard-coded allow-list（admin_users テーブルと一致）に含まれるかチェック
+- 弾いたら `401 unauthorized` / `403 forbidden`
+
+> village-admin の `requireAdmin` ミドルウェアと同じパターンで書く（`village-admin/functions/src/middleware/adminAuth.ts` 参考）。
+
+### `GET /api/self-matching/admin/pending`
+
+未処理 claim 一覧を返す。
+
+**Headers:** `Authorization: Bearer <id_token>` 必須
+
+**Response:**
+```json
 {
-  ok: true,
-  items: [
+  "ok": true,
+  "items": [
     {
-      claimId: string,
-      claimStatus: string,
-      claimCreatedAt: string,
-      claimNote: string | null,
-      helperName: string,        // helper_master から JOIN
-      helperEmail: string,
-      schedule: {
-        id: string,
-        date: string,
-        client: string,
-        startTime: string,
-        endTime: string,
-        task: string,
-        haisha: string,
-        summary: string,
-        beneficiaryNumber: string,
-      },
-      otherClaimantsCount: number,  // この schedule への他のpending/approved 申請数
+      "scheduleId": "uuid",
+      "date": "2026-05-10",
+      "client": "山田太郎",
+      "startTime": "10:00",
+      "endTime": "12:00",
+      "task": "居宅介護",
+      "haisha": "...",
+      "summary": "...",
+      "beneficiaryNumber": "...",
+      "claims": [
+        {
+          "claimId": "uuid",
+          "helperEmail": "tanaka@example.com",
+          "helperName": "田中花子",
+          "qualification": "初任者研修",
+          "createdAt": "2026-05-06T10:23:45Z",
+          "note": null
+        }
+      ]
     }
   ]
 }
 ```
 
-#### `POST /api/self-matching/approve`
+- 並び順: `schedule.date ASC, schedule.start_time ASC`
+- 同じ schedule_id の複数 pending claim は `claims[]` にまとめる（複数申請の比較がしやすい）
+- `helperName` は `helper_master.helper_name` を join。`qualification` も同様
+- `schedule_claims.status = 'pending'` のみ
+- `schedule.deleted_at IS NOT NULL` のものは出さない
+- `schedule.helper_email IS NOT NULL` のものは出さない（既に確定済み）
 
-```typescript
-// リクエスト
+### `GET /api/self-matching/admin/history?limit=50&before=YYYY-MM-DDTHH:MM:SSZ`
+
+`status IN ('approved', 'rejected', 'withdrawn')` の履歴を新しい順に。
+
+**Headers:** `Authorization: Bearer <id_token>` 必須
+
+**Response:**
+```json
 {
-  claimId: string,
-  decidedBy: string,  // 管理者の email
+  "ok": true,
+  "items": [
+    {
+      "claimId": "uuid",
+      "scheduleId": "uuid",
+      "date": "2026-05-10",
+      "client": "山田太郎",
+      "startTime": "10:00",
+      "endTime": "12:00",
+      "helperName": "田中花子",
+      "helperEmail": "tanaka@example.com",
+      "qualification": "初任者研修",
+      "status": "approved",
+      "decidedAt": "2026-05-06T11:00:00Z",
+      "decidedBy": "admin@village-support.jp"
+    }
+  ],
+  "hasMore": false
 }
-
-// 処理 (トランザクション推奨)
-1. claim を取得 (schedule_id, helper_email を控える)
-2. status='pending' でなければ 409 conflict
-3. schedule.helper_email がまだ NULL であることを確認、埋まっていれば 409
-4. UPDATE schedule_claims SET status='approved', decided_at=now(), decided_by=$1 WHERE id=$claimId
-5. UPDATE schedule SET helper_email=$2, name=$helperName WHERE id=$scheduleId
-   (helperName は helper_master から逆引き)
-6. 同じ schedule の他の pending claim を status='rejected' に一括 UPDATE
-   (1人選んだら他は自動却下)
-7. (将来) 通知: 承認されたヘルパーに push or アプリ内通知
-
-// レスポンス
-{ ok: true, claim: {...}, schedule: {...} }
 ```
 
-#### `POST /api/self-matching/reject`
+- 並び順: `decided_at DESC NULLS LAST, updated_at DESC`（withdrawn は decided_at が無い）
+- ページング: クエリ `before` で `decided_at < before` を指定（無ければ最新から）
+- `limit` デフォルト 50、最大 200
 
-```typescript
-// リクエスト
-{
-  claimId: string,
-  decidedBy: string,
-  reason?: string,  // 任意
-}
+### `POST /api/self-matching/admin/approve`
 
-// 処理
-- UPDATE schedule_claims SET status='rejected', decided_at=now(), decided_by=$1, note=COALESCE(note, $reason) WHERE id=$claimId AND status='pending'
-- 0行 → 409
+**Headers:** `Authorization: Bearer <id_token>` 必須
 
-// レスポンス
-{ ok: true, claim: {...} }
+**Body:**
+```json
+{ "claimId": "uuid" }
 ```
 
-### 2.3 ダッシュボード stat-card 追加
+**処理:**
+1. `claimId` を pending で SELECT。schedule_id / helper_email を取り出す
+2. `schedule.helper_email IS NULL` をチェック（race condition 回避）
+3. **3 連続 UPDATE（ベストエフォート）**:
+   - `UPDATE schedule_claims SET status='approved', decided_at=now(), decided_by=$adminEmail WHERE id=$claimId AND status='pending' RETURNING *` （0行 → 409 conflict）
+   - `UPDATE schedule SET helper_email=$helperEmail WHERE id=$scheduleId AND helper_email IS NULL` （0行 → race detected。claim を pending に戻して 409）
+   - `UPDATE schedule_claims SET status='rejected', decided_at=now(), decided_by=$adminEmail WHERE schedule_id=$scheduleId AND status='pending' AND id != $claimId`
+4. `200 { ok:true, claim: {...}, otherRejected: N }`
 
-既存 `/index.html` (admin ダッシュボード) に「未承認セルフマッチ申請」を追加:
-- pending 件数表示
-- クリック → `/self-matching-admin.html` へ遷移
-- 30秒ポーリングで件数更新
+> Supabase JS クライアントには transaction が無い。Phase 1 では 3 連続 UPDATE で許容するが、各 UPDATE 結果をログに残し、step 2 が失敗したら step 1 を rollback する補正を入れる。
 
-データ取得: `GET /api/self-matching/claims?status=pending` の `items.length`
+### `POST /api/self-matching/admin/reject`
 
-### 2.4 (任意) 1日1回サマリメール
+**Headers:** `Authorization: Bearer <id_token>` 必須
 
-夜中に当日 pending 件数を集計し、admin 全員にメール。
-village-admin の既存 Scheduler ジョブパターンを踏襲。
+**Body:**
+```json
+{ "claimId": "uuid" }
+```
+
+**処理:**
+- `UPDATE schedule_claims SET status='rejected', decided_at=now(), decided_by=$adminEmail WHERE id=$claimId AND status='pending'`
+- 0 行 → 409 not-pending
 
 ---
 
-## 3. 認可
+## 6. UI 仕様（village-admin: `public/self-matching.html`）
 
-- 全エンドポイントは `admin_users` (既存) の email allow-list で認可
-- 既存の adminAuth ミドルウェアを再利用
-- `decidedBy` は認証された admin の email を埋める
+### ナビゲーション
+
+既存の全 8 ページのヘッダー nav に追加（`is-active` は self-matching ページでのみ）:
+
+```html
+<a href="/self-matching.html" class="nav-link">🤝 セルフマッチング</a>
+```
+
+### 画面構成
+
+```
+ビレッジ管理アプリ                          [admin@...] [ログアウト]
+[ダッシュボード][スケジュール][研修][検索][移動][居宅][実績][資格][🤝セルフマッチング][監査]
+
+┌─ サブタブ ────────────────────────────┐
+│ [🟡 未処理 (3)] [📜 履歴]              │
+└─────────────────────────────────────┘
+
+【未処理タブ】
+┌─ 5/10 (土) 10:00-12:00 山田太郎 ────────┐
+│ サービス: 居宅介護                       │
+│                                          │
+│ 申請者:                                   │
+│  • 田中花子 (初任者研修)                  │
+│    tanaka@... · 2時間前                   │
+│    [✓ 承認] [✕ 却下]                      │
+│  • 佐藤次郎 (介護福祉士)                  │
+│    sato@... · 1時間前                     │
+│    [✓ 承認] [✕ 却下]                      │
+└──────────────────────────────────────────┘
+```
+
+### 操作
+
+- **承認ボタン**: 確認モーダル「○○さんを承認します。同じ予定への他申請は自動で却下されます。よろしいですか?」 → OK で `POST /admin/approve`
+- **却下ボタン**: 確認モーダル「○○さんの申請を却下します。よろしいですか?」 → OK で `POST /admin/reject`
+- 操作後はリスト全体を再 fetch して整合を保つ
+
+### 履歴タブ
+
+シンプルなテーブル:
+| 判定日時 | 判定 | 予定日時 | 利用者 | 申請者 | 判定者 |
+|---|---|---|---|---|---|
+| 5/6 11:00 | 承認 | 5/10 10-12 | 山田太郎 | 田中花子 | admin@... |
+
+- 上端に「もっと読み込む」ボタン（cursor-based pagination）
+
+### ダッシュボード（index.html）
+
+既存の stats-grid の最後あたりに追加:
+
+```html
+<div class="stat-card" id="self-matching-card">
+  <div class="stat-card__label">未処理セルフマッチング</div>
+  <div class="stat-card__value" id="stat-self-matching">—</div>
+</div>
+```
+
+`main.js` の `refresh()` で `/api/self-matching/admin/pending` を叩き、`items.length` を表示。0件なら `is-alert` 外す、>0件なら `is-alert` 付与。
 
 ---
 
-## 4. 競合回避と冪等性
+## 7. 実装ファイル一覧
 
-### 4.1 二重承認の防止
+### 新規（village-tsubasa）
 
-複数管理者が同時に同じ claim を approve しようとした場合:
+```
+functions/src/self-matching/
+├── adminAuth.ts        # Firebase Auth id_token 検証 + admin email allow-list（共通）
+├── adminPending.ts     # GET /admin/pending
+├── adminHistory.ts     # GET /admin/history
+├── adminApprove.ts     # POST /admin/approve
+├── adminReject.ts      # POST /admin/reject
+└── routes.ts           # 既存ファイルにルート追加
+```
+
+allow-list は `adminAuth.ts` 内に hard-code:
+```typescript
+const ALLOWED_ADMIN_EMAILS = [
+  "admin@village-support.jp",
+  "inachichoco@gmail.com",
+  "yutaka.ito1994@gmail.com",
+].map((v) => v.toLowerCase());
+```
+
+> Phase 2 で Firebase Secret 化検討。Phase 1 は admin_users テーブルとの整合を取りやすい hard-code で。
+
+### 新規（village-admin）
+
+```
+public/
+├── self-matching.html  # 新規ページ
+├── self-matching.js    # 新規 JS
+```
+
+既存の修正:
+```
+public/index.html       # ナビ追加 + ダッシュボードに stats-grid 1 枚追加
+public/main.js          # village-tsubasa の /api/self-matching/admin/pending 取得 + バッジ更新
+public/schedule.html    # ナビ追加
+public/training.html    # ナビ追加
+public/search.html      # ナビ追加
+public/service-notes-move.html  # ナビ追加
+public/service-notes-home.html  # ナビ追加
+public/records-home.html  # ナビ追加
+public/helper-qualification.html  # ナビ追加
+public/audit/index.html  # ナビ追加（あれば）
+```
+
+> ナビが各 HTML に重複定義されているのは既存の課題。将来は include 化したい（FUTURE_IDEAS 候補）。
+
+`public/main.js` 内の `TRAINING_API_BASE = "https://village-tsubasa.web.app/api"` パターンを再利用し、self-matching 用 base を共有定数にしてもよい。
+
+---
+
+## 8. デプロイ手順
+
+```bash
+# 1. village-tsubasa: API 実装
+cd ~/village-tsubasa
+firebase deploy --only functions:api
+
+# 2. village-admin: UI 実装
+cd ~/village-admin
+firebase deploy --only hosting
+```
+
+---
+
+## 9. テスト観点
+
+### API
+- [ ] `Authorization` ヘッダー無し → 401
+- [ ] 不正な id_token → 401
+- [ ] allow-list に無い email の id_token → 403
+- [ ] pending 一覧: status='pending' のみ、deleted/filled な schedule は出ない
+- [ ] approve: 該当 claim approved + schedule.helper_email 更新 + 他 claim rejected
+- [ ] approve: schedule.helper_email が既にセットされていたら 409、claim は pending のまま
+- [ ] approve: 既に approved/rejected の claim を再度 approve しようとしたら 409
+- [ ] reject: status='rejected' に更新、schedule は触らない
+
+### 単体テスト用 SQL（既存仕様書から流用）
 
 ```sql
-UPDATE schedule_claims
-SET status='approved', decided_at=now(), decided_by=$1
-WHERE id=$claimId AND status='pending'
-RETURNING *;
-```
-→ 0行返り = 既に他の admin が処理した、409 を返す。
-
-### 4.2 schedule の helper_email 競合
-
-approve 時、schedule.helper_email が NULL でない場合 (=既にスプレッドシート / user-schedule-app 経由で埋まった場合) は 409 を返し、claim 自動却下提案を表示。
-
-### 4.3 既存 schedule への影響
-
-- `schedule.helper_email` を埋める INSERT/UPDATE は既に user-schedule-app と GAS でも発生する
-- approve から UPDATE する際は **`synced_to_sheet` を false に戻す**ことを推奨 (GAS 月次フラッシュで吸収)
-- `name` 列も埋める(helper_master からヘルパー表示名を引いて入れる)
-
----
-
-## 5. 影響範囲チェックリスト (RULES.md 準拠)
-
-- [ ] **Rule 2**: schedule_claims は新規テーブル、helper_master の追加列も nullable+default → OK
-- [ ] **Rule 3**: 既存 API の破壊的変更なし、新規エンドポイント追加のみ → OK
-- [ ] **Rule 4**: schedule テーブルの UPDATE が新たな経路で発生 → 要確認
-  - 既存: user-schedule-app, GAS, schedule-editor (admin内)
-  - 追加: schedule_claims approve 時の UPDATE
-  - 既存と同じ列を更新するだけなので破壊的変更ではないが、**`synced_to_sheet=false` に戻す**処理は要確認
-- [ ] **Rule 5**: `village-admin/CHANGELOG.md` に実装エントリ追記 + `~/village-tsubasa/docs/CHANGELOG.md` の "village-admin リポの変更（転記）" にも転記
-
----
-
-## 6. テスト手順
-
-### 6.1 単体テスト用データ
-
-```sql
--- village-tsubasa 側で claim を1件INSERT (テスト用)
+-- 1) 未割当な予定に対して claim を1件作る (テスト用)
 insert into schedule_claims (schedule_id, helper_email, status, note)
 select id, 'yuki200164@gmail.com', 'pending', 'テスト申請'
 from schedule
@@ -291,39 +382,56 @@ where helper_email is null
   and client is not null
   and start_time is not null
 limit 1;
+
+-- 2) 承認後の検証
+select id, status, decided_at, decided_by from schedule_claims
+where helper_email='yuki200164@gmail.com'
+order by created_at desc
+limit 5;
+
+select id, helper_email, name, synced_to_sheet from schedule
+where id = '<上記 claim の schedule_id>';
+-- helper_email='yuki200164@gmail.com', name と synced_to_sheet は触らない
 ```
 
-### 6.2 動作確認
+### UI 手動シナリオ
+1. 三枝さん（実在の `enable_self_matching=true` ヘルパー）として `/self-matching/` から空き予定に claim
+2. 別の対象ヘルパーでも同じ予定に claim
+3. admin で `/self-matching.html` を開き、両者が同じカード内に表示されることを確認
+4. 一方を承認 → schedule に helper_email が入り、他方が rejected になる
+5. 履歴タブで両方の判定が記録されている
+6. ダッシュボードの「未処理セルフマッチング N件」が更新される
 
-1. admin で `/self-matching-admin.html` を開く → claim カードが1件出る
-2. 承認ボタン押下 → 確認ダイアログ → 承認実行
-3. Supabase で確認:
-   ```sql
-   select * from schedule_claims where helper_email='yuki200164@gmail.com' order by created_at desc limit 1;
-   -- status='approved', decided_at, decided_by 入っている
-   
-   select id, helper_email, name, synced_to_sheet from schedule where id=$scheduleId;
-   -- helper_email='yuki200164@gmail.com', name='三枝', synced_to_sheet=false
-   ```
-4. ヘルパーアプリ /self-matching/ で同じ予定が「✅ 確定済み」表示になる
-
-### 6.3 競合シナリオ
-
+### 競合シナリオ
 - 2 つのブラウザで同じ claim を同時に approve → 1 つは成功、もう 1 つは 409
-- 別経路で schedule.helper_email が埋められた後の approve → 409
+- 別経路で `schedule.helper_email` が埋められた後の approve → 409、claim は pending のまま
 
 ---
 
-## 7. 次のフェーズ (将来)
+## 10. RULES.md 準拠チェック
 
-- ヘルパーへの確定通知 (push or アプリ内通知)
-- approve 履歴のエクスポート (CSV)
-- 1日1回サマリメール
-- 対応可否(○×)データ取り込み後、approve画面に「○: 対応可」「×: 対応外」「△: 条件付」のラベル表示
+- ✅ ルール2: テーブル変更は **追加のみ**（`schedule_claims` の `decided_at`/`decided_by` は既存。`helper_master` は触らない）
+- ✅ ルール3: 既存 API は触らない、新規 API のみ追加
+- ⚠️ ルール4: `schedule.helper_email` UPDATE は重要テーブル変更 → 本ドキュメントで事前共有済み。`name` / `synced_to_sheet` は触らない方針で他アプリへの影響を最小化
+- ⏳ ルール5: 実装後に `CHANGELOG.md` / `SUPABASE_SCHEMA.md` の `schedule_claims` 「参照箇所」を更新
+- ⚠️ ルール9: village-admin リポは GitHub remote 未設定（🔴 危険）→ **本実装の事前作業として奥原さんが remote 設定** （2026-05-06 別タスクで実行中）
 
 ---
 
-## 8. 関連ファイル一覧 (village-tsubasa 側)
+## 11. フォローアップ（Phase 2 候補）
+
+- ヘルパーへの結果通知（Push/メール/LINE）
+- 利用者との相性（`user_helper_compatibility`）を UI に出す
+- 申請メモ（`note`）を UI に出す
+- 「却下理由」を選択式で記録（テーブル列追加が必要）
+- 承認の取消（一度確定した予定を解除する管理画面）
+- ナビの include 化（重複解消）
+- 1 日 1 回の pending サマリメール
+- `schedule.name` 自動補完 / `synced_to_sheet=false` リセット（GAS 同期との整合確認後）
+
+---
+
+## 関連ファイル一覧（village-tsubasa 既存）
 
 - `functions/src/self-matching/listCandidates.ts` — 候補一覧 API
 - `functions/src/self-matching/claimSchedule.ts` — claim INSERT
@@ -336,4 +444,7 @@ limit 1;
 
 ---
 
-質問・確認したいこと、追加要件あれば village-admin チャットで本ドキュメントを下敷きに相談してください。
+## 更新履歴
+
+- 2026-05-06: 初版作成（奥原翼 + Claude Opus 4.7、当該チャットでの仕様確定）
+- 2026-05-06: 既存 5/6 仕様書 (`ff7da8b`) と統合。allow-list / 対象ヘルパー / テスト SQL を取り込み

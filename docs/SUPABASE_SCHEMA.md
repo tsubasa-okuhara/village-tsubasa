@@ -89,7 +89,11 @@
   - `functions/src/self-matching/listCandidates.ts` (SELECT)
   - `functions/src/self-matching/claimSchedule.ts` (INSERT)
   - `functions/src/self-matching/withdrawClaim.ts` (UPDATE: status→'withdrawn')
-  - village-admin (別リポ予定): 管理者承認 UI からの SELECT/UPDATE
+  - `functions/src/self-matching/adminPending.ts` (SELECT pending、2026-05-06 追加)
+  - `functions/src/self-matching/adminHistory.ts` (SELECT approved/rejected/withdrawn、2026-05-06 追加)
+  - `functions/src/self-matching/adminApprove.ts` (UPDATE: status→'approved'、`decided_at`/`decided_by` セット、同 schedule の他 pending を 'rejected' に一括更新、2026-05-06 追加)
+  - `functions/src/self-matching/adminReject.ts` (UPDATE: status→'rejected'、`decided_at`/`decided_by` セット、2026-05-06 追加)
+  - village-admin: `public/self-matching.html` + `public/self-matching.js` から village-tsubasa の admin API を Firebase Auth Bearer で叩く（2026-05-06 追加）
 - **備考**:
   - `helper_email` への FK は付けていない（`helper_master` の PK が `helper_name` であり、既存テーブルの慣習に合わせて素 text）
   - 論理削除運用なし（必要なら status='withdrawn'/'rejected' をソフトデリート的に使う）
