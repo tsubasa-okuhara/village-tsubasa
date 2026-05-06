@@ -124,10 +124,18 @@
 **ヘルパー検索系（1）**
 - `GET  /api/helpers/lookup` — email → 名前の逆引き
 
-**セルフマッチング系（3）**（2026-05-06 追加、Phase 1）
+**セルフマッチング系（7）**（2026-05-06 追加、Phase 1）
+
+ヘルパー側（3）:
 - `GET  /api/self-matching/candidates` — 未割当予定の候補一覧（`helper_email` 必須、`enable_self_matching=true` のヘルパーのみ）
 - `POST /api/self-matching/claim` — 「入れます」申請（schedule_claims に INSERT）
 - `POST /api/self-matching/withdraw` — 自分の pending 申請を取り下げ
+
+管理者側（4、`Authorization: Bearer <Firebase id_token>` 必須、admin allow-list 3 名で照合）:
+- `GET  /api/self-matching/admin/pending` — 未処理の申請一覧（schedule × claims[] でグループ化、helper_master を join）
+- `GET  /api/self-matching/admin/history?limit=50&before=...` — 処理済み履歴（cursor pagination）
+- `POST /api/self-matching/admin/approve` — 承認 + `schedule.helper_email` セット + 同 schedule の他 pending を rejected
+- `POST /api/self-matching/admin/reject` — 却下
 
 **ヘルスチェック（1）**
 - `GET  /healthz` — `"ok"` を返すだけ

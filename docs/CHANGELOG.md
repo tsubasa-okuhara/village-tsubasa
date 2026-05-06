@@ -16,6 +16,64 @@
 
 ---
 
+## 2026-05-06 [village-tsubasa + village-admin] セルフマッチング Phase 1 — 管理者承認 UI 実装（deploy 待ち）
+
+### 何を作ったか
+
+5/6 にデプロイされたヘルパーセルフマッチング Phase 1（ヘルパー側の `claim` / `withdraw` 完成）の続編として、**管理者が pending の申請を承認/却下する UI** を実装。Supabase SQL Editor を使わず admin 画面でワンクリックで処理できるようになる。
+
+仕様詳細: `docs/HANDOFF_VILLAGE_ADMIN_SELF_MATCHING.md`（同日改訂）
+
+### village-tsubasa: 新規 API 4 本
+
+`functions/src/self-matching/` に以下を追加:
+
+- `adminAuth.ts` — Firebase Auth `verifyIdToken` + admin email allow-list（`admin_users` テーブルと同じ 3 名: `admin@village-support.jp` / `inachichoco@gmail.com` / `yutaka.ito1994@gmail.com`）
+- `adminPending.ts` — `GET /api/self-matching/admin/pending`（pending な claim を schedule × claims[] でグループ化、helper_master を join して helper_name / qualification を含む）
+- `adminHistory.ts` — `GET /api/self-matching/admin/history?limit=50&before=...`（cursor pagination）
+- `adminApprove.ts` — `POST /api/self-matching/admin/approve`（claim approve + schedule.helper_email セット + 同 schedule の他 pending を rejected）
+- `adminReject.ts` — `POST /api/self-matching/admin/reject`
+
+`functions/src/self-matching/routes.ts` に admin ルート 4 本を `requireAdmin` 経由で接続。`functions/src/index.ts` の CORS `allowedHeaders` に `Authorization` を追加（既存の `Content-Type` のみだと preflight で弾かれるため）。
+
+### village-admin: 新規 UI
+
+- `public/self-matching.html`（新規）— ヘッダーナビ + 未処理/履歴のサブタブ + 申請カード一覧 + 承認/却下確認モーダル
+- `public/self-matching.js`（新規）— Firebase Auth で id_token 取得、village-tsubasa の `/api/self-matching/admin/*` を Bearer 認証で叩く
+- `public/index.html` — stats-grid に「セルフマッチング承認待ち N 件」カードを追加（クリックで `/self-matching.html` 遷移）
+- `public/main.js` — `fetchSelfMatchingPendingCount()` 追加、30 秒ポーリングで stat-card / バッジ更新
+- 全 9 ページ（index/schedule/training/search/service-notes-move/service-notes-home/records-home/helper-qualification/audit/index）のナビに「🤝 セルフマッチング」リンクを追加
+
+### 仕様の決定事項（2026-05-06 確定）
+
+| 項目 | 決定 |
+|---|---|
+| 承認時の schedule 更新範囲 | `helper_email` のみ（`name` / `synced_to_sheet` は触らない、GAS 同期に委ねる） |
+| 同予定の他 pending claim | 承認時に自動 `rejected` |
+| API 認証 | Firebase Auth id_token + village-tsubasa 側で 3 名の allow-list 検証 |
+| `decided_by` | Firebase Auth ログイン email |
+| 表示する判断材料 | 申請者名 + email + 申請日時 + `qualification`（メモは出さない） |
+| 履歴 | サブタブで切り替え（pending / 履歴） |
+
+### 影響範囲
+
+- **村つばさ**: 新規 API のみ追加。既存の `/api/self-matching/{candidates,claim,withdraw}` は変更なし。CORS `allowedHeaders` に `Authorization` を追加（追加のみで破壊的変更なし）
+- **village-admin**: 新規ページ + 既存ページのナビ追加。ダッシュボードに stat-card 1 枚追加
+- **schedule テーブル**: `helper_email` UPDATE が新たに admin 経由で発生（ルール4 該当、本ドキュメントで事前共有済み）。`name` / `synced_to_sheet` は触らない
+- **GAS / user-schedule-app**: 影響なし（schedule.name の自動補完は GAS 月次フラッシュで吸収される運用、要動作確認）
+
+### 残作業 / フォロー
+
+- village-tsubasa: API デプロイ
+- village-admin: GitHub remote 設定（🔴 ルール9 該当、奥原さんが別作業中）→ ブランチ切って commit & push
+- Phase 2 候補: 承認/却下のヘルパー通知 / 利用者相性表示 / 1日1回サマリメール / `schedule.name` 自動補完
+
+### 関連コミット/PR
+
+- worktree: `claude/exciting-bardeen-46ff46`
+
+---
+
 ## 2026-05-06 [village-tsubasa] ヘルパーセルフマッチング Phase 1 実装（API + UI 完成、deploy 待ち）
 
 ### 何を作ったか
