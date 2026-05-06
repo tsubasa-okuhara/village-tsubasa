@@ -1,9 +1,24 @@
 import type { NextFunction, Request, Response } from "express";
-import { getApps, initializeApp } from "firebase-admin/app";
+import { type App, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
-if (getApps().length === 0) {
-  initializeApp();
+const VILLAGE_ADMIN_PROJECT_ID = "village-admin-bd316";
+const VILLAGE_ADMIN_APP_NAME = "village-admin";
+
+let villageAdminApp: App | null = null;
+
+function getVillageAdminApp(): App {
+  if (villageAdminApp) return villageAdminApp;
+  const existing = getApps().find((a) => a.name === VILLAGE_ADMIN_APP_NAME);
+  if (existing) {
+    villageAdminApp = existing;
+    return existing;
+  }
+  villageAdminApp = initializeApp(
+    { projectId: VILLAGE_ADMIN_PROJECT_ID },
+    VILLAGE_ADMIN_APP_NAME
+  );
+  return villageAdminApp;
 }
 
 const ALLOWED_ADMIN_EMAILS = [
@@ -35,7 +50,7 @@ export async function requireAdmin(
       return;
     }
 
-    const decoded = await getAuth().verifyIdToken(idToken);
+    const decoded = await getAuth(getVillageAdminApp()).verifyIdToken(idToken);
     const email = (decoded.email ?? "").toLowerCase();
 
     if (!email) {
