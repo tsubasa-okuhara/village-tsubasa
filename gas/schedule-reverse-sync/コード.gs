@@ -133,8 +133,11 @@ function handleAdd(payload) {
 
   const s = sheet;
   const bc = blockStartCol;
-  s.getRange(emptyRow, bc + COL.HELPER).setValue(helper || '担当未設定');
-  s.getRange(emptyRow, bc + COL.CLIENT).setValue(client);
+  // ヘルパー欄: 未設定なら空欄（過去は '担当未設定' リテラルだったが、空欄に統一）
+  s.getRange(emptyRow, bc + COL.HELPER).setValue(helper || '');
+  // 利用者欄: アプリ側 DB 値（"姓 名" 形式）を、スプレッドシート慣例（"姓名様" 形式）に変換
+  const formattedClient = String(client || '').replace(/[\s　]/g, '') + (client ? '様' : '');
+  s.getRange(emptyRow, bc + COL.CLIENT).setValue(formattedClient);
   s.getRange(emptyRow, bc + COL.START).setValue(startTime);
   s.getRange(emptyRow, bc + COL.END).setValue(endTime);
   s.getRange(emptyRow, bc + COL.HAISHA).setValue(haisha || '');
@@ -196,7 +199,8 @@ function handleDelete(payload) {
   }
 
   const { sheet, row, blockStartCol } = found;
-  sheet.getRange(row, blockStartCol, 1, 22).clearContent();
+  // 値は残し、行の背景色を灰色に変更（キャンセル料確認のため値の保持が必要）
+  sheet.getRange(row, blockStartCol, 1, 22).setBackground('#cccccc');
 
   return { success: true, action: 'delete', row: row, sheetName: sheet.getName() };
 }
