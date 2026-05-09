@@ -136,7 +136,7 @@ function handleAdd(payload) {
   // ヘルパー欄: 未設定なら空欄（過去は '担当未設定' リテラルだったが、空欄に統一）
   s.getRange(emptyRow, bc + COL.HELPER).setValue(helper || '');
   // 利用者欄: アプリ側 DB 値（"姓 名" 形式）を、スプレッドシート慣例（"姓名様" 形式）に変換
-  const formattedClient = String(client || '').replace(/[\s　]/g, '') + (client ? '様' : '');
+  const formattedClient = String(client || '').replace(/[\s　]/g, '').replace(/様$/, '') + (client ? '様' : '');
   s.getRange(emptyRow, bc + COL.CLIENT).setValue(formattedClient);
   s.getRange(emptyRow, bc + COL.START).setValue(startTime);
   s.getRange(emptyRow, bc + COL.END).setValue(endTime);
