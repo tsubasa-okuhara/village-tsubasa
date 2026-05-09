@@ -313,7 +313,7 @@ function testAdd() {
   const result = handleAdd({
     supabaseId: 'test-uuid-123',
     date: '2026-05-11',
-    helper: '担当未設定',
+    helper: '',
     client: 'テスト利用者',
     startTime: '09:00',
     endTime: '11:00',
