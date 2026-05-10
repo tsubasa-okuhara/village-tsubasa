@@ -13,6 +13,48 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
+最終更新: 2026-05-08（user-schedule-app 利用者名表示の空白除去 + GAS 逆同期の handleAdd/handleDelete 改修）
+
+---
+
+## 2026-05-08 [user-schedule-app + gas/schedule-reverse-sync] 利用者名表示の空白除去 / 追加・キャンセル時のスプレッドシート挙動変更
+
+### 背景
+- `client_users.client_name` は「藤井 舞純」(半角スペースあり、様なし)、`schedule.client` は「藤井舞純様」(空白なし、様あり) と表記が分裂しており、user-schedule-app からのスケジュール表示・追加で不整合が生じていた
+- キャンセル時に GAS が 22 列を `clearContent()` していたため、キャンセル料の確認に必要なヘルパー名等が消えていた
+- 「担当未設定」リテラルがアプリ側→DB→GAS と素通しで書かれており、空欄に統一したい要望
+
+### 変更内容
+1. **user-schedule-app**
+   - `formatClientName()` (半角・全角スペース除去) を `schedule.html` / `records.html` に追加
+   - ヘッダ「○○ さん」、PDF ヘッダ「○○様」、Excel/PDF 内の利用者名表示を空白除去版に統一
+     - `index.html:57` プレースホルダ「例：山田太郎」
+     - `schedule.html:392, 930` / `records.html:219, 220, 460, 523, 604, 684`
+     - `mypage.html:95` ハードコード文言整形（モック表示）
+   - スケジュール `INSERT` 時の `name`/`helper` リテラルを `'担当未設定'` → `''` に変更（schedule.html L619, L630, L859, L868）
+2. **gas/schedule-reverse-sync/コード.gs**
+   - `handleAdd`: HELPER 列のフォールバックを `'担当未設定'` → `''` に変更。CLIENT 列に書き込む値を `String(client).replace(/[\s　]/g, '') + '様'` に正規化（スプレッドシート慣例「姓名様」形式に揃える）
+   - `handleDelete`: `clearContent()` を廃止し、22 列分の背景色を `#cccccc`（灰色）に設定。値は残す（キャンセル料確認のため）
+
+### 影響範囲
+- **schedule テーブル**: 列の追加・削除なし。`name` 列に書き込む値が `'担当未設定'` リテラル → 空文字 `''` に変わる（既存行はそのまま、新規 INSERT のみ）
+- **スプレッドシート「全体スケジュール」**: 利用者名カラムの新規書き込みが「姓名様」形式に統一。キャンセル削除→灰色背景 ＋ 値保持に挙動変更
+- **village-tsubasa（ヘルパー）/ village-admin**: 直接の API 変更なし。ただし schedule.name に「担当未設定」が来る前提のロジックがあれば要見直し（`grep '担当未設定'` 推奨）
+- **GAS 同期**: `gas/schedule-reverse-sync/コード.gs` を変更したので Apps Script 側にもコピー＆再デプロイが必要（同期ワークフローは `gas/README.md` 参照）
+
+### 追加修正（同日中、残置事項対応）
+- `schedule.html:278` 通知スキップガードに `!helperName` 条件を追加（空文字でも通知スキップさせる）
+- `schedule.html:565` 一覧の「担当」ラベルを `${i.helper ? '...' : ''}` に変更（直上の summary と同じパターンでラッパ div ごと条件化、未確定時は完全非表示）
+- `schedule.html:565` 上記の条件式に `i.helper !== '担当未設定'` を追加（レガシー1行対策、表示側でも除外して通知スキップガードと対称化）
+- `schedule.html:999` PDF iframe の `<title>` 内 displayName を `formatClientName` に通すよう修正
+- `records.html:576` 実績記録 GAS payload の `displayName` を `formatClientName(displayName)` に変更（実績記録シートも空白なし表記で統一）
+
+### レガシー行調査
+- `schedule` テーブルの `name='担当未設定'` 行: **1 件のみ**（`{date:2026-05-04, client:"蛭子 正", name:"担当未設定"}`、user-schedule-app 経由で挿入された未確定行と推定）
+- 推奨: 一括 UPDATE せず**放置**で問題なし（次回 GAS 経由で確定したら上書きされる）。気になる場合のみ Supabase SQL Editor で `UPDATE schedule SET name='' WHERE name='担当未設定';` を 1 回流す（1 行のみ更新）
+
+### 関連コミット
+- 2026-05-08 user-schedule-app + village-tsubasa（同日コミット予定）
 
 ---
 
