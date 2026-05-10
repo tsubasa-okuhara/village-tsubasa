@@ -4,7 +4,45 @@
 > CHANGELOG と違って、過去の記録ではなく **進行中の状態** を書く。
 > 一段落したら CHANGELOG に正式に書き写して、ここはクリア / 次のテーマに更新。
 
-最終更新: 2026-05-03 09:00（feedback フロント救出完了、次は再発防止スクリプト）
+最終更新: 2026-05-10（Phase 1 完了 — utility-name-cleanup）
+
+---
+
+## 2026-05-10 Phase 1 完了 — utility-name-cleanup
+
+### 概要
+user-schedule-app + village-tsubasa GAS の機能改善を Phase 1 として実装・本番反映。
+
+### 変更内容
+- **user-schedule-app** (PR #1, Merged):
+  - `formatClientName(name)` 共通関数追加(空白除去+「様」付与)
+  - 全表示箇所で利用(index.html / schedule.html / records.html / mypage.html)
+  - 追加申請の name フィールド: '担当未設定' → ''
+
+- **village-tsubasa GAS スケジュール逆同期** (PR #9, Merged):
+  - `handleDelete`: clearContent() → setBackground('#cccccc')(値保持+灰色化)
+  - `handleAdd`: formattedClient を idempotent化(`.replace(/様$/, '')` 追加)
+  - testAdd の helper を '' に変更(本番想定値)
+
+### リスク発見と対応
+sheet_auto_create.gs 月次バッチ(毎月15日 00:05 JST)が handleAdd を直接呼び、既存「○○様」データを再渡す挙動が判明 → 「○○様様」二重化問題発覚 → handleAdd の idempotent化で事前に解決。
+
+### デプロイ
+- **GAS**: 本番Web App URL `AKfycbz...` 不変で更新済(Apps Script「スケジュール逆同期」プロジェクト、奥原運用)
+- **GitHub Pages**: PR #1 マージで自動デプロイ、116名利用者に新コード配信
+
+### 動作確認(シークレットウィンドウで予定追加)
+- ✅ ヘルパー欄: 空欄
+- ✅ 利用者欄: 「○○様」(空白なし、様1つ)
+- ✅ DB側の半角スペース('蛭子 正')も regex で正規化された
+
+### コミット履歴
+- village-tsubasa: 4b7eb7d → ce1db59 → 2a39758 → b45ff61(squash merge to main)
+- user-schedule-app: bd7b547 → squash merge to main
+
+### 関連 Notion
+- https://www.notion.so/35cfee12354981fda4b5fd5dd5bc2493
+- https://www.notion.so/35cfee1235498111b91ed508a79f2464
 
 ---
 
