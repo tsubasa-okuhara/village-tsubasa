@@ -1315,6 +1315,38 @@ def main():
     with col2:
         st.metric("総金額", format_currency(stats['total']))
 
+    # ===== 月別統計(Phase 1A) =====
+    today = datetime.now().date()
+    this_month_first = today.replace(day=1)
+    prev_month_last = this_month_first - timedelta(days=1)
+    prev_month_first = prev_month_last.replace(day=1)
+
+    stats_this = get_receipt_stats(
+        helper_email=helper_email,
+        date_from=this_month_first.isoformat(),
+        date_to=today.isoformat(),
+    )
+    stats_prev = get_receipt_stats(
+        helper_email=helper_email,
+        date_from=prev_month_first.isoformat(),
+        date_to=prev_month_last.isoformat(),
+    )
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"**📅 今月 ({this_month_first.strftime('%Y/%m')})**")
+    col_t1, col_t2 = st.sidebar.columns(2)
+    with col_t1:
+        st.metric("件数", f"{stats_this['count']}件")
+    with col_t2:
+        st.metric("金額", format_currency(stats_this['total']))
+
+    st.sidebar.markdown(f"**📅 先月 ({prev_month_first.strftime('%Y/%m')})**")
+    col_p1, col_p2 = st.sidebar.columns(2)
+    with col_p1:
+        st.metric("件数", f"{stats_prev['count']}件")
+    with col_p2:
+        st.metric("金額", format_currency(stats_prev['total']))
+
     st.sidebar.divider()
     st.sidebar.caption("""
     🔐 電子帳簿保存法対応
