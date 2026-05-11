@@ -972,16 +972,17 @@ def page_detail_and_edit(user: dict):
             format="%d"
         )
 
-        vendors = get_unique_vendors(helper_email)
-        if receipt['vendor'] and receipt['vendor'] not in vendors:
-            vendors = [receipt['vendor']] + vendors
-        vendor_index = vendors.index(receipt['vendor']) if receipt['vendor'] in vendors else 0
-
-        new_vendor = st.selectbox(
+        new_vendor = st.text_input(
             "取引先",
-            options=vendors if vendors else [""],
-            index=vendor_index if vendors else 0
+            value=receipt['vendor'] or "",
+            help="OCR誤認識があればここで自由に修正してください"
         )
+
+        existing_vendors = get_unique_vendors(helper_email)
+        if existing_vendors:
+            with st.expander("既存の取引先から選ぶ"):
+                st.caption("クリックでコピーできます（上のテキスト欄に貼り付けてください）")
+                st.code("\n".join(existing_vendors), language=None)
 
         categories = get_categories()
         category_index = categories.index(receipt['category']) if receipt['category'] in categories else 0
