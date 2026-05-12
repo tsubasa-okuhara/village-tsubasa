@@ -69,7 +69,19 @@ DROP POLICY IF EXISTS client_users_anon_all ON public.client_users;
 --      出力:
 --        ログイン成功時 1 行、失敗時 0 行
 --      返却列に login_code は含めない（漏洩防止の主目的）
-CREATE OR REPLACE FUNCTION public.client_login(
+--
+-- 注意: client_users.service_types の実型は text[]（postgres 配列）。
+--       RETURNS TABLE 側を text[] で一致させないと
+--       42P13 "return type mismatch" エラーになる。
+--       PostgREST は text[] を JSON 配列としてシリアライズするので、
+--       user-schedule-app/index.html の `JSON.stringify(user.service_types || [])`
+--       はそのまま機能する。
+--
+-- 補足: 万一前回失敗時に関数が部分的に残っていたら、CREATE OR REPLACE は
+--       戻り値型の変更を許さないため明示的に DROP しておく。
+DROP FUNCTION IF EXISTS public.client_login(text, text);
+
+CREATE FUNCTION public.client_login(
   p_name text,
   p_code text
 )
@@ -77,7 +89,7 @@ RETURNS TABLE (
   id                 uuid,
   client_name        text,
   beneficiary_number text,
-  service_types      jsonb
+  service_types      text[]
 )
 LANGUAGE sql
 SECURITY DEFINER
