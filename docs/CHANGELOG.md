@@ -13,7 +13,24 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-05-11（経費アプリ — 取引先フィールドを自由入力テキストに変更）
+最終更新: 2026-05-12（Supabase セキュリティ修正 — client_users RPC 化 / user_helper_compatibility RLS 有効化）
+
+---
+
+## 2026-05-12 [village-tsubasa + user-schedule-app] Supabase セキュリティ修正
+
+### Security
+- `client_users.login_code` が anon キーから全件取得できる状態だったため SECURITY DEFINER RPC `client_login(p_name, p_code)` 経由のみで照合する形に変更。Phase 3 の `client_users_anon_all (FOR ALL TO anon)` ポリシーを撤去し、anon の直接 SELECT を不可に
+- `user_helper_compatibility` テーブルが RLS 無効のまま放置されていた問題を解消（RLS ON、ポリシー無し → service_role のみアクセス可）
+- 関連 SQL: `sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`（ロールバックブロック・検証クエリ同梱）
+- user-schedule-app/index.html: `from('client_users').select(...).eq('login_code', code)` → `sb.rpc('client_login', { p_name, p_code })` に書き換え（user-schedule-app コミット `534edae`）
+
+### 影響範囲
+- 他アプリ: user-schedule-app の `index.html` ログインフローのみ変更（schedule.html / records.html / mypage.html は無影響）
+- village-admin・Cloud Functions・GAS は service_role キーのため RLS bypass で無影響
+- `portal_*` テーブル群および他の既存 RLS ポリシーには変更なし
+- 適用順序の注意: user-schedule-app の RPC 切り替え（main 反映済み）→ Supabase に SQL を適用、の順で進めないとログインが一時的に壊れる
+- Supabase への SQL 適用は奥原さんが Dashboard → SQL Editor で手動実施予定
 
 ---
 

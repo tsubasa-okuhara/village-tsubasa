@@ -118,6 +118,32 @@
   - `enable_self_matching` がセルフマッチング画面のゲート判定に使われる（Phase 1 で導入。`functions/src/self-matching/listCandidates.ts` / `claimSchedule.ts`）
   - 居宅実績記録票の HTML 表示で `qualification` の値による色分けに使う想定（介護福祉士・初任者研修=青、重度訪問介護=赤）
   - 2026-05-04: village-admin の監査用「勤務形態一覧表」で `employment_type` を参照
+### ✅ `user_helper_compatibility`
+- **役割**: ヘルパー × 利用者の対応可否マトリクス（⚪︎×シート相当）。Supabase が正、スプレッドシートはバックアップ扱い。Phase 1A セルフマッチング機能の判定基盤
+- **CREATE 文**: `sql/2026-04-29_helper_compatibility.sql`
+- **列**:
+  - `user_name` (text, NOT NULL): 利用者名（PK 一部）
+  - `helper_email` (text, NOT NULL): ヘルパーメール（PK 一部）
+  - `beneficiary_number` (text, nullable): 受給者番号（将来 user_master との結合キー予定）
+  - `status` (text, NOT NULL, default `'×'`, CHECK `'⚪︎'/'×'/'△'/'1'/'2'/'N'`)
+    - ⚪︎=OK / ×=未経験 / △=1人で自信なし / 1=2人付で1人対応可 / 2=2人付で相方ありなら可 / N=NG（家族指定など、絶対除外）
+  - `status_set_by` (text, NOT NULL, default `'admin'`, CHECK `'helper'/'admin'`)
+  - `note` (text, nullable)
+  - `updated_at` (timestamptz, NOT NULL, default `NOW()`): 自動更新トリガー `uhc_set_updated_at` あり
+  - `updated_by` (text, nullable)
+- **PK**: `(user_name, helper_email)`
+- **インデックス**:
+  - `idx_uhc_helper_email` (helper_email)
+  - `idx_uhc_user_name` (user_name)
+  - `idx_uhc_status_n` (helper_email, status) WHERE `status = 'N'`
+- **参照箇所**:
+  - `gas/village-schedule-sync/対応可否シート移行.gs` （スプレッドシートからの初回 UPSERT、service_role キー使用）
+  - 将来: `functions/src/self-matching/listCandidates.ts` でセルフマッチング候補絞り込みに使用予定
+- **RLS**:
+  - 2026-04-29 作成時: RLS OFF（`sql/2026-04-29_helper_compatibility.sql` で RLS 設定漏れ）
+  - **2026-05-12 修正**: RLS ON、ポリシー無し（service_role のみアクセス可）。
+    `sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`
+    - 現状アクセス元は GAS の service_role のみのため、ポリシー無しでも既存挙動は無影響
 ---
 ## 2. 移動支援（move）系
 ### ⚠️ `schedule_tasks_move`
@@ -416,19 +442,32 @@
 
 ### 🔎 `client_users`
 - **役割（推定）**: 利用者の認証/識別マスタ。user-schedule-app のログインや
-  本人特定に使われている可能性が高い
+  本人特定に使われている
 - **発見経緯**: 2026-04-25、RLS 移行 Phase 2 の調査で `~/Desktop/user-schedule-app/index.html:108` から
   `.from('client_users')` 呼び出しが発見された
-- **列**: 未調査
+- **列（user-schedule-app の SELECT から判明した分）**:
+  - `id` (uuid): PK
+  - `client_name` (text): 利用者名
+  - `beneficiary_number` (text)
+  - `login_code` (text): 4桁ログインコード。**anon から漏らしてはいけない機微情報**
+  - `service_types` (jsonb)
+  - `is_active` (boolean): 退会・無効化フラグ
 - **参照箇所**:
-  - user-schedule-app/index.html L108（操作種別未確認）
+  - user-schedule-app/index.html: 2026-05-12 から `sb.rpc('client_login', { p_name, p_code })` で照合（旧: `from('client_users').select(...).eq('login_code', code)` の anon 直接 SELECT）
 - **CREATE 文**: 不明（リポジトリ内未確認）
 - **TODO**:
-  - [ ] 列構成の確認（Supabase Dashboard）
-  - [ ] index.html の前後コードを読んで操作種別を特定（SELECT のみ？INSERT もある？）
+  - [ ] 列構成の確認（Supabase Dashboard で全列を確定）
   - [ ] `calm_check_targets.client_id` が参照する `clients` テーブルとの関係性確認
-- **RLS**: 2026-04-25 時点で OFF。Phase 3 で `FOR ALL TO anon` ポリシー予定
-  （`sql/enable_rls_schedule.sql`）
+- **RLS / アクセス制御**:
+  - 2026-04-25 Phase 3: RLS ON + `client_users_anon_all (FOR ALL TO anon USING(true))` ポリシー
+    （`sql/enable_rls_schedule.sql`）→ anon が `login_code` を含む全列を取得できる状態だった
+  - **2026-05-12 修正**: anon 直接 SELECT を禁止し、SECURITY DEFINER RPC `client_login(p_name text, p_code text)` 経由のみ許可
+    （`sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`）
+    - `DROP POLICY client_users_anon_all`（RLS は ON のまま、ポリシー無し → anon は何もできない）
+    - 新 RPC `public.client_login(p_name, p_code)` は SECURITY DEFINER / STABLE / `search_path = pg_catalog, public, pg_temp`
+    - 返却列は `id / client_name / beneficiary_number / service_types`（**`login_code` は返さない**）
+    - `GRANT EXECUTE TO anon, authenticated`
+    - service_role は引き続き RLS bypass で全操作可（admin / Cloud Functions 用）
 
 ---
 
@@ -557,6 +596,7 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 - カラム自体は残してあるので、将来必要になれば GAS 側で `sbMarkSynced_()` を有効化すれば使える
 ---
 ## 更新履歴
+- 2026-05-12: セキュリティ修正 2 件。(1) `client_users.login_code` を anon キーから読み取れない構造に変更 — Phase 3 の `client_users_anon_all (FOR ALL TO anon)` ポリシーを撤去し、SECURITY DEFINER RPC `client_login(p_name, p_code)` 経由のみで照合。RPC の返却列に `login_code` を含めない。user-schedule-app/index.html もこの RPC 呼び出しに切り替え（コミット `534edae`）。(2) `user_helper_compatibility` の RLS を有効化（ポリシー無し → service_role のみアクセス可）。GAS の対応可否シート移行は service_role 利用なので無影響。CREATE 文: `sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`。`portal_*` テーブル群および他の既存 RLS ポリシー（schedule / helper_master / notifications / Group A 17 テーブル / schedule_claims）には変更なし
 - 2026-05-06: `home_schedule_tasks` に partial UNIQUE INDEX `uniq_home_schedule_tasks_manual` を追加。キー: (service_date, start_time, end_time, user_name, helper_name, task)、条件: `WHERE schedule_id IS NULL`。GAS `★サービス記録内容転送.gs` の重複 INSERT を DB レベルで拒否。永沢様 2026-05-01 分の重複事故（11時間差で2回投入）への根本対策。CREATE 文: `sql/2026-05-06_uniq_home_schedule_tasks_manual.sql`。ルール 2「追加は OK / 既存変更しない」に該当（既存列・既存制約は無変更、partial INDEX 追加のみ）
 - 2026-05-04: `helper_master.employment_type` (text, nullable) を追加。村のつばさ admin の監査用「勤務形態一覧表」で常勤/非常勤を表示するため。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`。ルール 2「nullable な列追加」に該当
 - 2026-04-11: 初版作成
