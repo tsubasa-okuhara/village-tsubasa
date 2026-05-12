@@ -450,7 +450,7 @@
   - `client_name` (text): 利用者名
   - `beneficiary_number` (text)
   - `login_code` (text): 4桁ログインコード。**anon から漏らしてはいけない機微情報**
-  - `service_types` (jsonb)
+  - `service_types` (text[]): 利用者が使うサービス種別の配列（PostgREST 経由では JSON 配列としてシリアライズされる）
   - `is_active` (boolean): 退会・無効化フラグ
 - **参照箇所**:
   - user-schedule-app/index.html: 2026-05-12 から `sb.rpc('client_login', { p_name, p_code })` で照合（旧: `from('client_users').select(...).eq('login_code', code)` の anon 直接 SELECT）
@@ -465,7 +465,7 @@
     （`sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`）
     - `DROP POLICY client_users_anon_all`（RLS は ON のまま、ポリシー無し → anon は何もできない）
     - 新 RPC `public.client_login(p_name, p_code)` は SECURITY DEFINER / STABLE / `search_path = pg_catalog, public, pg_temp`
-    - 返却列は `id / client_name / beneficiary_number / service_types`（**`login_code` は返さない**）
+    - 返却列は `id (uuid) / client_name (text) / beneficiary_number (text) / service_types (text[])`（**`login_code` は返さない**）
     - `GRANT EXECUTE TO anon, authenticated`
     - service_role は引き続き RLS bypass で全操作可（admin / Cloud Functions 用）
 
