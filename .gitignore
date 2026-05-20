@@ -28,3 +28,4 @@ receipt_database.db
 # 画像アップロード（ユーザーデータ）
 images/
 uploads/
+venv/
