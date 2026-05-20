@@ -135,26 +135,36 @@ export async function handleListSelfMatchingCandidates(
       return;
     }
 
-    const scheduleIds = filtered.map((row) => String(row.id));
+    // 候補件数が多いと .in("schedule_id", [...]) の URL が CF/Envoy の長さ制限を超えて
+    // 400 Bad Request(非JSON)で弾かれるため、ステータス絞り込みのみで取得し JS 側で突合する。
+    // pending/approved に限れば全件取得しても件数は小さい。
+    const scheduleIdSet = new Set(filtered.map((row) => String(row.id)));
 
-    const { data: claimRows, error: claimsErr } = await supabase
+    const { data: allClaimRows, error: claimsErr } = await supabase
       .from("schedule_claims")
       .select("id, schedule_id, helper_email, status")
-      .in("schedule_id", scheduleIds)
       .in("status", ["pending", "approved"]);
 
     if (claimsErr) {
-      console.error("[self-matching/candidates] claims query error:", claimsErr);
+      console.error(
+        "[self-matching/candidates] claims query error:",
+        claimsErr,
+        `(candidates=${scheduleIdSet.size})`
+      );
       res.status(500).json({ ok: false, message: "internal error" });
       return;
     }
+
+    const claimRows = ((allClaimRows ?? []) as ClaimRow[]).filter((claim) =>
+      scheduleIdSet.has(String(claim.schedule_id))
+    );
 
     const lowerHelperEmail = helperEmail.toLowerCase();
     const claimsByScheduleId = new Map<
       string,
       { myId: string | null; mine: string | null; total: number }
     >();
-    for (const claim of (claimRows ?? []) as ClaimRow[]) {
+    for (const claim of claimRows) {
       const key = String(claim.schedule_id);
       const entry =
         claimsByScheduleId.get(key) ?? { myId: null, mine: null, total: 0 };
