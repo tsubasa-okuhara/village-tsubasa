@@ -13,7 +13,22 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-05-12（Supabase セキュリティ修正 — client_users RPC 化 / user_helper_compatibility RLS 有効化）
+最終更新: 2026-05-20（セルフマッチング候補API の 500 エラー修正 — schedule_claims クエリ URL 長制限超過）
+
+---
+
+## 2026-05-20 [village-tsubasa] セルフマッチング候補API の 500 エラー修正
+
+### Fixed
+- `GET /api/self-matching/candidates?helper_email=...` が常に 500 を返してフロント「読み込む」が失敗していた問題を解消
+- 原因: `listCandidates.ts` の `schedule_claims` クエリで `.in("schedule_id", [...687件])` を組み立てた結果、URL が約 25,571 バイトに膨らみ Cloudflare/Envoy 層で 400 Bad Request（非 JSON）が返っていた。supabase-js が postgrest JSON 形式のエラーを得られず bare `{ message: 'Bad Request' }` にフォールバックし、ハンドラが 500 で応答
+- 修正: `schedule_id` フィルタを止め、`status in ('pending','approved')` のみで取得 → JS 側で `scheduleIdSet` と突合（pending/approved の件数は本質的に少数なので全件取得しても安価）
+- 併せてエラーログに候補件数 (`candidates=N`) を追加し、同種の URL 長クラッシュを次回即座に特定できるよう改善
+
+### 影響範囲
+- 本リポ内のみ（API レスポンス形式・DB スキーマに変更なし、内部実装のみ）
+- village-admin・user-schedule-app には無影響
+- 関連ファイル: `functions/src/self-matching/listCandidates.ts`
 
 ---
 
