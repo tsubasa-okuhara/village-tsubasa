@@ -63,6 +63,9 @@ const formRegenButton = document.getElementById("form-regen-note");
 const formStatus = document.getElementById("form-status");
 const formSaveNext = document.getElementById("form-save-next");
 const formSaveClose = document.getElementById("form-save-close");
+const formMic = document.getElementById("form-mic");
+const formMicStatus = document.getElementById("form-mic-status");
+const formAiButton = document.getElementById("form-ai-note");
 
 // ─── 状態 ───────────────────────────────────────────────
 const state = {
@@ -187,7 +190,31 @@ async function fetchUnwritten(category) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   if (!data.ok) throw new Error(data.message || "fetch failed");
-  return Array.isArray(data.items) ? data.items : [];
+  const rawItems = Array.isArray(data.items) ? data.items : [];
+
+  // ⚠️ 居宅と移動で API レスポンス形式が異なるため、ここでスネークケースに統一
+  //   - home: スネークケース (id, user_name, helper_email, ...) で返す
+  //   - move: キャメルケース (taskId, userName, helperEmail, ...) で返す
+  // UI 側のコードは home 形式（スネークケース）前提で書かれているので、
+  // move の場合だけここで変換する。
+  if (category === "move") {
+    return rawItems.map((item) => ({
+      id: item.taskId,
+      helper_email: item.helperEmail,
+      helper_name: item.helperName,
+      user_name: item.userName,
+      service_date: item.serviceDate,
+      start_time: item.startTime,
+      end_time: item.endTime,
+      task: item.task,
+      summary: item.summary,
+      summary_text: item.summaryText,
+      beneficiary_number: item.beneficiaryNumber,
+      haisha: item.raw && item.raw.haisha ? String(item.raw.haisha) : "",
+    }));
+  }
+
+  return rawItems;
 }
 
 function updateBadges() {
@@ -270,6 +297,10 @@ function openForm(task) {
 }
 
 function closeForm() {
+  // モーダル閉じる前に録音停止（音声入力中なら）
+  if (speech && speech.isRecording) {
+    stopRecording();
+  }
   formModal.hidden = true;
   state.selectedTask = null;
 }
@@ -504,6 +535,242 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+// ─── 音声入力 (Web Speech API) ───────────────────────
+// 仕様:
+//   - 🎤 ボタン押す → 録音開始（ブラウザの許可ダイアログ初回のみ）
+//   - 話す → 自動でメモ欄末尾に追記（既存内容は保持）
+//   - 中間結果（途中の認識文字）は status 欄にうっすら表示、確定したら memo に追記
+//   - もう一度押す or stop イベントで終了
+// 対応ブラウザ:
+//   - Chrome (Mac/Android), Edge, Safari (iOS 14.5+)
+//   - 非対応の場合は 🎤 ボタン自体を非表示
+const SpeechRecognitionCtor =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+const speech = {
+  recognition: null,
+  isRecording: false,
+  finalBuffer: "", // 確定した認識結果（このセッションで足し続ける用）
+};
+
+function initSpeechRecognition() {
+  if (!SpeechRecognitionCtor) {
+    // ブラウザ非対応 → ボタン隠したまま
+    return false;
+  }
+
+  formMic.hidden = false;
+
+  const rec = new SpeechRecognitionCtor();
+  rec.lang = "ja-JP";
+  rec.continuous = true;       // 喋り続ける間ずっと認識
+  rec.interimResults = true;   // 中間結果も受け取る
+  rec.maxAlternatives = 1;
+
+  rec.onresult = (event) => {
+    let interim = "";
+    let finalThisCallback = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalThisCallback += transcript;
+      } else {
+        interim += transcript;
+      }
+    }
+
+    if (finalThisCallback) {
+      // メモ欄に追記（既存末尾にスペース or 改行）
+      const current = formMemo.value;
+      const sep = current && !/[\s\n]$/.test(current) ? " " : "";
+      formMemo.value = current + sep + finalThisCallback;
+      // 自動的に記録本文も再生成
+      if (state.selectedTask) {
+        formFinalNote.value = generateFinalNote(state.selectedTask, formMemo.value);
+      }
+    }
+
+    // 中間結果を status に表示
+    if (interim) {
+      formMicStatus.innerHTML = `🎤 録音中... <span class="interim">${escapeHtml(interim)}</span>`;
+    } else {
+      formMicStatus.textContent = "🎤 録音中...";
+    }
+  };
+
+  rec.onerror = (event) => {
+    console.error("[speech] error:", event.error);
+    let msg = "音声認識エラー";
+    if (event.error === "not-allowed" || event.error === "permission-denied") {
+      msg = "❌ マイク許可が必要です。ブラウザ設定から許可してください。";
+    } else if (event.error === "no-speech") {
+      msg = "🔇 音声が検出されません";
+    } else if (event.error === "network") {
+      msg = "🌐 ネットワークエラー（オフラインでは動きません）";
+    } else if (event.error === "aborted") {
+      msg = ""; // 自分で stop したケース、無視
+    } else {
+      msg = `❌ 音声認識エラー: ${event.error}`;
+    }
+    if (msg) {
+      formMicStatus.textContent = msg;
+      formMicStatus.classList.remove("is-recording");
+    }
+    stopRecording();
+  };
+
+  rec.onstart = () => {
+    speech.isRecording = true;
+    formMic.classList.add("is-recording");
+    formMic.textContent = "⏹ 停止";
+    formMemo.classList.add("is-recording");
+    formMicStatus.textContent = "🎤 録音中...";
+    formMicStatus.classList.add("is-recording");
+  };
+
+  rec.onend = () => {
+    speech.isRecording = false;
+    formMic.classList.remove("is-recording");
+    formMic.textContent = "🎤 音声";
+    formMemo.classList.remove("is-recording");
+    formMicStatus.classList.remove("is-recording");
+    // 状態クリア（ただし、エラーメッセージが入ってる場合は保持）
+    if (formMicStatus.textContent.startsWith("🎤")) {
+      formMicStatus.textContent = "";
+    }
+  };
+
+  speech.recognition = rec;
+  return true;
+}
+
+function startRecording() {
+  if (!speech.recognition || speech.isRecording) return;
+  try {
+    speech.recognition.start();
+  } catch (err) {
+    // start() を連続で呼ぶとエラーになるが、その場合は無視
+    console.error("[speech] start error:", err);
+  }
+}
+
+function stopRecording() {
+  if (!speech.recognition) return;
+  try {
+    speech.recognition.stop();
+  } catch (err) {
+    console.error("[speech] stop error:", err);
+  }
+}
+
+// 🎤 ボタン
+formMic.addEventListener("click", () => {
+  if (speech.isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
+// 音声認識を初期化（非対応ブラウザならボタン隠したまま）
+// モーダル閉じる時の録音停止は closeForm() 内で対応済み
+initSpeechRecognition();
+
+// ─── AI 整形 (既存の generateSummary エンドポイント流用) ──
+// 仕様:
+//   - 🤖 ボタン押す → 現フォーム内容（メモ + 自動入力情報）を AI に送信
+//   - GPT-4o-mini で介護記録文を生成（既存 /api/service-records-{home,move}/summary）
+//   - 返ってきた summaryText を記録本文（finalNote）にセット
+//   - OPENAI_API_KEY 未設定時はサーバー側がフォールバック文を返す（無害）
+formAiButton.addEventListener("click", async () => {
+  if (!state.selectedTask) return;
+
+  const memo = formMemo.value.trim();
+  if (!memo) {
+    formStatus.textContent = "メモを入力してから AI整形してください。";
+    formStatus.className = "status is-error";
+    formMemo.focus();
+    return;
+  }
+
+  // ローディング表示
+  formAiButton.classList.add("is-loading");
+  formAiButton.disabled = true;
+  formStatus.textContent = "🤖 AI 整形中…";
+  formStatus.className = "status";
+
+  try {
+    let summaryText;
+    if (state.currentCategory === "home") {
+      summaryText = await fetchAiSummaryHome(state.selectedTask, memo);
+    } else {
+      summaryText = await fetchAiSummaryMove(state.selectedTask, memo);
+    }
+
+    if (summaryText) {
+      formFinalNote.value = summaryText;
+      formStatus.textContent = "✨ AI 整形完了";
+      formStatus.className = "status is-success";
+    } else {
+      formStatus.textContent = "AI から空のレスポンスが返りました。";
+      formStatus.className = "status is-error";
+    }
+  } catch (err) {
+    console.error("[owner-record] ai summary error:", err);
+    formStatus.textContent = "AI 整形に失敗: " + (err.message || "不明エラー");
+    formStatus.className = "status is-error";
+  } finally {
+    formAiButton.classList.remove("is-loading");
+    formAiButton.disabled = false;
+  }
+});
+
+async function fetchAiSummaryHome(task, memo) {
+  const body = {
+    helperName: task.helper_name || "",
+    userName: task.user_name || "",
+    serviceDate: task.service_date || "",
+    startTime: task.start_time || "",
+    endTime: task.end_time || "",
+    category: state.selectedCategoryValue || task.task || "",
+    items: [],         // 構造化項目（実施項目）は省略
+    otherDetail: "",
+    memo,
+  };
+  const res = await fetch(`${API_BASE}/service-records-home/summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return data.summaryText;
+}
+
+async function fetchAiSummaryMove(task, memo) {
+  const body = {
+    helperName: task.helper_name || "",
+    userName: task.user_name || "",
+    serviceDate: task.service_date || "",
+    startTime: task.start_time || "",
+    endTime: task.end_time || "",
+    task: task.task || "",
+    notes: memo,
+  };
+  const res = await fetch(`${API_BASE}/service-records-move/summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return data.summaryText;
 }
 
 // ─── 起動 ─────────────────────────────────────────────
