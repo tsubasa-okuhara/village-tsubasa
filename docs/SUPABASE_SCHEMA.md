@@ -5,6 +5,134 @@
 > - ✅ : リポジトリ内に CREATE 文（sql/）あり
 > - ⚠️ : コード参照のみ（CREATE 文がリポジトリに無い、Supabase 上で直接作成されたもの）
 > - 🔎 : 要確認（別チャットで追加された可能性あり）
+
+---
+
+## 0. 現在のライブスキーマ概況（2026-05-11 自動取得 / 2026-05-12 セキュリティ修正を反映）
+
+Supabase Management API（`/v1/projects/pbqqqwwgswniuomjlhsh/database/query`）経由で `pg_class` / `pg_policies` / `information_schema` / `pg_constraint` を直接照会した結果。本セクションが**ライブ DB の正本**で、以降のセクションで食い違う記述があれば本セクションを優先する。
+
+- プロジェクト ref: `pbqqqwwgswniuomjlhsh`（village-tsubasa）
+- PostgreSQL: 17.6
+- public スキーマ: 28 テーブル + 1 ビュー (`schedule_web_v`)
+- 公開関数（pg_proc）: 8 個（トリガー関数 7 個 + SECURITY DEFINER 1 個 `client_login`、2026-05-12 追加）
+
+### 0.1 テーブル一覧（行数・RLS 状態・ポリシー数）
+
+| # | テーブル | 行数 | RLS | ポリシー | 主用途 |
+|---|---|---:|:---:|:---:|---|
+| 1 | `admin_error_alerts` | 0 | ON | 0 | 管理ダッシュボードエラーアラート（§9） |
+| 2 | `admin_users` | 5 | ON | 0 | 管理者 allow-list + `can_edit_schedule`（§9） |
+| 3 | `anonymous_feedback` | 2 | ON | 0 | 匿名フィードバック（§6） |
+| 4 | `calm_check_targets` | 2 | ON | 0 | 落ち着き確認対象（§8） |
+| 5 | `calm_checks` | 6 | ON | 0 | 落ち着き確認ログ（§8） |
+| 6 | `client_users` | 116 | ON | 0 ※2026-05-12 に `client_users_anon_all` 撤去（RLS deny-all）。anon は行を読めず、ログインは `client_login` RPC 経由 | 利用者マスタ（§8.5） |
+| 7 | `helper_master` | 37 | ON | **1 (anon SELECT)** | ヘルパーマスタ（§1） |
+| 8 | `helper_priority` | 170 | ON | **1 (public ALL)** | ヘルパー優先度（§8.6） |
+| 9 | `home_schedule_tasks` | 255 | ON | 0 | 居宅介護スケジュール（§3） |
+| 10 | `move_check_logs` | 0 | ON | 0 | 移動チェックポイントログ（§2） |
+| 11 | `notifications` | 1177 | ON | **1 (anon INSERT)** | 通知（§5） |
+| 12 | `process_log` | 7 | ON | **1 (public ALL)** | 処理ログ（§8.6） |
+| 13 | `push_subscriptions` | 19 | ON | 0 | Web Push 購読（§5） |
+| 14 | `receipt_audit_log` | 76 | ON | 0 | 経費精算監査（§8.6） |
+| 15 | `receipt_categories` | 8 | ON | 0 | 経費精算カテゴリ（§8.6） |
+| 16 | `receipts` | 63 | ON | 0 | 経費精算（§8.6） |
+| 17 | `schedule` | 3531 | ON | **1 (anon ALL)** | 予定本体（§1） |
+| 18 | `schedule_claims` | 0 | ON | 0 | セルフマッチング申請（§1） |
+| 19 | `schedule_tasks_move` | 1701 | ON | 0 | 移動支援スケジュール（§2） |
+| 20 | `service_action_logs` | 318 | ON | 0 | サービス行動ログ（§4） |
+| 21 | `service_action_logs_home` | 78 | ON | 0 | 居宅介護行動ログ（§3） |
+| 22 | `service_irregular_events` | 5 | ON | 0 | イレギュラー事象（§4） |
+| 23 | `service_notes_home` | 191 | ON | 0 | 居宅介護記録（§3） |
+| 24 | `service_notes_move` | 1176 | ON | 0 | 移動支援記録（§2） |
+| 25 | `service_record_structured` | 345 | ON | 0 | 構造化記録本体（§4） |
+| 26 | `training_materials` | 1 | ON | 0 | 研修教材（§7） |
+| 27 | `training_reports` | 21 | ON | 0 | 研修報告（§7） |
+| 28 | `user_helper_compatibility` | 0 | ON | 0 | 利用者×ヘルパー相性（2026-05-12 RLS 有効化） |
+| V | `schedule_web_v` | (view) | — | — | `schedule` 整形ビュー |
+
+**RLS 観点で 3 グループに分類:**（2026-05-12 セキュリティ修正“後”の現状。修正前は A=21 / B=6 / C=1）
+- **A. 完全ロック（RLS ON + ポリシー 0）**: anon/authenticated からは一切アクセス不可、service_role キーのみ。23 テーブル（修正前 21 → 2026-05-12 に `user_helper_compatibility` を C→A、`client_users` を B→A の 2 つを移動して +2）。
+- **B. anon 全許可（RLS ON + 緩いポリシー）**: 5 テーブル → `schedule` / `helper_master` / `notifications` / `helper_priority` / `process_log`。anon キーで `USING true` ベースに通る（§12 で詳細）。
+- **C. RLS 完全 OFF**: なし（2026-05-12 に `user_helper_compatibility` の RLS を有効化して 0 件化）。
+- **`client_users` の補足**: 2026-05-11 時点では anon 全許可（B）だったが、2026-05-12 に `client_users_anon_all` ポリシーを撤去して RLS deny-all 化（A へ移動）。anon はテーブルから 1 行も読めない。ログイン照合のみ SECURITY DEFINER 関数 `client_login(p_name, p_code)` 経由で可能。`login_code` 列は anon の列権限（SELECT 等）自体は残るが、RLS deny-all で行が返らないため読めない（列レベル REVOKE は未適用）。
+
+### 0.2 RLS ポリシー全列挙（pg_policies）
+
+| テーブル | ポリシー名 | コマンド | ロール | USING | WITH CHECK |
+|---|---|---|---|---|---|
+| `client_users` | `client_users_anon_all` | ALL | `{anon}` | `true` | `true` |
+| `helper_master` | `helper_master_anon_select` | SELECT | `{anon}` | `true` | — |
+| `helper_priority` | `Service role full access on helper_priority` | ALL | `{public}` | `true` | `true` |
+| `notifications` | `notifications_anon_insert` | INSERT | `{anon}` | — | `true` |
+| `process_log` | `Service role full access on process_log` | ALL | `{public}` | `true` | `true` |
+| `schedule` | `schedule_anon_all` | ALL | `{anon}` | `true` | `true` |
+
+> ⚠️ `helper_priority` / `process_log` のポリシーは名前に "Service role full access" と入っているが、実体は `TO public USING (true)` で、**anon でも認証済みでも誰でも通る**。`TO service_role` 限定の意図だったなら誤設定。
+
+> ⚠️ 上表は 2026-05-11 時点のスナップショット。`client_users_anon_all` は 2026-05-12 に DROP 済み（現在 `client_users` のポリシーは 0 件＝RLS deny-all）。**現行ポリシーは 5 件**。
+
+> 🔒 `client_users` のログイン保護（2026-05-12）: `client_users_anon_all` ポリシーを撤去し **RLS deny-all** 化。anon はテーブルから 1 行も読めない。`login_code` 列の anon 列権限（SELECT 等）自体は残っているが、RLS deny-all が先に効いて行が返らないため読めない（**列レベル REVOKE は未適用**）。anon のログイン照合は SECURITY DEFINER 関数 `public.client_login(p_name, p_code)` 経由のみ（返却列に `login_code` を含まない）。
+
+### 0.3 外部キー全列挙（pg_constraint, contype='f'）
+
+| 制約名 | 子 | 親 | ON DELETE |
+|---|---|---|---|
+| `home_schedule_tasks_schedule_id_fkey` | `home_schedule_tasks.schedule_id` | `schedule.id` | CASCADE |
+| `receipt_audit_log_receipt_id_fkey` | `receipt_audit_log.receipt_id` | `receipts.id` | NO ACTION |
+| `schedule_claims_schedule_id_fkey` | `schedule_claims.schedule_id` | `schedule.id` | CASCADE |
+| `schedule_tasks_move_schedule_id_fkey` | `schedule_tasks_move.schedule_id` | `schedule.id` | CASCADE |
+| `service_action_logs_structured_record_id_fkey` | `service_action_logs.structured_record_id` | `service_record_structured.id` | CASCADE |
+| `service_action_logs_home_schedule_task_id_fkey` | `service_action_logs_home.schedule_task_id` | `home_schedule_tasks.id` | CASCADE |
+| `service_action_logs_home_service_note_id_fkey` | `service_action_logs_home.service_note_id` | `service_notes_home.id` | CASCADE |
+| `service_irregular_events_structured_record_id_fkey` | `service_irregular_events.structured_record_id` | `service_record_structured.id` | CASCADE |
+| `service_notes_home_schedule_task_id_fkey` | `service_notes_home.schedule_task_id` | `home_schedule_tasks.id` | CASCADE |
+| `training_reports_training_material_id_fkey` | `training_reports.training_material_id` | `training_materials.id` | SET NULL |
+
+> ⚠️ FK は 10 本のみ。`helper_email` / `helper_name` / `client` / `user_name` 等のテキスト結合キーは**どれも FK 不在**で、`helper_master` や `client_users` への参照整合性は DB レベルで保証されていない（GAS / アプリ側の運用に依存）。
+
+### 0.4 トリガー一覧
+
+| テーブル | トリガー | 関数 | 用途 |
+|---|---|---|---|
+| `home_schedule_tasks` | `trg_fill_helper_email_home` | `fill_helper_email_home()` | INSERT/UPDATE 時に `helper_email` を `helper_master` から補完 |
+| `schedule` | `trg_fill_helper_email_schedule` | `fill_helper_email_schedule()` | 同上（`name` → `helper_email`） |
+| `schedule_tasks_move` | `trg_fill_helper_email_move` | `fill_helper_email_move()` | 同上 |
+| `receipts` | `trg_prevent_receipt_delete` | `prevent_receipt_delete()` | DELETE を拒否（`is_deleted` フラグ運用に強制） |
+| `receipt_audit_log` | `trg_prevent_receipt_audit_update` | `prevent_receipt_audit_modification()` | UPDATE/DELETE を拒否（append-only） |
+| `schedule_claims` | `trg_schedule_claims_updated_at` | `set_schedule_claims_updated_at()` | `updated_at` 自動更新 |
+| `user_helper_compatibility` | `uhc_set_updated_at` | `trg_uhc_set_updated_at()` | `updated_at` 自動更新 |
+
+### 0.5 UNIQUE / CHECK 制約（PK 以外）
+
+- UNIQUE
+  - `helper_priority` `(client_name, helper_name, service_type)`
+  - `push_subscriptions.endpoint`
+  - `receipt_categories.name`
+  - `receipts.image_hash`
+  - `schedule.source_key`（unique index `schedule_source_key_idx`）
+  - `schedule_claims (schedule_id, helper_email)`
+  - `schedule_tasks_move.source_key`
+  - `home_schedule_tasks.source_key`
+  - `home_schedule_tasks (service_date, source_sheet, source_row)`
+  - `home_schedule_tasks (service_date, start_time, end_time, user_name, helper_name, task) WHERE schedule_id IS NULL` — 手動投入の二重防止（2026-05-06 追加）
+  - `service_record_structured (source_type, source_note_id)`
+- CHECK
+  - `schedule_claims.status IN ('pending','approved','rejected','withdrawn')`
+  - `user_helper_compatibility.status IN ('⚪︎','×','△','1','2','N')`
+  - `user_helper_compatibility.status_set_by IN ('helper','admin')`
+
+### 0.6 取得 SQL（再現用）
+
+本セクションは以下のクエリで再取得可能（Management API 経由）:
+- テーブル + RLS: `pg_class JOIN pg_namespace WHERE nspname='public'` → `relrowsecurity` / `relforcerowsecurity`
+- 列: `information_schema.columns WHERE table_schema='public'`
+- PK/UK/CHECK: `pg_constraint WHERE contype IN ('p','u','c') AND nspname='public'`
+- FK: `pg_constraint WHERE contype='f' AND nspname='public'`
+- ポリシー: `pg_policies WHERE schemaname='public'`
+- インデックス: `pg_index JOIN pg_class ...`
+- ビュー定義: `pg_views`
+
 ---
 ## 1. schedule 系
 ### ⚠️ `schedule`
@@ -45,7 +173,8 @@
   - 2026-04-17 時点で 1,838 レコード（service_role 経由のカウント）
   - スプレッドシート側は Supabase `id` を **W 列相当**（block 開始列からの offset 19）に保持して同期キーにしている
     - 2026-04-17 変更: Q 列（offset 13）→ W 列（offset 19）に移動。`gas/コード.gs` の `COL.SUPABASE_ID` 定数で管理
-  - RLS は OFF（2026-04-17 確認）。service_role キーは GAS のスクリプトプロパティ `SUPABASE_SERVICE_KEY` に保存
+  - RLS は **ON**（2026-05-11 ライブ確認）。ただしポリシー `schedule_anon_all` (`FOR ALL TO anon USING true WITH CHECK true`) があるため anon キーから読み書き共に通る。2026-04-17 時点では OFF だったが、2026-04-25 の RLS 移行 Phase 3 で ON + anon ALL ポリシー構成に切り替わった
+  - service_role キーは GAS のスクリプトプロパティ `SUPABASE_SERVICE_KEY` に保存
   - ⚠️ 過去に GAS スクリプトプロパティが別プロジェクト (`xwnbdlcukycihgfrfcox`) の anon キーを指していた事故あり。現在は `pbqqqwwgswniuomjlhsh` の service_role キーに修正済み（2026-04-17）
 ### ✅ `schedule_web_v` （ビュー）
 - **役割**: Web アプリ表示用に `schedule` を整形した view
@@ -445,18 +574,30 @@
   本人特定に使われている
 - **発見経緯**: 2026-04-25、RLS 移行 Phase 2 の調査で `~/Desktop/user-schedule-app/index.html:108` から
   `.from('client_users')` 呼び出しが発見された
-- **列（user-schedule-app の SELECT から判明した分）**:
-  - `id` (uuid): PK
-  - `client_name` (text): 利用者名
-  - `beneficiary_number` (text)
-  - `login_code` (text): 4桁ログインコード。**anon から漏らしてはいけない機微情報**
-  - `service_types` (text[]): 利用者が使うサービス種別の配列（PostgREST 経由では JSON 配列としてシリアライズされる）
-  - `is_active` (boolean): 退会・無効化フラグ
+- **行数**: 116（2026-05-11）
+- **列（2026-05-11 ライブ取得）**:
+  - `id` (uuid, PK, default `gen_random_uuid()`)
+  - `client_name` (text, NOT NULL)
+  - `beneficiary_number` (text, nullable)
+  - `login_code` (text, NOT NULL) — 利用者アプリのログインコード。**事実上の認証シークレット。anon キーから読み取れてはいけない**（→ 2026-05-12 に `client_login` RPC 経由のみに変更）
+  - `phone` (text, nullable)
+  - `address` (text, nullable)
+  - `service_types` (text[], nullable)
+  - `emergency_contact` (text, nullable)
+  - `notes` (text, nullable)
+  - `is_active` (bool, default true)
+  - `created_at` (timestamptz, default now())
+  - `monthly_limit` (int4, nullable)
+  - `with_physical_care` (text, nullable)
+  - `without_physical_care` (text, nullable)
+  - `guardian_name` (text, nullable)
+  - `child_name` (text, nullable)
+- **制約**: PK=`id`、UNIQUE 無し、CHECK 無し、FK 無し
 - **参照箇所**:
   - user-schedule-app/index.html: 2026-05-12 から `sb.rpc('client_login', { p_name, p_code })` で照合（旧: `from('client_users').select(...).eq('login_code', code)` の anon 直接 SELECT）
 - **CREATE 文**: 不明（リポジトリ内未確認）
 - **TODO**:
-  - [ ] 列構成の確認（Supabase Dashboard で全列を確定）
+  - [x] ~~列構成の確認（Supabase Dashboard で全列を確定）~~ → 2026-05-11 ライブ取得で全16列確定済み（上記）
   - [ ] `calm_check_targets.client_id` が参照する `clients` テーブルとの関係性確認
 - **RLS / アクセス制御**:
   - 2026-04-25 Phase 3: RLS ON + `client_users_anon_all (FOR ALL TO anon USING(true))` ポリシー
@@ -477,16 +618,37 @@
 RLS 移行 Phase 0 の診断 SQL で初めて存在が判明。
 
 ### 🔎 `helper_priority`
-- **状態**: RLS 既に ON、ただし**「Always True」相当のゆるいポリシー付き**（2026-04-25 Security Advisor で判明）
+- **状態**: RLS **ON**、ただしポリシー `Service role full access on helper_priority` が `TO public USING (true)` で全ロール素通り（2026-05-11 確認）。名前と挙動が乖離している
 - **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
-- **推定**: ヘルパー優先度マスタ？
-- **TODO**: 用途・列構成・参照箇所を奥原さんに確認 → 必要なら厳格なポリシーに置換
+- **行数**: 170（2026-05-11）
+- **推定**: ヘルパー優先度マスタ（client_name × helper_name × service_type で優先度を保持）
+- **列（2026-05-11 ライブ取得）**:
+  - `id` (int8, PK, default `nextval('helper_priority_id_seq')`)
+  - `client_name` (text, NOT NULL)
+  - `helper_name` (text, NOT NULL)
+  - `priority` (int4, NOT NULL, default 1)
+  - `service_type` (text, NOT NULL, default '移動支援')
+  - `created_at` (timestamptz, NOT NULL, default now())
+- **制約**: UNIQUE `(client_name, helper_name, service_type)`、補助 INDEX `idx_helper_priority_lookup (client_name, service_type, priority)`
+- **TODO**: ポリシーを `TO service_role` に絞るか、anon に許す範囲を明示
 
 ### 🔎 `process_log`
-- **状態**: RLS 既に ON、ただし**「Always True」相当のゆるいポリシー付き**（2026-04-25 Security Advisor で判明）
+- **状態**: RLS **ON**、ただしポリシー `Service role full access on process_log` が `TO public USING (true)` で全ロール素通り（2026-05-11 確認）。`helper_priority` と同じ落とし穴
 - **発見経緯**: 2026-04-25 RLS 診断 SQL の結果
-- **推定**: 何らかの処理ログ？
-- **TODO**: 用途・列構成・参照箇所を奥原さんに確認 → 必要なら厳格なポリシーに置換
+- **行数**: 7（2026-05-11）
+- **推定**: 何らかのバッチ処理ログ
+- **列（2026-05-11 ライブ取得）**:
+  - `id` (int8, PK, default `nextval('process_log_id_seq')`)
+  - `processed_at` (timestamptz, NOT NULL, default now())
+  - `input_rows` (int4, NOT NULL, default 0)
+  - `verification_rows` (int4, NOT NULL, default 0)
+  - `overlap_count` (int4, NOT NULL, default 0)
+  - `gap_count` (int4, NOT NULL, default 0)
+  - `kyotaku_count` (int4, NOT NULL, default 0)
+  - `shinagawa_count` (int4, NOT NULL, default 0)
+  - `suginami_count` (int4, NOT NULL, default 0)
+  - `ota_count` (int4, NOT NULL, default 0)
+- **TODO**: ポリシーを `TO service_role` に絞る／用途を確認
 
 ### ✅ `receipts` / `receipt_categories` / `receipt_audit_log`
 - **状態**: RLS 既に ON
@@ -594,9 +756,73 @@ Supabase テーブルではないが、`schedule` テーブルの延長線上に
 ### `synced_to_sheet` / `synced_at` が未使用状態
 - 2026-04-17 にカラムを追加したが、PostgREST キャッシュ問題で GAS から書き込みできなかった経緯から、現在の `sheet_auto_create.gs` は「シート状態ベース版」（シートに同じ supabaseId があるかで判定）に切り替え済み
 - カラム自体は残してあるので、将来必要になれば GAS 側で `sbMarkSynced_()` を有効化すれば使える
+
+---
+## 12. portal_* 拡張時の診断（2026-05-11）
+
+新しく `portal_*` プレフィックスのテーブル群を追加する前提で、ライブ DB を点検した結果。
+
+### 12.1 名前衝突: なし ✅
+
+- 既存 28 テーブル + 1 ビュー（`schedule_web_v`）の中に `portal_` で始まる名前は **0 件**。
+- 衝突する候補名も無い（`admin_*` / `client_*` / `service_*` / `schedule_*` / `helper_*` / `receipt_*` / `training_*` / `calm_*` / `home_*` / `move_*` / `notifications` / `push_subscriptions` / `anonymous_feedback` / `process_log` / `user_helper_compatibility`）。
+- → `portal_users` / `portal_sessions` / `portal_audit` 等は安全に新設可能。
+
+> 補足: `client_users` が既にあるため、ポータルのログインユーザを `portal_users` にすると意味的に紛らわしい可能性あり。代わりに `portal_accounts` / `portal_members` 等の検討も。
+
+### 12.2 RLS 未設定 / 緩いテーブル
+
+ポータルが同一 Supabase プロジェクトで動くなら、以下は **anon キーから到達可能**。portal_* 側で `auth.uid()` ベースの厳格なポリシーを設計するときの参考に。
+
+| テーブル | 危険度 | 状態 | 留意点 |
+|---|:---:|---|---|
+| `user_helper_compatibility` | 🟢 低 | RLS ON / ポリシー 0 | 2026-05-12 に RLS 有効化済み。policy なし＝service_role 専用。ヘルパー本人の更新画面ができた時点で `auth.jwt()->>'email'` ベースのポリシー追加検討 |
+| `client_users` | 🟡 中 | RLS ON / ポリシー 0（`client_users_anon_all` 撤去）→ anon deny-all | 2026-05-12 に `client_users_anon_all` を撤去し RLS deny-all 化。anon はテーブルから 1 行も読めない。ログイン照合は `client_login` RPC（SECURITY DEFINER）経由のみ。`login_code` 列の anon 列権限は残るが RLS deny-all で読めない（列レベル REVOKE は未適用） |
+| `schedule` | 🟡 中 | RLS ON / `anon ALL true` | 3531 行ある業務本体。anon キーでフル CRUD 可能。`schedule_anon_all` ポリシーは user-schedule-app の生 supabase-js が前提だが、ポータルが認証済みユーザにのみ書かせる設計なら、ポリシーを SELECT / INSERT / UPDATE に分割し WHERE を絞るのが筋 |
+| `helper_priority` | 🟡 中 | RLS ON / `public ALL true` | ポリシー名は "Service role" だが `TO public` で全ロール素通り。ポータルが触らなくても誤設定なので是正候補 |
+| `process_log` | 🟡 中 | RLS ON / `public ALL true` | 同上 |
+| `helper_master` | 🟢 低 | RLS ON / `anon SELECT true` | 37 行のヘルパー名簿。SELECT のみ。`employment_type` も全 anon に見える点だけ意識 |
+| `notifications` | 🟢 低 | RLS ON / `anon INSERT true` | anon が INSERT 可（spam リスク）。ポータルから admin 通知を出すなら新規ポリシー追加で十分 |
+
+### 12.3 RLS は ON だがポリシー 0（service_role 専用）
+
+§0.1 の Group A（RLS ON + ポリシー 0）は計 23 テーブル。うち以下 **22 テーブル**は anon/authenticated からは一切見えない純粋な service_role 専用。ポータルが anon/authenticated で読み書きする必要があるなら、テーブルごとに**新しい RLS ポリシー追加**が必要:
+
+`admin_error_alerts`, `admin_users`, `anonymous_feedback`, `calm_check_targets`, `calm_checks`, `home_schedule_tasks`, `move_check_logs`, `push_subscriptions`, `receipt_audit_log`, `receipt_categories`, `receipts`, `schedule_claims`, `schedule_tasks_move`, `service_action_logs`, `service_action_logs_home`, `service_irregular_events`, `service_notes_home`, `service_notes_move`, `service_record_structured`, `training_materials`, `training_reports`, `user_helper_compatibility`
+
+> `user_helper_compatibility` は 2026-05-12 に RLS 有効化（C→A）。policy 0 件＝完全に service_role 専用。
+
+> Group A の残り 1 つ `client_users` も RLS ON + ポリシー 0 だが、**純粋な service_role 専用ではない**: table レベルは RLS deny-all（anon は 1 行も読めない）一方、anon は SECURITY DEFINER 関数 `client_login(p_name, p_code)` 経由でログイン照合のみ可能。ポータルで利用者認証を扱うなら、この RPC を再利用するか専用のポリシー/関数を設計する。
+
+> 現状の運用は「Firebase Functions が service_role キーで PostgREST を叩く」モデル。ポータルが同じモデルを踏襲するなら追加ポリシー不要。ブラウザ側 supabase-js を直接使うなら、影響範囲のテーブルにポリシー追加が必要。
+
+### 12.4 参照整合性の弱さ
+
+FK は 10 本のみ。`helper_email` / `helper_name` / `client` / `user_name` / `beneficiary_number` 等の**テキストで結合しているキーには 1 つも FK が無い**。portal_* 側で以下を意識:
+
+- portal_* テーブルから `helper_master` を参照するなら、`helper_master.helper_email` を UNIQUE 化したうえで FK を張れる（現状 PK は `helper_name`）。`helper_email` に UNIQUE INDEX を追加する移行が前提。
+- `client_users.id` (uuid) は PK なので、portal 側からは `client_users(id)` を FK にできる。ただし既存 `calm_check_targets.client_id` も同じ uuid を指すなら `client_users(id)` 起点に整理するチャンス。
+- `schedule.id` (uuid) は PK で、既に `home_schedule_tasks` / `schedule_tasks_move` / `schedule_claims` が FK で参照済み（全て ON DELETE CASCADE）。portal_* も同様に張れる。
+
+### 12.5 portal_* 命名で推奨 / 非推奨
+
+- ✅ 推奨: `portal_accounts`, `portal_sessions`, `portal_audit_log`, `portal_invitations`, `portal_feature_flags`
+- ⚠️ 紛らわしい: `portal_users`（→ `client_users` と混同）、`portal_admins`（→ `admin_users` と混同）、`portal_schedule`（→ `schedule` と混同）
+- ❌ 不要な大文字混在 / ハイフン: Supabase / PostgREST のクォート要求が増えるので snake_case 統一
+
+### 12.6 portal_* 設計前にやるべき改善（任意）
+
+1. ✅ `user_helper_compatibility` の RLS を ON にする（最小: `ENABLE ROW LEVEL SECURITY` のみ。policy が無ければ service_role 以外シャットアウト） — **2026-05-12 適用済み** (`sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`)
+2. `helper_priority` / `process_log` のポリシーを `TO service_role` に絞り直す（policy 名と一致させる）
+3. ✅ `client_users.login_code` を別テーブル化、または anon ポリシーから SELECT を外して `auth.uid()` ベースに切り替える — **2026-05-12 対応**: `client_users_anon_all` ポリシーを撤去し RLS deny-all 化、ログイン照合を SECURITY DEFINER 関数 `client_login(p_name, p_code)` に集約（`sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`）。`auth.uid()` 連携への完全移行は portal_* 設計時に再検討
+4. `helper_master` に `helper_email` UNIQUE 制約を追加（portal_* から FK を張れるように）
+5. （多層防御・任意）`client_users.login_code` 列に対する anon の列レベル REVOKE を追加適用する。現状は RLS deny-all で読めないため不要だが、将来 RLS ポリシーを誤って緩めた場合の保険になる（**現状未適用・必須ではない**）。
+
 ---
 ## 更新履歴
+- 2026-06-10: SCHEMA ドキュメントの整合修正。stash pop 衝突の解決時に紛れていた未デプロイ方式（`verify_client_login` / 列レベル REVOKE）の記述を、ライブ DB 実態（`client_users_anon_all` 撤去＋RLS deny-all＋SECURITY DEFINER 関数 `client_login`、列レベル REVOKE は未適用）に統一。§0 公開関数名、§0.1 グループ分類（A=23 / B=5 / C=0 に再計算、`client_users` を B→A）、§0.2 にスナップショット脚注、§12.2 危険度表、§12.6 改善候補 1・3 を修正し、改善候補 5（多層防御として列レベル REVOKE の任意追加）を新設。コード/SQL の変更なし（ドキュメントのみ）
 - 2026-05-12: セキュリティ修正 2 件。(1) `client_users.login_code` を anon キーから読み取れない構造に変更 — Phase 3 の `client_users_anon_all (FOR ALL TO anon)` ポリシーを撤去し、SECURITY DEFINER RPC `client_login(p_name, p_code)` 経由のみで照合。RPC の返却列に `login_code` を含めない。user-schedule-app/index.html もこの RPC 呼び出しに切り替え（コミット `534edae`）。(2) `user_helper_compatibility` の RLS を有効化（ポリシー無し → service_role のみアクセス可）。GAS の対応可否シート移行は service_role 利用なので無影響。CREATE 文: `sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`。`portal_*` テーブル群および他の既存 RLS ポリシー（schedule / helper_master / notifications / Group A 17 テーブル / schedule_claims）には変更なし
+- 2026-05-11: Supabase Management API 経由でライブスキーマを直接照会し、**§0 ライブスキーマ概況**（28 テーブル + 1 ビュー、ポリシー 6、FK 10、トリガー 7、関数 7）を追加。`schedule` / `client_users` 等の RLS 状態を「OFF」→「ON + anon ALL」に修正。`helper_priority` / `process_log` の列構成と「ポリシー名は service role なのに `TO public` で素通り」状態を明記。`client_users` の列を全 16 個列挙（`login_code` 含む）。**§12 portal_* 拡張時の診断**を新設: 名前衝突 0 件、RLS OFF は `user_helper_compatibility` のみ、anon に開いているテーブル 6 個、FK 10 本のみ・テキスト結合キーに FK 無し、改善候補 4 件を整理
 - 2026-05-06: `home_schedule_tasks` に partial UNIQUE INDEX `uniq_home_schedule_tasks_manual` を追加。キー: (service_date, start_time, end_time, user_name, helper_name, task)、条件: `WHERE schedule_id IS NULL`。GAS `★サービス記録内容転送.gs` の重複 INSERT を DB レベルで拒否。永沢様 2026-05-01 分の重複事故（11時間差で2回投入）への根本対策。CREATE 文: `sql/2026-05-06_uniq_home_schedule_tasks_manual.sql`。ルール 2「追加は OK / 既存変更しない」に該当（既存列・既存制約は無変更、partial INDEX 追加のみ）
 - 2026-05-04: `helper_master.employment_type` (text, nullable) を追加。村のつばさ admin の監査用「勤務形態一覧表」で常勤/非常勤を表示するため。CREATE 文: `sql/2026-05-03_helper_employment_type.sql`。ルール 2「nullable な列追加」に該当
 - 2026-04-11: 初版作成
