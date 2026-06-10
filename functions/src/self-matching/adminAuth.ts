@@ -25,6 +25,7 @@ const ALLOWED_ADMIN_EMAILS = [
   "admin@village-support.jp",
   "inachichoco@gmail.com",
   "yutaka.ito1994@gmail.com",
+  "masao020842713012@gmail.com",
 ].map((v) => v.toLowerCase());
 
 export type AdminRequest = Request & {
