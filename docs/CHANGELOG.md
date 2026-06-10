@@ -32,6 +32,14 @@
 
 ---
 
+## 2026-05-14 [village-tsubasa] セルフマッチング管理者 API の許可リストに masao020842713012@gmail.com を追加
+
+- `functions/src/self-matching/adminAuth.ts` の `ALLOWED_ADMIN_EMAILS` に `masao020842713012@gmail.com` を追加（既存 3 件はそのまま）
+- `firebase deploy --only functions` で `api(asia-northeast1)` 等を更新済み
+- 影響範囲: 本リポ内のみ（village-admin から Bearer トークンで叩く `/api/self-matching/admin/*` 系の認可リストが広がるだけ。スキーマ変更なし）
+
+---
+
 ## 2026-05-12 [village-tsubasa + user-schedule-app] Supabase セキュリティ修正
 
 ### Security
@@ -183,6 +191,89 @@ Cloud Functions 変更なしのため `--only hosting` で可。
 3. 居宅 / 移動 タブで未記録一覧が表示される
 4. カードタップ → モーダル → メモ入力 → 保存
 5. 既存 `/service-records-home/` で「記録済み」になっていることを確認
+
+### 追記 2026-05-06 19:30 — 許可リスト拡張
+
+初期実装では `admin@village-support.jp` 一意でゲート判定していたが、奥原翼さんの実ヘルパー email は `village.tsubasa_4499@icloud.com` であり、本来表示したいタスクが 0 件になる問題を発見。`ALLOWED_EMAIL` 定数を `ALLOWED_EMAILS` 配列に変更し以下の 2 件を許可:
+
+- `admin@village-support.jp`（管理者ログイン用、helper_master 未登録なのでタスク 0 件）
+- `village.tsubasa_4499@icloud.com`（実ヘルパー、本来の利用想定）
+
+`isEmailAllowed(email)` ヘルパー関数を追加し、`tryEmailFromStorage` と `gateSubmit` 両方で利用。古い localStorage 値が許可リスト外だった場合は自動削除（許可リスト変更時の自動クリア）。
+
+修正対象は `public/qrec-okuhara-9k2b/main.js` のみ。
+
+### 追記 2026-05-07 — Lv2 音声入力 + 移動 API バグ修正
+
+#### 1. 移動 API のバグ修正
+初期実装では居宅と移動の API レスポンス形式が異なる問題に未対応で、移動側で「利用者未設定」表示 + 保存時 400 エラー (`taskId, helperEmail, notes and summaryText are required`) が発生していた。
+
+- 居宅 API (`/api/service-records-home/unwritten`): スネークケース (`id`, `user_name`, `helper_email`, ...)
+- 移動 API (`/api/service-records-move/unwritten`): キャメルケース (`taskId`, `userName`, `helperEmail`, ...)
+
+`fetchUnwritten()` 関数内で移動レスポンスを居宅と同じスネークケース形式に正規化することで対応。UI 側のコードはそのまま動く（バックエンド変更なし、フロントの 1 関数追加のみ）。
+
+#### 2. Lv2 音声入力（Web Speech API）
+
+`/qrec-okuhara-9k2b/` のメモ欄に **🎤 音声ボタン**を追加。「ハンズフリーで記録」を実現するため当初の Q4 段階方針通り次レベルを実装。
+
+**機能**:
+- 🎤 ボタン押す → ブラウザの音声認識開始（初回のみ許可ダイアログ）
+- 喋る → メモ欄末尾に自動でテキスト追記
+- 中間結果（途中の音声認識テキスト）は status 欄にうっすら表示
+- ボタン再押 or 何も喋らないで一定時間経過で自動停止
+- メモ更新時に記録本文も自動再生成
+
+**対応ブラウザ**:
+- Chrome (Mac/Android), Safari (iOS 14.5+), Edge → ✅
+- Firefox → ❌（API 非対応、🎤 ボタンが自動的に非表示）
+
+**コスト**: ゼロ（Web Speech API はブラウザ標準・無料、外部 API なし）
+
+**設計判断**:
+- 音声認識は memo フィールドのみ対象（記録本文はメモから自動生成済みのため）
+- 確定した結果だけ memo に追記、interim は status 欄に表示
+- モーダル閉じる時に自動で録音停止（リソース節約）
+- 既存メモへの追記モード（音声で何度も追加できる）
+
+**期待される効果**:
+- 移動中の運転前後で記録完結 → 夜の机作業がほぼゼロに
+- 「内容多くて打つのが大変」問題の根本解決
+
+**次のレベル**: Phase 1b 前回コピー / Lv3 AI 整形（既存の「AI要約作成」「AI記録案を作成」ロジック流用予定）。実利用しての効果次第で優先度判断。
+
+#### 3. Lv3 AI 整形（同日に追加実装）
+
+Lv2 完成直後に Lv3 も実装。既存の AI 要約エンドポイント (`POST /api/service-records-{home,move}/summary`) を流用してフロントから呼び出すだけのシンプルな統合。
+
+**ボタン**: 記録本文の下に **「🤖 AI整形」**（既存の「🔄 メモから再生成」ボタンの隣）を追加。
+
+**フロー**:
+1. ユーザーがメモを書く（手入力 or 🎤 音声）
+2. 🤖 AI整形 ボタンを押す
+3. 既存エンドポイントに POST（自動入力情報 + memo を全部送る）
+4. GPT-4o-mini が介護記録文を生成
+5. 記録本文に挿入
+6. 必要なら手動編集して保存
+
+**バックエンド変更**: なし。既存の `handleGenerateHomeSummary` / `handleServiceRecordsMoveGenerateSummary` をそのまま使う。OPENAI_API_KEY 未設定時はフォールバック（テンプレ文）を返すので無害。
+
+**コスト**: GPT-4o-mini 1 件あたり数百〜数千トークン → 1 件 0.1〜0.5 円程度。1 日 10 件使っても月数百円レベル。
+
+**期待される使い方**:
+- 🎤 音声で「7時 浴介 通常 お変わりなし」と短く話す
+- 🤖 AI整形で「2026-05-07 7:00〜8:15、永沢様へ身体介護を実施しました。湯温39度のシャワー浴を5分間。会話穏やか、特記事項なし」のような正式な記録文に整形
+- 保存
+
+**ファイル変更**:
+- `public/qrec-okuhara-9k2b/index.html`: `note-actions` コンテナ追加、🤖 ボタン追加、ローディング CSS 追加
+- `public/qrec-okuhara-9k2b/main.js`: `formAiButton` イベントリスナ + `fetchAiSummaryHome` / `fetchAiSummaryMove` 関数追加
+
+**残タスク（次のターン以降）**:
+- Phase 1b 前回コピー（同利用者の前回記録から本文を引っ張ってくる機能）
+- 実利用フィードバック反映
+
+---
 
 ### 追記 2026-05-06 19:30 — 許可リスト拡張
 
