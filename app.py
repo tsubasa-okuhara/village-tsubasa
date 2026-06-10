@@ -8,7 +8,7 @@
 import os
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
@@ -20,7 +20,6 @@ from database import (
     get_categories, get_unique_vendors, get_receipt_stats,
     sign_in_helper, sign_up_helper, sign_out_helper,
     is_admin, search_all_receipts, get_all_receipt_stats,
-    is_owner, get_all_helpers_stats,
 )
 from image_utils import validate_image, compute_hash, save_image, load_image_for_display
 from ocr_utils import extract_receipt_from_image
@@ -1204,141 +1203,6 @@ def page_tax_report(user: dict):
         )
 
 
-# ===== ページ6 (オーナー専用): 全ヘルパー集計 =====
-def page_all_helpers_summary(user: dict):
-    """オーナー専用ページ: 全ヘルパーの経費を月単位でまとめて確認する"""
-    st.title("👥 全ヘルパー集計 (オーナー)")
-
-    helper_email = user["helper_email"]
-
-    # 権限チェック (多重防御: サイドバーで非表示 + ここでも弾く)
-    if not is_owner(helper_email):
-        st.error("❌ このページはオーナーのみ利用できます。")
-        return
-
-    st.write("""
-    全ヘルパーの経費を月単位で集計します。従業員の金銭情報を含むため、
-    オーナー本人のみが閲覧できます。
-    """)
-
-    # ===== 月セレクタ =====
-    today = datetime.now().date()
-    col_year, col_month = st.columns(2)
-    with col_year:
-        year = st.selectbox(
-            "対象年",
-            options=list(range(today.year, today.year - 4, -1)),
-            index=0,
-            key="all_helpers_year",
-        )
-    with col_month:
-        month = st.selectbox(
-            "対象月",
-            options=list(range(1, 13)),
-            index=today.month - 1,
-            key="all_helpers_month",
-            format_func=lambda m: f"{m}月",
-        )
-
-    # 選択月の月初〜月末を算出
-    month_first = date(year, month, 1)
-    if month == 12:
-        next_first = date(year + 1, 1, 1)
-    else:
-        next_first = date(year, month + 1, 1)
-    month_last = next_first - timedelta(days=1)
-
-    date_from = month_first.isoformat()
-    date_to = month_last.isoformat()
-
-    st.caption(f"集計期間: {date_from} 〜 {date_to}")
-
-    # ===== ヘルパー別集計 =====
-    helper_stats = get_all_helpers_stats(date_from=date_from, date_to=date_to)
-
-    # 全体合計
-    total_count = sum(r["count"] for r in helper_stats)
-    total_amount = sum(r["total"] for r in helper_stats)
-
-    c1, c2 = st.columns(2)
-    c1.metric("全体件数", f"{total_count}件")
-    c2.metric("全体合計", format_currency(total_amount))
-
-    if not helper_stats:
-        st.info("この月に登録された経費はありません")
-        return
-
-    # ヘルパー別 件数・合計金額の一覧表
-    st.subheader(f"ヘルパー別集計（{year}年{month}月・{len(helper_stats)}名）")
-    summary_rows = []
-    for r in helper_stats:
-        display_name = r["helper_name"] or r["helper_email"] or "(未設定)"
-        summary_rows.append({
-            "ヘルパー": display_name,
-            "メール": r["helper_email"] or "",
-            "件数": r["count"],
-            "合計金額": format_currency(r["total"]),
-        })
-    summary_df = pd.DataFrame(summary_rows)
-    st.dataframe(
-        summary_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "ヘルパー": st.column_config.TextColumn(width=140),
-            "メール": st.column_config.TextColumn(width=200),
-            "件数": st.column_config.NumberColumn(width=70),
-            "合計金額": st.column_config.TextColumn(width=110),
-        },
-    )
-
-    # ===== 各ヘルパーの明細ドリルダウン (任意) =====
-    st.divider()
-    st.subheader("🔎 ヘルパー別 明細")
-
-    # email をキーに選択 (同姓同名でも区別できるよう email ベース)
-    helper_choices = [r["helper_email"] for r in helper_stats]
-    name_by_email = {
-        r["helper_email"]: (r["helper_name"] or r["helper_email"] or "(未設定)")
-        for r in helper_stats
-    }
-    selected_email = st.selectbox(
-        "明細を見るヘルパーを選択",
-        options=[""] + helper_choices,
-        index=0,
-        format_func=lambda e: "（選択してください）" if e == "" else name_by_email.get(e, e),
-        key="all_helpers_drilldown",
-    )
-
-    if selected_email:
-        detail = search_all_receipts(date_from=date_from, date_to=date_to)
-        # 選択ヘルパー分だけに絞る (email は大文字小文字無視で比較)
-        target = selected_email.strip().lower()
-        detail = [
-            r for r in detail
-            if (r.get("helper_email") or "").strip().lower() == target
-        ]
-
-        if not detail:
-            st.info("この月の明細はありません")
-        else:
-            detail_df = pd.DataFrame(detail)
-            detail_display = detail_df[[
-                "id", "transaction_date", "category", "amount", "vendor"
-            ]].copy()
-            detail_display.columns = ["ID", "取引日", "費目", "金額", "取引先"]
-            detail_display["金額"] = detail_display["金額"].apply(format_currency)
-            st.dataframe(
-                detail_display,
-                use_container_width=True,
-                hide_index=True,
-            )
-            st.caption(
-                f"{name_by_email.get(selected_email, selected_email)}: "
-                f"{len(detail)}件 / {format_currency(sum(r.get('amount') or 0 for r in detail))}"
-            )
-
-
 # ===== ページ4: 監査ログ =====
 def page_audit_log(user: dict):
     st.title("📊 監査ログ")
@@ -1420,7 +1284,6 @@ def main():
 
     # 管理者のみ「税理士提出」ページを表示
     admin_user = is_admin(helper_email)
-    owner_user = is_owner(helper_email)
     page_options = [
         "📝 レシート登録",
         "⌨️ 手入力",
@@ -1430,9 +1293,6 @@ def main():
     ]
     if admin_user:
         page_options.append("📊 税理士提出 (管理者)")
-    # オーナー本人のみ「全ヘルパー集計」を表示 (従業員の金銭情報のため限定)
-    if owner_user:
-        page_options.append("👥 全ヘルパー集計 (オーナー)")
 
     page = st.sidebar.radio(
         "ページを選択",
@@ -1516,8 +1376,6 @@ def main():
         page_audit_log(user)
     elif page == "📊 税理士提出 (管理者)":
         page_tax_report(user)
-    elif page == "👥 全ヘルパー集計 (オーナー)":
-        page_all_helpers_summary(user)
 
 
 if __name__ == "__main__":

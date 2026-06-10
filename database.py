@@ -238,22 +238,6 @@ def is_admin(email: str) -> bool:
     return email.strip().lower() in _get_admin_emails()
 
 
-# オーナー (経営者本人) のみがアクセスできる機能用の固定許可リスト。
-# 「全ヘルパー集計」は従業員の金銭情報を横断表示するため、設定可能な
-# ADMIN_EMAILS とは独立に、ここで明示した 2 アドレスだけに限定する。
-OWNER_EMAILS = frozenset({
-    "admin@village-support.jp",
-    "village.tsubasa_4499@icloud.com",
-})
-
-
-def is_owner(email: str) -> bool:
-    """メールアドレスがオーナー (経営者本人) かどうか"""
-    if not email:
-        return False
-    return email.strip().lower() in OWNER_EMAILS
-
-
 # ============================================================
 # SQLite 実装
 # ============================================================
@@ -992,66 +976,6 @@ def get_all_receipt_stats(
     row = cursor.fetchone()
     conn.close()
     return {"count": row["count"] or 0, "total": row["total"] or 0.0}
-
-
-def get_all_helpers_stats(
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-) -> List[Dict]:
-    """
-    オーナー用: ヘルパー別の件数・合計金額を集計 (helper_email でスコープしない)
-    ※呼び出し側で is_owner チェックを必ず行うこと
-
-    戻り値: [{"helper_email", "helper_name", "count", "total"}, ...] (合計の降順)
-    helper_email が空のレシートは "(未設定)" のキーにまとめる。
-    """
-    client = _get_supabase_client()
-    if client is not None:
-        try:
-            q = (
-                client.table("receipts")
-                .select("helper_email, helper_name, amount")
-                .eq("is_deleted", False)
-            )
-            if date_from:
-                q = q.gte("transaction_date", date_from)
-            if date_to:
-                q = q.lte("transaction_date", date_to)
-            res = q.execute()
-            rows = res.data or []
-        except Exception as e:
-            print(f"Supabaseヘルパー別統計エラー: {e}")
-            return []
-    else:
-        conn = _sqlite_conn()
-        cursor = conn.cursor()
-        query = "SELECT helper_email, helper_name, amount FROM receipts WHERE is_deleted = 0"
-        params: list = []
-        if date_from:
-            query += " AND transaction_date >= ?"
-            params.append(date_from)
-        if date_to:
-            query += " AND transaction_date <= ?"
-            params.append(date_to)
-        cursor.execute(query, params)
-        rows = [dict(r) for r in cursor.fetchall()]
-        conn.close()
-
-    # ヘルパーごとに集計 (email を大文字小文字無視のキーで束ねる)
-    agg: Dict[str, Dict] = {}
-    for r in rows:
-        email = (r.get("helper_email") or "").strip()
-        key = email.lower() if email else "(未設定)"
-        entry = agg.setdefault(
-            key,
-            {"helper_email": email, "helper_name": "", "count": 0, "total": 0.0},
-        )
-        if not entry["helper_name"] and r.get("helper_name"):
-            entry["helper_name"] = r["helper_name"]
-        entry["count"] += 1
-        entry["total"] += (r.get("amount") or 0)
-
-    return sorted(agg.values(), key=lambda x: x["total"], reverse=True)
 
 
 def get_receipt_stats(
