@@ -29,3 +29,7 @@ receipt_database.db
 images/
 uploads/
 venv/
+
+# Claude Code のローカル状態（worktree / 設定など。共有不要）
+# ※ CLAUDE.md は共有用プロジェクト指示なので除外しない（追跡対象）
+.claude/
