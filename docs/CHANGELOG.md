@@ -13,7 +13,39 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-05-20（セルフマッチング候補API の 500 エラー修正 — schedule_claims クエリ URL 長制限超過）
+最終更新: 2026-06-10（経費アプリ Phase 1C — 全ヘルパー×月別集計ページをオーナー専用で追加）
+
+---
+
+## 2026-06-10 [village-tsubasa] 経費アプリ Phase 1C — 全ヘルパー×月別集計ページ（オーナー専用）
+
+### Added
+- 経費アプリ（`app.py` / Streamlit, `v-sche-receipt.streamlit.app`）に **「👥 全ヘルパー集計 (オーナー)」** ページを新設
+- オーナー（経営者本人）が全ヘルパー25〜30名の経費を **月単位** でまとめて確認できる
+  - 月セレクタ（対象年・対象月）
+  - ヘルパー別 件数・合計金額の一覧表（合計の降順）
+  - 全体合計（全体件数・全体合計）
+  - ヘルパー選択での明細ドリルダウン（取引日・費目・金額・取引先）
+
+### アクセス制御
+- ログインメールが `admin@village-support.jp` または `village.tsubasa_4499@icloud.com` のときだけサイドバーに項目を表示
+- 既存の設定可能な `ADMIN_EMAILS`（`is_admin`）とは独立に、`database.py` に固定許可リスト `OWNER_EMAILS` + `is_owner()` を新設して限定
+- 多重防御: サイドバーで非表示にするだけでなく、ページ関数先頭でも `is_owner` で弾く（従業員の金銭情報のため）
+
+### Technical
+- `database.py` に `get_all_helpers_stats(date_from, date_to)` を追加（`helper_email` で絞らず月範囲だけで全ヘルパー分を集計 → ヘルパー別 件数・金額を返す）。`is_deleted=FALSE` フィルタ・`transaction_date` 範囲は既存実装に準拠
+- 明細ドリルダウンは既存 `search_all_receipts` を流用
+- DB スキーマ変更なし、新規依存なし
+
+### 影響範囲
+- 本リポ内のみ（経費アプリ＝Streamlit のフロント追加 + データ層の集計関数追加のみ。Supabase スキーマ・API・他アプリへの影響なし）
+- village-admin・user-schedule-app には無影響
+
+### 再投入メモ（初回マージ #17 → revert #18 → 再投入）
+- 初回マージ後、本番が `app.py:17 from database import (...)` で `ImportError: cannot import name 'get_all_helpers_stats'` を出し全体起動失敗 → revert (#18) で即復旧。
+- 確認できた事実: typing import 不足ではない（List/Dict/Optional は import 済み）。Python 3.9/3.12/3.13 の import・`streamlit run` のフル起動はいずれも正常＝コードは正しい。
+- 本番の実際の traceback 全文は未取得のため **根本原因は未確定**。有力候補は、app.py と database.py の同時更新時に Streamlit Cloud のモジュール再読み込みが不整合になる事象。
+- 再投入の措置: コード内容は #17 と同一。加えて requirements.txt に無害な変更を入れ、Cloud にフル再起動を促す（上記候補への保険）。本番反映後に再検証する。
 
 ---
 

@@ -1,3 +1,7 @@
+# 2026-06-10 経費アプリ Phase 1C 再投入時の touch。requirements を変更すると
+# Streamlit Cloud がフル再デプロイ（プロセス再起動）するため、app.py と database.py の
+# 同時更新時に起きた起動失敗（#17→revert #18、根本原因は未確定）への保険として入れている。
+# 詳細は docs/CHANGELOG.md の 2026-06-10「再投入メモ」を参照。
 streamlit>=1.30
 Pillow>=10.0
 pandas>=2.0
