@@ -44,6 +44,7 @@ const tabHome = document.getElementById("tab-home");
 const tabMove = document.getElementById("tab-move");
 const badgeHome = document.getElementById("badge-home");
 const badgeMove = document.getElementById("badge-move");
+const scopeAll = document.getElementById("scope-all");
 
 const listStatus = document.getElementById("list-status");
 const taskListEl = document.getElementById("task-list");
@@ -68,6 +69,7 @@ const formSaveClose = document.getElementById("form-save-close");
 const state = {
   email: null,
   currentCategory: "home", // 'home' | 'move'
+  showAll: false, // false=自分だけ / true=全員の未記入
   homeTasks: [],
   moveTasks: [],
   selectedTask: null,
@@ -140,6 +142,12 @@ logoutButton.addEventListener("click", () => {
 // ─── タブ切替 ─────────────────────────────────────────
 tabHome.addEventListener("click", () => switchTab("home"));
 tabMove.addEventListener("click", () => switchTab("move"));
+if (scopeAll) {
+  scopeAll.addEventListener("change", () => {
+    state.showAll = scopeAll.checked;
+    loadAll();
+  });
+}
 
 function switchTab(category) {
   state.currentCategory = category;
@@ -182,7 +190,9 @@ async function fetchUnwritten(category) {
     category === "home"
       ? "/service-records-home/unwritten"
       : "/service-records-move/unwritten";
-  const url = `${API_BASE}${path}?helper_email=${encodeURIComponent(state.email)}`;
+  const url = state.showAll
+    ? `${API_BASE}${path}`
+    : `${API_BASE}${path}?helper_email=${encodeURIComponent(state.email)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
@@ -229,7 +239,7 @@ function renderTaskCard(task) {
   const timeLabel = formatTimeRange(task.start_time, task.end_time);
   card.innerHTML = `
     <div class="task-card__time">${escapeHtml(dateLabel)} ${escapeHtml(timeLabel)}</div>
-    <div class="task-card__user">${escapeHtml(task.user_name || "（利用者未設定）")}</div>
+    <div class="task-card__user">${escapeHtml(task.user_name || task.userName || "（利用者未設定）")}</div>
     <div class="task-card__task">${escapeHtml(task.task || "—")}${task.summary ? " / " + escapeHtml(task.summary) : ""}</div>
     <div class="task-card__cta">✏️ タップして記録</div>
   `;
@@ -247,7 +257,7 @@ function openForm(task) {
   formTitle.textContent =
     state.currentCategory === "home" ? "居宅介護 記録入力" : "移動支援 記録入力";
   formDatetime.textContent = `${dateLabel} ${timeLabel}`;
-  formUser.textContent = task.user_name || "（利用者未設定）";
+  formUser.textContent = task.user_name || task.userName || "（利用者未設定）";
   formTask.textContent = task.task || "—";
 
   // 居宅のみ区分ボタン表示
@@ -330,7 +340,7 @@ formMemo.addEventListener("blur", () => {
 function generateFinalNote(task, memo) {
   const dateLabel = task.service_date || "";
   const timeRange = formatTimeRange(task.start_time, task.end_time);
-  const userName = task.user_name || "";
+  const userName = task.user_name || task.userName || "";
   const taskName = state.selectedCategoryValue || task.task || "";
   const memoSegment = memo && memo.trim() ? `\n${memo.trim()}` : "";
 
@@ -428,7 +438,7 @@ async function saveHome(task, memo, finalNote) {
     serviceDate: task.service_date,
     helperName: task.helper_name,
     helperEmail: task.helper_email || state.email,
-    userName: task.user_name,
+    userName: task.user_name || task.userName,
     task: state.selectedCategoryValue || task.task,
     memo,
     aiSummary: null,
@@ -451,7 +461,7 @@ async function saveMove(task, memo, finalNote) {
     taskId: task.id,
     helperEmail: task.helper_email || state.email,
     helperName: task.helper_name,
-    userName: task.user_name,
+    userName: task.user_name || task.userName,
     serviceDate: task.service_date,
     startTime: task.start_time || "",
     endTime: task.end_time || "",
