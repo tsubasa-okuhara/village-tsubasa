@@ -154,6 +154,7 @@ async function handleSaveHomeRecord(req, res) {
             .update({ status: "written" })
             .eq("id", parsedBody.scheduleTaskId)
             .eq("status", "unwritten")
+            .is("deleted_at", null)
             .select("id")
             .maybeSingle();
         if (updateError) {

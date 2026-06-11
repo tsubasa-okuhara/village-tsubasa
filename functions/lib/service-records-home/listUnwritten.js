@@ -27,6 +27,7 @@ async function handleListUnwrittenHome(req, res) {
             .from("home_schedule_tasks")
             .select("id, schedule_id, service_date, helper_name, helper_email, user_name, start_time, end_time, task, summary, beneficiary_number, status")
             .eq("status", "unwritten")
+            .is("deleted_at", null)
             .order("service_date", { ascending: true })
             .order("start_time", { ascending: true, nullsFirst: true })
             .order("helper_name", { ascending: true });

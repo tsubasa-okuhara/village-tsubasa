@@ -47,6 +47,13 @@ import {
   handleGetTrainingReports,
   handleUpdateTrainingReportStatus,
 } from "./trainingReport";
+import {
+  handleCreateTrainingMaterial,
+  handleListTrainingMaterials,
+  handleGetTrainingMaterial,
+  handleUpdateTrainingMaterial,
+  handleDeleteTrainingMaterial,
+} from "./trainingMaterial";
 
 import {
   handleGetPushPublicKey,
@@ -176,6 +183,16 @@ app.post("/training-reports/notice", handleSubmitTrainingNotice);
 app.post("/api/training-reports/notice", handleSubmitTrainingNotice);
 app.post("/training-reports/update-status", handleUpdateTrainingReportStatus);
 app.post("/api/training-reports/update-status", handleUpdateTrainingReportStatus);
+app.post("/training-materials", handleCreateTrainingMaterial);
+app.post("/api/training-materials", handleCreateTrainingMaterial);
+app.get("/training-materials", handleListTrainingMaterials);
+app.get("/api/training-materials", handleListTrainingMaterials);
+app.get("/training-materials/:id", handleGetTrainingMaterial);
+app.get("/api/training-materials/:id", handleGetTrainingMaterial);
+app.post("/training-materials/update", handleUpdateTrainingMaterial);
+app.post("/api/training-materials/update", handleUpdateTrainingMaterial);
+app.post("/training-materials/delete", handleDeleteTrainingMaterial);
+app.post("/api/training-materials/delete", handleDeleteTrainingMaterial);
 
 // 落ち着き確認
 app.get("/calm-checks/pending", handleGetPendingCalmChecks);
