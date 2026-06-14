@@ -8,8 +8,10 @@
 //
 // 既存 API を流用:
 //   - GET /api/service-records-home/unwritten?helper_email=...
+//   - POST /api/service-records-home/summary  （AI 整形・居宅 / OpenAI gpt-4o-mini）
 //   - POST /api/service-records-home/save
 //   - GET /api/service-records-move/unwritten?helper_email=...
+//   - POST /api/service-records-move/summary  （AI 整形・移動 / OpenAI gpt-4o-mini）
 //   - POST /api/service-records-move/save
 
 // 入力許可メールアドレス（複数可）
@@ -295,9 +297,9 @@ categoryButtons.addEventListener("click", (e) => {
   if (!btn) return;
   const value = btn.dataset.categoryValue;
   selectCategory(value);
-  // メモ・本文を再生成
+  // 区分が変わったら本文を再生成（メモがあれば AI、無ければテンプレ）
   if (state.selectedTask) {
-    formFinalNote.value = generateFinalNote(state.selectedTask, formMemo.value);
+    regenerateNote();
   }
 });
 
@@ -321,19 +323,17 @@ function inferCategoryFromTask(taskText) {
   return "身体介護";
 }
 
-// メモ → 記録本文 自動生成
+// メモ → 記録本文 自動生成（AI 整形）
 formRegenButton.addEventListener("click", () => {
-  if (!state.selectedTask) return;
-  formFinalNote.value = generateFinalNote(state.selectedTask, formMemo.value);
+  regenerateNote();
 });
 
 formMemo.addEventListener("blur", () => {
-  // メモから本文を再生成（既に手動編集済みでなければ）
+  // メモ入力を終えたら本文を再生成（手動編集・AI生成済みは上書きしない）
   if (!state.selectedTask) return;
-  // 既存本文が「自動生成版」のままなら更新
   const auto = generateFinalNote(state.selectedTask, "");
   if (formFinalNote.value === auto || formFinalNote.value.trim() === "") {
-    formFinalNote.value = generateFinalNote(state.selectedTask, formMemo.value);
+    regenerateNote();
   }
 });
 
@@ -349,6 +349,118 @@ function generateFinalNote(task, memo) {
   } else {
     return `${dateLabel} ${timeRange}、${userName}様の${taskName || "移動支援"}を実施しました。${memoSegment ? memo.trim() : "予定通りに支援しました。"}`;
   }
+}
+
+// ─── AI 整形（既存 generateSummary エンドポイント流用） ─────
+//   - メモが空のとき: AI を呼ばずテンプレ（generateFinalNote）で即時プレースホルダ
+//   - メモがあるとき: 居宅 → /service-records-home/summary
+//                     移動 → /service-records-move/summary（OpenAI gpt-4o-mini）
+//   - API 失敗時はローカルテンプレにフォールバックして画面を固めない
+const HOME_SUMMARY_ENDPOINT = `${API_BASE}/service-records-home/summary`;
+const MOVE_SUMMARY_ENDPOINT = `${API_BASE}/service-records-move/summary`;
+
+let isGenerating = false;
+
+async function regenerateNote() {
+  if (!state.selectedTask) return;
+
+  const task = state.selectedTask;
+  const memo = formMemo.value.trim();
+
+  // メモが無ければ AI を呼ばず、テンプレのプレースホルダを表示
+  if (!memo) {
+    formFinalNote.value = generateFinalNote(task, "");
+    return;
+  }
+
+  if (isGenerating) return;
+  isGenerating = true;
+  formRegenButton.disabled = true;
+  formStatus.textContent = "🤖 生成中…";
+  formStatus.className = "status";
+
+  try {
+    const result =
+      state.currentCategory === "home"
+        ? await fetchAiSummaryHome(task, memo)
+        : await fetchAiSummaryMove(task, memo);
+
+    const summaryText = (result.summaryText || "").trim();
+
+    if (summaryText) {
+      formFinalNote.value = summaryText;
+      if (result.source === "fallback") {
+        // サーバー側が AI 生成に失敗し簡易テンプレを返したケース
+        formStatus.textContent =
+          "⚠️ AI 生成に失敗し簡易テンプレを表示中。内容を確認してください。";
+        formStatus.className = "status is-error";
+      } else {
+        formStatus.textContent = "✨ AI 整形完了";
+        formStatus.className = "status is-success";
+      }
+    } else {
+      formFinalNote.value = generateFinalNote(task, memo);
+      formStatus.textContent = "AI が空を返したためテンプレを表示しました。";
+      formStatus.className = "status is-error";
+    }
+  } catch (err) {
+    console.error("[owner-record] ai summary error:", err);
+    // フォールバック: ローカルテンプレで画面を固めない
+    formFinalNote.value = generateFinalNote(task, memo);
+    formStatus.textContent =
+      "AI 整形に失敗したためテンプレを表示しました: " +
+      (err.message || "不明エラー");
+    formStatus.className = "status is-error";
+  } finally {
+    isGenerating = false;
+    formRegenButton.disabled = false;
+  }
+}
+
+async function fetchAiSummaryHome(task, memo) {
+  const body = {
+    helperName: task.helper_name || "",
+    userName: task.user_name || task.userName || "",
+    serviceDate: task.service_date || "",
+    startTime: task.start_time || "",
+    endTime: task.end_time || "",
+    category: state.selectedCategoryValue || task.task || "",
+    items: [], // 構造化項目（実施項目）は qrec では省略
+    otherDetail: "",
+    memo,
+  };
+  const res = await fetch(HOME_SUMMARY_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return { summaryText: data.summaryText, source: data.source };
+}
+
+async function fetchAiSummaryMove(task, memo) {
+  const body = {
+    helperName: task.helper_name || "",
+    userName: task.user_name || task.userName || "",
+    serviceDate: task.service_date || "",
+    startTime: task.start_time || "",
+    endTime: task.end_time || "",
+    task: task.task || "",
+    notes: memo,
+  };
+  const res = await fetch(MOVE_SUMMARY_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return { summaryText: data.summaryText, source: data.source };
 }
 
 // ─── 保存処理 ─────────────────────────────────────────
