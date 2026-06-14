@@ -569,14 +569,16 @@ async function saveHome(task, memo, finalNote) {
 }
 
 async function saveMove(task, memo, finalNote) {
+  // 移動の unwritten は camelCase 変換済み(taskId/serviceDate/helperName…)を返す。
+  // 居宅は snake_case 生データ。両対応のため camelCase 優先 + snake_case フォールバック。
   const body = {
-    taskId: task.id,
-    helperEmail: task.helper_email || state.email,
-    helperName: task.helper_name,
+    taskId: task.taskId || task.id || (task.raw && task.raw.id),
+    helperEmail: task.helperEmail || task.helper_email || state.email,
+    helperName: task.helperName || task.helper_name,
     userName: task.user_name || task.userName,
-    serviceDate: task.service_date,
-    startTime: task.start_time || "",
-    endTime: task.end_time || "",
+    serviceDate: task.serviceDate || task.service_date,
+    startTime: task.startTime || task.start_time || "",
+    endTime: task.endTime || task.end_time || "",
     task: task.task || "",
     haisha: task.haisha || "",
     notes: memo,
