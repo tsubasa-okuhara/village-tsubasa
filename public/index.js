@@ -234,6 +234,12 @@ function setPushStatusLabel(label) {
   statusElement.textContent = label;
 }
 
+// 端末にローカル購読が無くても、サーバ側に登録が残っている可能性があるため
+// メール保存済みなら解除操作は許可する（ボタンが押せないまま通知が止められない事故を防ぐ）
+function canUnsubscribe() {
+  return Boolean(state.pushSubscription || state.helperEmail);
+}
+
 function renderPushControls() {
   const enableButtonElement = getRequiredElement("push-enable");
   const disableButtonElement = getRequiredElement("push-disable");
@@ -266,7 +272,7 @@ function renderPushControls() {
   if (window.Notification.permission === "denied") {
     setPushStatusLabel("拒否中");
     enableButtonElement.disabled = true;
-    disableButtonElement.disabled = !state.pushSubscription;
+    disableButtonElement.disabled = !canUnsubscribe();
     testButtonElement.disabled = true;
     setPushMessage(
       "通知がブラウザで拒否されています。ブラウザ設定から許可に変更してください。",
@@ -291,7 +297,7 @@ function renderPushControls() {
     window.Notification.permission === "granted" ? "未登録" : "未許可",
   );
   enableButtonElement.disabled = false;
-  disableButtonElement.disabled = true;
+  disableButtonElement.disabled = !canUnsubscribe();
   testButtonElement.disabled = true;
   setPushMessage(
     "通知を許可すると、この端末で連絡を受け取れるようになります。",
@@ -405,20 +411,45 @@ async function subscribeCurrentDevice() {
 }
 
 async function unsubscribeCurrentDevice() {
-  if (!state.pushSubscription) {
+  // state のキャッシュを信用せず、クリック時点の購読を取り直す
+  const subscription = state.pushRegistration
+    ? await state.pushRegistration.pushManager.getSubscription()
+    : state.pushSubscription;
+
+  if (!subscription && !state.helperEmail) {
+    state.pushSubscription = null;
     renderPushControls();
-    return;
+    return { scope: "none" };
   }
 
-  const endpoint = state.pushSubscription.endpoint;
-  await postJson(PUSH_CONFIG.unsubscribeEndpoint, {
-    endpoint,
-  });
-  await state.pushSubscription.unsubscribe();
+  // サーバ側の解除。endpoint があればその端末のみ、無ければメール単位で解除する
+  const scope = subscription ? "device" : "email";
+  const payload = subscription
+    ? { endpoint: subscription.endpoint }
+    : { helperEmail: state.helperEmail };
+
+  let serverError = null;
+  try {
+    await postJson(PUSH_CONFIG.unsubscribeEndpoint, payload);
+  } catch (error) {
+    // サーバが落ちていてもローカル購読の解除だけは進める
+    serverError = error;
+  }
+
+  if (subscription) {
+    await subscription.unsubscribe();
+  }
+
   state.pushSubscription = state.pushRegistration
     ? await state.pushRegistration.pushManager.getSubscription()
     : null;
   renderPushControls();
+
+  if (serverError) {
+    throw serverError;
+  }
+
+  return { scope };
 }
 
 async function syncExistingSubscriptionIfNeeded() {
@@ -959,11 +990,25 @@ function setupPushControls() {
       setPushStatusLabel("解除中");
       setPushMessage("端末登録を解除しています...", "default");
       disableButtonElement.disabled = true;
-      await unsubscribeCurrentDevice();
-      setPushMessage("この端末の通知設定を解除しました。", "success");
+      const result = await unsubscribeCurrentDevice();
+
+      if (result.scope === "email") {
+        setPushMessage(
+          "この端末に登録が見つからなかったため、保存中のメールアドレスに紐づく通知登録をすべて解除しました。",
+          "success",
+        );
+      } else if (result.scope === "none") {
+        setPushMessage("この端末は通知を受け取る設定になっていません。", "default");
+      } else {
+        setPushMessage("この端末の通知設定を解除しました。", "success");
+      }
     } catch (error) {
+      // ローカル購読の解除は済んでいるが、サーバ側の解除に失敗した状態
       console.error("[push] unsubscribe error:", error);
-      setPushMessage("端末登録の解除に失敗しました。", "error");
+      setPushMessage(
+        "この端末の通知は止めましたが、サーバ側の登録解除に失敗しました。時間をおいてもう一度お試しください。",
+        "error",
+      );
       renderPushControls();
     }
   });

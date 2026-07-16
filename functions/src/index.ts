@@ -20,7 +20,6 @@ import { handleScheduleSync } from "./scheduleSync";
 import {
   handleNotifyTodaySchedule,
   handleNotifyTomorrowSchedule,
-  runNotifyToday,
   runNotifyTomorrow,
 } from "./scheduledNotifications";
 
@@ -235,28 +234,11 @@ app.get("/api/schedule-editor/trash", handleScheduleEditorListTrash);
 app.post("/schedule-editor/create", handleScheduleEditorCreate);
 app.post("/api/schedule-editor/create", handleScheduleEditorCreate);
 
-// 毎朝7時（JST）に今日の予定を通知
-export const notifyTodaySchedule = onSchedule(
-  {
-    schedule: "0 7 * * *",  // JST 07:00
-    timeZone: "Asia/Tokyo",
-    region: "asia-northeast1",
-    secrets: [
-      SUPABASE_SERVICE_ROLE_KEY,
-      WEB_PUSH_VAPID_PUBLIC_KEY,
-      WEB_PUSH_VAPID_PRIVATE_KEY,
-      WEB_PUSH_SUBJECT,
-    ],
-  },
-  async () => {
-    await runNotifyToday();
-  },
-);
-
-// 毎晩20時（JST）に明日の予定を通知
+// 毎日18時（JST）に明日の予定を通知（2026-07-16: 18時の1本に集約。
+// 朝7時の notifyTodaySchedule は廃止。手動実行は POST /api/notify-today で可能）
 export const notifyTomorrowSchedule = onSchedule(
   {
-    schedule: "0 20 * * *",  // JST 20:00
+    schedule: "0 18 * * *",  // JST 18:00
     timeZone: "Asia/Tokyo",
     region: "asia-northeast1",
     secrets: [

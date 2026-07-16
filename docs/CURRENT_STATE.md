@@ -170,8 +170,9 @@
 
 | ジョブ名 | cron | 用途 |
 |---|---|---|
-| `notifyTodaySchedule` | `0 7 * * *` (JST) | 毎朝7時、今日の予定をヘルパーに push 通知 |
-| `notifyTomorrowSchedule` | `0 20 * * *` (JST) | 毎晩20時、明日の予定をヘルパーに push 通知 |
+| `notifyTomorrowSchedule` | `0 18 * * *` (JST) | 毎日18時、明日の予定をヘルパーに push 通知 |
+
+> **2026-07-16 変更**: 「毎日18時に1回だけ、翌日の予定のみ」に集約。`notifyTodaySchedule`（毎朝7時 / 今日の予定）は**廃止**し、`notifyTomorrowSchedule` を 20時 → 18時 に変更した。手動実行用の `POST /api/notify-today` は残置（ジョブとは独立したハンドラ）。詳細は `CHANGELOG.md` の 2026-07-16 参照。
 
 ### 2.4 GAS（Google Apps Script）プロジェクト
 
