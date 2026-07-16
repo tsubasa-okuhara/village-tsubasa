@@ -47,6 +47,7 @@ const tabMove = document.getElementById("tab-move");
 const badgeHome = document.getElementById("badge-home");
 const badgeMove = document.getElementById("badge-move");
 const scopeAll = document.getElementById("scope-all");
+const userFilterEl = document.getElementById("user-filter");
 
 const listStatus = document.getElementById("list-status");
 const taskListEl = document.getElementById("task-list");
@@ -72,6 +73,7 @@ const state = {
   email: null,
   currentCategory: "home", // 'home' | 'move'
   showAll: false, // false=自分だけ / true=全員の未記入
+  userFilter: "", // ""=すべての利用者 / 利用者名で絞り込み
   homeTasks: [],
   moveTasks: [],
   selectedTask: null,
@@ -150,6 +152,12 @@ if (scopeAll) {
     loadAll();
   });
 }
+if (userFilterEl) {
+  userFilterEl.addEventListener("change", () => {
+    state.userFilter = userFilterEl.value;
+    renderList();
+  });
+}
 
 function switchTab(category) {
   state.currentCategory = category;
@@ -219,17 +227,70 @@ function updateBadges() {
   }
 }
 
+// ─── 利用者フィルタ ───────────────────────────────────
+// 居宅は user_name(snake) / 移動は userName(camel) で返るため両対応
+function getTaskUserName(task) {
+  return task.user_name || task.userName || "";
+}
+
+// 現在のタブの一覧から利用者の選択肢を作り直す。
+// 選択中の利用者が一覧から消えた場合は「すべて」に戻す。
+function refreshUserFilterOptions(tasks) {
+  if (!userFilterEl) return;
+
+  const counts = new Map();
+  for (const task of tasks) {
+    const name = getTaskUserName(task);
+    if (!name) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  if (state.userFilter && !counts.has(state.userFilter)) {
+    state.userFilter = "";
+  }
+
+  const names = Array.from(counts.keys()).sort(function (a, b) {
+    return a.localeCompare(b, "ja");
+  });
+
+  userFilterEl.innerHTML = "";
+  const allOption = document.createElement("option");
+  allOption.value = "";
+  allOption.textContent = `すべての利用者（${tasks.length}件）`;
+  userFilterEl.appendChild(allOption);
+
+  for (const name of names) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = `${name}（${counts.get(name)}件）`;
+    userFilterEl.appendChild(option);
+  }
+
+  userFilterEl.value = state.userFilter;
+}
+
 // ─── 一覧レンダリング ─────────────────────────────────
 function renderList() {
   const tasks =
     state.currentCategory === "home" ? state.homeTasks : state.moveTasks;
+
+  // 選択肢はフィルタ適用前の一覧から作る（絞り込み後だと他の利用者を選べなくなる）
+  refreshUserFilterOptions(tasks);
+
+  // 並び順は変えず、絞り込みだけをかける
+  const visibleTasks = state.userFilter
+    ? tasks.filter(function (task) {
+        return getTaskUserName(task) === state.userFilter;
+      })
+    : tasks;
+
   taskListEl.innerHTML = "";
-  if (tasks.length === 0) {
+  if (visibleTasks.length === 0) {
     emptyStateEl.hidden = false;
     return;
   }
   emptyStateEl.hidden = true;
-  for (const task of tasks) {
+  for (const task of visibleTasks) {
     taskListEl.appendChild(renderTaskCard(task));
   }
 }
