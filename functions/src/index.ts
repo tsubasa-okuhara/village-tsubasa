@@ -31,6 +31,7 @@ import { selfMatchingRouter } from "./self-matching/routes";
 
 import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
 import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
+import { handleSamplesHome } from "./service-records-home/samples";
 import { handleBonusLeaderboard } from "./bonus/leaderboard";
 import { requireOwner } from "./bonus/requireOwner";
 import { handleSaveHomeRecord } from "./service-records-home/saveRecord";
@@ -162,6 +163,8 @@ app.post("/service-records-home/summary", handleGenerateHomeSummary);
 app.post("/api/service-records-home/summary", handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
+app.get("/service-records-home/samples", handleSamplesHome);
+app.get("/api/service-records-home/samples", handleSamplesHome);
 app.get("/bonus/leaderboard", requireOwner, handleBonusLeaderboard);
 app.get("/api/bonus/leaderboard", requireOwner, handleBonusLeaderboard);
 app.post("/service-records-home/save", handleSaveHomeRecord);
