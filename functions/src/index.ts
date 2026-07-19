@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { SUPABASE_SERVICE_ROLE_KEY } from "./lib/supabase";
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SUB2_SERVICE_ROLE_KEY } from "./lib/supabase";
 import { OPENAI_API_KEY } from "./lib/openai";
 import { handleScheduleList } from "./scheduleList";
 import {
@@ -31,6 +31,7 @@ import { selfMatchingRouter } from "./self-matching/routes";
 
 import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
 import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
+import { handlePreviousHome } from "./service-records-home/previous";
 import { handleSamplesHome } from "./service-records-home/samples";
 import { handleBonusLeaderboard } from "./bonus/leaderboard";
 import { requireOwner } from "./bonus/requireOwner";
@@ -163,6 +164,8 @@ app.post("/service-records-home/summary", handleGenerateHomeSummary);
 app.post("/api/service-records-home/summary", handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
+app.get("/service-records-home/previous", handlePreviousHome);
+app.get("/api/service-records-home/previous", handlePreviousHome);
 app.get("/service-records-home/samples", handleSamplesHome);
 app.get("/api/service-records-home/samples", handleSamplesHome);
 app.get("/bonus/leaderboard", requireOwner, handleBonusLeaderboard);
@@ -261,6 +264,7 @@ export const api = onRequest(
     region: "asia-northeast1",
     secrets: [
       SUPABASE_SERVICE_ROLE_KEY,
+      SUPABASE_SUB2_SERVICE_ROLE_KEY,
       OPENAI_API_KEY,
       WEB_PUSH_VAPID_PUBLIC_KEY,
       WEB_PUSH_VAPID_PRIVATE_KEY,
