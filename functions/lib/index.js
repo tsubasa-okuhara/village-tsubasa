@@ -189,6 +189,7 @@ exports.api = (0, https_1.onRequest)({
     region: "asia-northeast1",
     secrets: [
         supabase_1.SUPABASE_SERVICE_ROLE_KEY,
+        supabase_1.SUPABASE_SUB2_SERVICE_ROLE_KEY,
         openai_1.OPENAI_API_KEY,
         push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
         push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
