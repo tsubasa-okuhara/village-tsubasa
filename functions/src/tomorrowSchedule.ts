@@ -12,6 +12,7 @@ type TomorrowScheduleItem = {
   haisha: string | null;
   task: string | null;
   summary: string | null;
+  coHelpers: string[];   // 同 (client, start_time) の他ヘルパー名（合同シフト用）
 };
 
 type TomorrowScheduleSuccessResponse = {
@@ -45,20 +46,38 @@ export async function fetchTomorrowScheduleByHelperEmail(
   date: string
 ): Promise<TomorrowScheduleItem[]> {
   const supabase = getSupabaseClient();
+
+  // 当日の全レコードを取得（合同シフト判定のため、本人以外も含めて全件）
   const { data, error } = await supabase
     .from("schedule_web_v")
     .select("id, date, name, helper_email, client, start_time, end_time, haisha, task, summary")
     .eq("date", date)
-    .ilike("helper_email", helperEmail)
     .order("start_time", { ascending: true });
 
   if (error) {
     throw error;
   }
 
-  const rows = (data ?? []) as ScheduleRow[];
+  const allRows = (data ?? []) as ScheduleRow[];
+  const helperEmailLc = helperEmail.toLowerCase();
 
-  return rows.map(function (row) {
+  // 本人の行（helper_email 一致）を抽出
+  const myRows = allRows.filter(function (r) {
+    return (r.helper_email ?? "").toLowerCase() === helperEmailLc;
+  });
+
+  return myRows.map(function (row) {
+    // 同 (client, start_time) で本人以外のヘルパー名を抽出（合同シフト）
+    const coHelperSet = new Set<string>();
+    for (const other of allRows) {
+      if (other === row) continue;
+      if (other.client !== row.client) continue;
+      if (other.start_time !== row.start_time) continue;
+      if (!other.name) continue;
+      if (other.name === row.name) continue;
+      coHelperSet.add(other.name);
+    }
+
     return {
       id: row.id,
       helperName: row.name,
@@ -68,6 +87,7 @@ export async function fetchTomorrowScheduleByHelperEmail(
       haisha: row.haisha,
       task: row.task,
       summary: row.summary,
+      coHelpers: Array.from(coHelperSet),
     };
   });
 }
