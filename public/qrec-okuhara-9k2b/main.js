@@ -8,8 +8,10 @@
 //
 // 既存 API を流用:
 //   - GET /api/service-records-home/unwritten?helper_email=...
+//   - POST /api/service-records-home/summary  （AI 整形・居宅 / OpenAI gpt-4o-mini）
 //   - POST /api/service-records-home/save
 //   - GET /api/service-records-move/unwritten?helper_email=...
+//   - POST /api/service-records-move/summary  （AI 整形・移動 / OpenAI gpt-4o-mini）
 //   - POST /api/service-records-move/save
 
 // 入力許可メールアドレス（複数可）
@@ -44,6 +46,8 @@ const tabHome = document.getElementById("tab-home");
 const tabMove = document.getElementById("tab-move");
 const badgeHome = document.getElementById("badge-home");
 const badgeMove = document.getElementById("badge-move");
+const scopeAll = document.getElementById("scope-all");
+const userFilterEl = document.getElementById("user-filter");
 
 const listStatus = document.getElementById("list-status");
 const taskListEl = document.getElementById("task-list");
@@ -68,6 +72,8 @@ const formSaveClose = document.getElementById("form-save-close");
 const state = {
   email: null,
   currentCategory: "home", // 'home' | 'move'
+  showAll: false, // false=自分だけ / true=全員の未記入
+  userFilter: "", // ""=すべての利用者 / 利用者名で絞り込み
   homeTasks: [],
   moveTasks: [],
   selectedTask: null,
@@ -140,6 +146,18 @@ logoutButton.addEventListener("click", () => {
 // ─── タブ切替 ─────────────────────────────────────────
 tabHome.addEventListener("click", () => switchTab("home"));
 tabMove.addEventListener("click", () => switchTab("move"));
+if (scopeAll) {
+  scopeAll.addEventListener("change", () => {
+    state.showAll = scopeAll.checked;
+    loadAll();
+  });
+}
+if (userFilterEl) {
+  userFilterEl.addEventListener("change", () => {
+    state.userFilter = userFilterEl.value;
+    renderList();
+  });
+}
 
 function switchTab(category) {
   state.currentCategory = category;
@@ -182,7 +200,9 @@ async function fetchUnwritten(category) {
     category === "home"
       ? "/service-records-home/unwritten"
       : "/service-records-move/unwritten";
-  const url = `${API_BASE}${path}?helper_email=${encodeURIComponent(state.email)}`;
+  const url = state.showAll
+    ? `${API_BASE}${path}`
+    : `${API_BASE}${path}?helper_email=${encodeURIComponent(state.email)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
@@ -207,17 +227,70 @@ function updateBadges() {
   }
 }
 
+// ─── 利用者フィルタ ───────────────────────────────────
+// 居宅は user_name(snake) / 移動は userName(camel) で返るため両対応
+function getTaskUserName(task) {
+  return task.user_name || task.userName || "";
+}
+
+// 現在のタブの一覧から利用者の選択肢を作り直す。
+// 選択中の利用者が一覧から消えた場合は「すべて」に戻す。
+function refreshUserFilterOptions(tasks) {
+  if (!userFilterEl) return;
+
+  const counts = new Map();
+  for (const task of tasks) {
+    const name = getTaskUserName(task);
+    if (!name) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  if (state.userFilter && !counts.has(state.userFilter)) {
+    state.userFilter = "";
+  }
+
+  const names = Array.from(counts.keys()).sort(function (a, b) {
+    return a.localeCompare(b, "ja");
+  });
+
+  userFilterEl.innerHTML = "";
+  const allOption = document.createElement("option");
+  allOption.value = "";
+  allOption.textContent = `すべての利用者（${tasks.length}件）`;
+  userFilterEl.appendChild(allOption);
+
+  for (const name of names) {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = `${name}（${counts.get(name)}件）`;
+    userFilterEl.appendChild(option);
+  }
+
+  userFilterEl.value = state.userFilter;
+}
+
 // ─── 一覧レンダリング ─────────────────────────────────
 function renderList() {
   const tasks =
     state.currentCategory === "home" ? state.homeTasks : state.moveTasks;
+
+  // 選択肢はフィルタ適用前の一覧から作る（絞り込み後だと他の利用者を選べなくなる）
+  refreshUserFilterOptions(tasks);
+
+  // 並び順は変えず、絞り込みだけをかける
+  const visibleTasks = state.userFilter
+    ? tasks.filter(function (task) {
+        return getTaskUserName(task) === state.userFilter;
+      })
+    : tasks;
+
   taskListEl.innerHTML = "";
-  if (tasks.length === 0) {
+  if (visibleTasks.length === 0) {
     emptyStateEl.hidden = false;
     return;
   }
   emptyStateEl.hidden = true;
-  for (const task of tasks) {
+  for (const task of visibleTasks) {
     taskListEl.appendChild(renderTaskCard(task));
   }
 }
@@ -229,7 +302,7 @@ function renderTaskCard(task) {
   const timeLabel = formatTimeRange(task.start_time, task.end_time);
   card.innerHTML = `
     <div class="task-card__time">${escapeHtml(dateLabel)} ${escapeHtml(timeLabel)}</div>
-    <div class="task-card__user">${escapeHtml(task.user_name || "（利用者未設定）")}</div>
+    <div class="task-card__user">${escapeHtml(task.user_name || task.userName || "（利用者未設定）")}</div>
     <div class="task-card__task">${escapeHtml(task.task || "—")}${task.summary ? " / " + escapeHtml(task.summary) : ""}</div>
     <div class="task-card__cta">✏️ タップして記録</div>
   `;
@@ -247,7 +320,7 @@ function openForm(task) {
   formTitle.textContent =
     state.currentCategory === "home" ? "居宅介護 記録入力" : "移動支援 記録入力";
   formDatetime.textContent = `${dateLabel} ${timeLabel}`;
-  formUser.textContent = task.user_name || "（利用者未設定）";
+  formUser.textContent = task.user_name || task.userName || "（利用者未設定）";
   formTask.textContent = task.task || "—";
 
   // 居宅のみ区分ボタン表示
@@ -285,9 +358,9 @@ categoryButtons.addEventListener("click", (e) => {
   if (!btn) return;
   const value = btn.dataset.categoryValue;
   selectCategory(value);
-  // メモ・本文を再生成
+  // 区分が変わったら本文を再生成（メモがあれば AI、無ければテンプレ）
   if (state.selectedTask) {
-    formFinalNote.value = generateFinalNote(state.selectedTask, formMemo.value);
+    regenerateNote();
   }
 });
 
@@ -311,26 +384,24 @@ function inferCategoryFromTask(taskText) {
   return "身体介護";
 }
 
-// メモ → 記録本文 自動生成
+// メモ → 記録本文 自動生成（AI 整形）
 formRegenButton.addEventListener("click", () => {
-  if (!state.selectedTask) return;
-  formFinalNote.value = generateFinalNote(state.selectedTask, formMemo.value);
+  regenerateNote();
 });
 
 formMemo.addEventListener("blur", () => {
-  // メモから本文を再生成（既に手動編集済みでなければ）
+  // メモ入力を終えたら本文を再生成（手動編集・AI生成済みは上書きしない）
   if (!state.selectedTask) return;
-  // 既存本文が「自動生成版」のままなら更新
   const auto = generateFinalNote(state.selectedTask, "");
   if (formFinalNote.value === auto || formFinalNote.value.trim() === "") {
-    formFinalNote.value = generateFinalNote(state.selectedTask, formMemo.value);
+    regenerateNote();
   }
 });
 
 function generateFinalNote(task, memo) {
   const dateLabel = task.service_date || "";
   const timeRange = formatTimeRange(task.start_time, task.end_time);
-  const userName = task.user_name || "";
+  const userName = task.user_name || task.userName || "";
   const taskName = state.selectedCategoryValue || task.task || "";
   const memoSegment = memo && memo.trim() ? `\n${memo.trim()}` : "";
 
@@ -339,6 +410,118 @@ function generateFinalNote(task, memo) {
   } else {
     return `${dateLabel} ${timeRange}、${userName}様の${taskName || "移動支援"}を実施しました。${memoSegment ? memo.trim() : "予定通りに支援しました。"}`;
   }
+}
+
+// ─── AI 整形（既存 generateSummary エンドポイント流用） ─────
+//   - メモが空のとき: AI を呼ばずテンプレ（generateFinalNote）で即時プレースホルダ
+//   - メモがあるとき: 居宅 → /service-records-home/summary
+//                     移動 → /service-records-move/summary（OpenAI gpt-4o-mini）
+//   - API 失敗時はローカルテンプレにフォールバックして画面を固めない
+const HOME_SUMMARY_ENDPOINT = `${API_BASE}/service-records-home/summary`;
+const MOVE_SUMMARY_ENDPOINT = `${API_BASE}/service-records-move/summary`;
+
+let isGenerating = false;
+
+async function regenerateNote() {
+  if (!state.selectedTask) return;
+
+  const task = state.selectedTask;
+  const memo = formMemo.value.trim();
+
+  // メモが無ければ AI を呼ばず、テンプレのプレースホルダを表示
+  if (!memo) {
+    formFinalNote.value = generateFinalNote(task, "");
+    return;
+  }
+
+  if (isGenerating) return;
+  isGenerating = true;
+  formRegenButton.disabled = true;
+  formStatus.textContent = "🤖 生成中…";
+  formStatus.className = "status";
+
+  try {
+    const result =
+      state.currentCategory === "home"
+        ? await fetchAiSummaryHome(task, memo)
+        : await fetchAiSummaryMove(task, memo);
+
+    const summaryText = (result.summaryText || "").trim();
+
+    if (summaryText) {
+      formFinalNote.value = summaryText;
+      if (result.source === "fallback") {
+        // サーバー側が AI 生成に失敗し簡易テンプレを返したケース
+        formStatus.textContent =
+          "⚠️ AI 生成に失敗し簡易テンプレを表示中。内容を確認してください。";
+        formStatus.className = "status is-error";
+      } else {
+        formStatus.textContent = "✨ AI 整形完了";
+        formStatus.className = "status is-success";
+      }
+    } else {
+      formFinalNote.value = generateFinalNote(task, memo);
+      formStatus.textContent = "AI が空を返したためテンプレを表示しました。";
+      formStatus.className = "status is-error";
+    }
+  } catch (err) {
+    console.error("[owner-record] ai summary error:", err);
+    // フォールバック: ローカルテンプレで画面を固めない
+    formFinalNote.value = generateFinalNote(task, memo);
+    formStatus.textContent =
+      "AI 整形に失敗したためテンプレを表示しました: " +
+      (err.message || "不明エラー");
+    formStatus.className = "status is-error";
+  } finally {
+    isGenerating = false;
+    formRegenButton.disabled = false;
+  }
+}
+
+async function fetchAiSummaryHome(task, memo) {
+  const body = {
+    helperName: task.helper_name || "",
+    userName: task.user_name || task.userName || "",
+    serviceDate: task.service_date || "",
+    startTime: task.start_time || "",
+    endTime: task.end_time || "",
+    category: state.selectedCategoryValue || task.task || "",
+    items: [], // 構造化項目（実施項目）は qrec では省略
+    otherDetail: "",
+    memo,
+  };
+  const res = await fetch(HOME_SUMMARY_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return { summaryText: data.summaryText, source: data.source };
+}
+
+async function fetchAiSummaryMove(task, memo) {
+  const body = {
+    helperName: task.helper_name || "",
+    userName: task.user_name || task.userName || "",
+    serviceDate: task.service_date || "",
+    startTime: task.start_time || "",
+    endTime: task.end_time || "",
+    task: task.task || "",
+    notes: memo,
+  };
+  const res = await fetch(MOVE_SUMMARY_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return { summaryText: data.summaryText, source: data.source };
 }
 
 // ─── 保存処理 ─────────────────────────────────────────
@@ -428,7 +611,7 @@ async function saveHome(task, memo, finalNote) {
     serviceDate: task.service_date,
     helperName: task.helper_name,
     helperEmail: task.helper_email || state.email,
-    userName: task.user_name,
+    userName: task.user_name || task.userName,
     task: state.selectedCategoryValue || task.task,
     memo,
     aiSummary: null,
@@ -447,14 +630,16 @@ async function saveHome(task, memo, finalNote) {
 }
 
 async function saveMove(task, memo, finalNote) {
+  // 移動の unwritten は camelCase 変換済み(taskId/serviceDate/helperName…)を返す。
+  // 居宅は snake_case 生データ。両対応のため camelCase 優先 + snake_case フォールバック。
   const body = {
-    taskId: task.id,
-    helperEmail: task.helper_email || state.email,
-    helperName: task.helper_name,
-    userName: task.user_name,
-    serviceDate: task.service_date,
-    startTime: task.start_time || "",
-    endTime: task.end_time || "",
+    taskId: task.taskId || task.id || (task.raw && task.raw.id),
+    helperEmail: task.helperEmail || task.helper_email || state.email,
+    helperName: task.helperName || task.helper_name,
+    userName: task.user_name || task.userName,
+    serviceDate: task.serviceDate || task.service_date,
+    startTime: task.startTime || task.start_time || "",
+    endTime: task.endTime || task.end_time || "",
     task: task.task || "",
     haisha: task.haisha || "",
     notes: memo,

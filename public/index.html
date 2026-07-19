@@ -104,7 +104,7 @@
         </div>
       </section>
 
-      <section class="priority-section" aria-label="次の予定と連絡">
+      <section class="priority-section" aria-label="次の予定・連絡・使い始めの設定">
         <div class="priority-grid">
           <article id="notifications-summary" class="summary-card is-loading">
             <div class="summary-card__top">
@@ -153,6 +153,66 @@
               </a>
             </div>
           </article>
+
+          <section class="setting-card helper-email-panel" aria-live="polite">
+            <div class="setting-card__head">
+              <div>
+                <h3>自分用表示の設定</h3>
+                <p id="helper-email-note" class="setting-card__copy">
+                  メールアドレスを保存すると、自分の予定リンクが使えるようになります。
+                </p>
+              </div>
+              <span id="helper-email-status" class="helper-email-status">未保存</span>
+            </div>
+
+            <p class="helper-email-current">保存済みメール: <strong id="helper-email-current">未設定</strong></p>
+
+            <form id="helper-email-form" class="helper-email-form">
+              <input
+                id="helper-email-input"
+                class="helper-email-input"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                placeholder="helper@example.com"
+              />
+              <button id="helper-email-save" class="helper-email-button" type="button">保存</button>
+              <button id="helper-email-clear" class="helper-email-clear" type="button">クリア</button>
+            </form>
+
+            <p id="helper-email-message" class="helper-email-message" data-tone="default">
+              全体の予定確認だけなら、保存しなくても使えます。
+            </p>
+
+            <span id="settings-status-badge" class="section-status-badge" hidden>
+              自分用表示 未設定
+            </span>
+          </section>
+
+          <section class="setting-card push-panel" aria-live="polite">
+            <div class="setting-card__head">
+              <div>
+                <h3>端末通知</h3>
+                <p class="setting-card__copy">
+                  通知を許可すると、アプリを開いていないときも端末で連絡を受け取れます。
+                </p>
+              </div>
+              <span id="push-status" class="push-status">確認中</span>
+            </div>
+
+            <div class="push-actions">
+              <button id="push-enable" class="push-button" data-tone="primary" type="button">通知を受け取る</button>
+              <button id="push-disable" class="push-button" data-tone="danger" type="button">通知を止める</button>
+              <button id="push-test" class="push-button" type="button">テスト通知</button>
+            </div>
+
+            <p id="push-message" class="push-message" data-tone="default">
+              メールアドレスを保存してから、端末通知を登録してください。
+            </p>
+            <p class="push-note">
+              iPhone はホーム画面に追加した状態で通知許可を行う想定です。
+            </p>
+          </section>
 
           <article id="next-summary" class="summary-card is-loading">
             <div class="summary-card__top">
@@ -225,7 +285,7 @@
               </a>
               <a
                 class="menu-card__sub-link"
-                href="https://friendly-sherbet-cd822b.netlify.app/"
+                href="https://shift-app-mock001.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -275,76 +335,6 @@
             <p>アプリや業務への意見・要望を匿名で届けられます。</p>
             <a href="/feedback/">声を届ける</a>
           </article>
-        </div>
-      </section>
-
-      <section class="settings-section" aria-label="使い始めの設定">
-        <div class="section-head">
-          <div>
-            <h2>使い始めの設定</h2>
-            <p>自分用の表示や端末通知を使うときだけ設定してください。</p>
-          </div>
-          <span id="settings-status-badge" class="section-status-badge" hidden>
-            自分用表示 未設定
-          </span>
-        </div>
-
-        <div class="settings-grid">
-          <section class="setting-card helper-email-panel" aria-live="polite">
-            <div class="setting-card__head">
-              <div>
-                <h3>自分用表示の設定</h3>
-                <p id="helper-email-note" class="setting-card__copy">
-                  メールアドレスを保存すると、自分の予定リンクが使えるようになります。
-                </p>
-              </div>
-              <span id="helper-email-status" class="helper-email-status">未保存</span>
-            </div>
-
-            <p class="helper-email-current">保存済みメール: <strong id="helper-email-current">未設定</strong></p>
-
-            <form id="helper-email-form" class="helper-email-form">
-              <input
-                id="helper-email-input"
-                class="helper-email-input"
-                type="email"
-                inputmode="email"
-                autocomplete="email"
-                placeholder="helper@example.com"
-              />
-              <button id="helper-email-save" class="helper-email-button" type="button">保存</button>
-              <button id="helper-email-clear" class="helper-email-clear" type="button">クリア</button>
-            </form>
-
-            <p id="helper-email-message" class="helper-email-message" data-tone="default">
-              全体の予定確認だけなら、保存しなくても使えます。
-            </p>
-          </section>
-
-          <section class="setting-card push-panel" aria-live="polite">
-            <div class="setting-card__head">
-              <div>
-                <h3>端末通知</h3>
-                <p class="setting-card__copy">
-                  通知を許可すると、アプリを開いていないときも端末で連絡を受け取れます。
-                </p>
-              </div>
-              <span id="push-status" class="push-status">確認中</span>
-            </div>
-
-            <div class="push-actions">
-              <button id="push-enable" class="push-button" data-tone="primary" type="button">通知を受け取る</button>
-              <button id="push-disable" class="push-button" data-tone="danger" type="button">通知を止める</button>
-              <button id="push-test" class="push-button" type="button">テスト通知</button>
-            </div>
-
-            <p id="push-message" class="push-message" data-tone="default">
-              メールアドレスを保存してから、端末通知を登録してください。
-            </p>
-            <p class="push-note">
-              iPhone はホーム画面に追加した状態で通知許可を行う想定です。
-            </p>
-          </section>
         </div>
       </section>
 

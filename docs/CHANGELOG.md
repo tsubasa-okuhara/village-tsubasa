@@ -13,7 +13,55 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-06-10（経費アプリ Phase 1C — 全ヘルパー×月別集計ページをオーナー専用で追加）
+最終更新: 2026-07-16（ひろばダッシュボード: 設定カード移動 / 通知解除の修正 / 通知を18時1本に集約）
+
+---
+
+## 2026-07-16 [village-tsubasa] ひろばダッシュボード — 設定カード移動・通知解除の修正・Push 通知を18時1本に集約
+
+### 1. レイアウト移動（`public/index.html` / `public/home.css`）
+- 「自分用表示の設定」「端末通知」の2カードを、「使い始めの設定」セクションから **「連絡の確認」と同じエリア**（`priority-section`）へ移動
+- 移動により空になった **「使い始めの設定」セクションは丸ごと削除**
+- `#settings-status-badge` は `index.js:renderHelperEmailPanel` が `getRequiredElement()` で必須参照しており、削除すると **ページ初期化全体が例外で停止する**ため、「自分用表示の設定」カード内へ一緒に移設した
+- ハンドラは全て ID 参照のため紐付けは維持。`.priority-grid` と `.settings-grid` は grid 定義が同一（PC 2列 / スマホ 1列）なので見た目の崩れなし
+- 表示順: 連絡の確認 → 自分用表示の設定 → 端末通知 → 次に入る予定（PC では2列で折り返すため「次に入る予定」が右下に移動する）
+
+### 2. Fixed — 「通知を止める」ボタンが押せない不具合
+- **症状**: ボタンがグレーのまま押せず、通知を停止できない
+- **原因**: `renderPushControls()` が `state.pushSubscription`（＝ブラウザのローカル購読）が無い場合に無条件で `disabled = true` にしていた。ローカル購読が検出できないが **Supabase 側に `is_active=true` のレコードが残っている**状態だと、ユーザーは通知を受け取り続けるのに解除操作が一切できない詰み状態になっていた
+- **修正（`public/index.js`）**:
+  - `canUnsubscribe()` を新設。ローカル購読が無くても **メール保存済みなら解除ボタンを有効化**
+  - `unsubscribeCurrentDevice()` はクリック時に `getSubscription()` を**取り直す**（state のキャッシュを信用しない）
+  - サーバ呼び出しが失敗しても **ローカルの `unsubscribe()` は必ず実行**するよう順序を変更（旧実装は `await postJson` が先に throw するとローカル解除に到達しなかった）
+  - 解除スコープ（device / email / none）に応じて画面文言を出し分け
+- **修正（`functions/src/push.ts`）**:
+  - `POST /api/push/unsubscribe` が `endpoint` に加えて **`helperEmail` を受け付ける**ように変更（ローカル購読が無く endpoint 不明なケースの救済）
+  - `deactivateSubscriptionsByHelperEmail()` を追加（`ilike` 比較、ルール7準拠）
+  - **後方互換**: 既存の `endpoint` 指定の挙動は不変。`helperEmail` は endpoint が無いときのみ使うフォールバック（ルール3の「新フィールド追加」に該当、破壊的変更なし）
+
+### 3. Changed — Cloud Scheduler を18時1本に集約（⚠️ ルール4 該当、奥原さん承認済み）
+| ジョブ名 | 変更前 | 変更後 |
+|---|---|---|
+| `notifyTodaySchedule` | `0 7 * * *` (Asia/Tokyo) 今日の予定 | **廃止（コードごと削除）** |
+| `notifyTomorrowSchedule` | `0 20 * * *` (Asia/Tokyo) 明日の予定 | **`0 18 * * *` (Asia/Tokyo)** 明日の予定 |
+
+- 送信対象の「翌日のみ」絞り込みは **既存の `runNotifyTomorrow()` → `getJstDateByOffset(1)` が元から実装済み**のため、ロジック変更は不要だった
+- `notifyTodaySchedule` の `export` を削除したので、**deploy 時に Functions と Cloud Scheduler ジョブが両方自動削除される**
+- 手動実行用の `POST /api/notify-today` / `POST /api/notify-tomorrow` は **両方とも残置**（`handleNotifyTodaySchedule` は `runNotifyToday` を経由せず `sendNotificationsForDate` を直接呼ぶ独立実装のため、ジョブ削除の影響を受けない）
+- `runNotifyToday()` は `scheduledNotifications.ts:165` に export のまま残置したが、**現在どこからも呼ばれない dead code** になった（将来の判断用に残す）
+- **注意**: 依頼時に言及された `/api/notify-push` は本リポに存在しない。Push を呼ぶ手動エンドポイントは `/api/notify-today` と `/api/notify-tomorrow` の2本
+
+### 影響範囲
+- **ヘルパー全員**: 朝7時の「今日の予定」通知が **無くなる**。今後は18時に「明日の予定」のみ届く（運用変更）
+- **village-admin / user-schedule-app**: 影響なし
+- **Supabase**: スキーマ変更なし（`push_subscriptions` は既存列 `is_active` / `updated_at` の UPDATE のみ）
+- **API**: 破壊的変更なし（`/api/push/unsubscribe` はフィールド追加のみ）
+
+### デプロイ
+```
+firebase deploy --only functions:api,functions:notifyTomorrowSchedule,hosting:village-tsubasa
+```
+※ `notifyTodaySchedule` の削除を反映するには functions のフルデプロイが必要（`firebase deploy --only functions`）。CLI が削除確認を求める
 
 ---
 

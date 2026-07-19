@@ -104,6 +104,23 @@ function getPushSubscriptionFromBody(body: unknown): PushSubscription | null {
   };
 }
 
+async function deactivateSubscriptionsByHelperEmail(
+  helperEmail: string
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .update({
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .ilike("helper_email", helperEmail);
+
+  if (error) {
+    throw error;
+  }
+}
+
 async function deactivateSubscriptionByEndpoint(endpoint: string): Promise<void> {
   const supabase = getSupabaseClient();
   const { error } = await supabase
@@ -200,17 +217,23 @@ export async function handleUnsubscribePush(
   res: Response<PushActionSuccessResponse | PushErrorResponse>
 ): Promise<void> {
   const endpoint = getStringValue(req.body?.endpoint);
+  // 端末側に購読が残っていない場合、endpoint が分からないので helperEmail 単位で解除する
+  const helperEmail = getStringValue(req.body?.helperEmail);
 
-  if (!endpoint) {
+  if (!endpoint && !helperEmail) {
     res.status(400).json({
       ok: false,
-      message: "endpoint is required",
+      message: "endpoint or helperEmail is required",
     });
     return;
   }
 
   try {
-    await deactivateSubscriptionByEndpoint(endpoint);
+    if (endpoint) {
+      await deactivateSubscriptionByEndpoint(endpoint);
+    } else {
+      await deactivateSubscriptionsByHelperEmail(helperEmail);
+    }
 
     res.status(200).json({
       ok: true,

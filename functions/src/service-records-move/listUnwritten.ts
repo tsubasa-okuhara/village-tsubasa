@@ -75,14 +75,6 @@ export async function handleServiceRecordsMoveListUnwritten(
 ): Promise<void> {
   const helperEmail = getQueryValue(req.query.helper_email);
 
-  if (!helperEmail) {
-    res.status(400).json({
-      ok: false,
-      message: "helper_email is required",
-    });
-    return;
-  }
-
   console.log("[service-records-move/unwritten] request:", {
     helperEmail,
   });
@@ -90,7 +82,7 @@ export async function handleServiceRecordsMoveListUnwritten(
   try {
     const supabase = getSupabaseClient();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("schedule_tasks_move")
       .select(
         `
@@ -108,10 +100,15 @@ export async function handleServiceRecordsMoveListUnwritten(
           beneficiary_number
         `,
       )
-      .ilike("helper_email", helperEmail)
       .eq("status", "unwritten")
       .order("service_date", { ascending: true })
       .order("start_time", { ascending: true });
+
+    if (helperEmail) {
+      query = query.ilike("helper_email", helperEmail);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("[service-records-move/unwritten] query error:", error);

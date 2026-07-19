@@ -402,6 +402,16 @@
         </div>
 
         <div class="panel-content">
+          <label class="scope-toggle" style="display:flex;align-items:center;gap:8px;margin:10px 2px;font-size:14px;cursor:pointer;">
+            <input type="checkbox" id="scope-all" />
+            <span>全員の未記入を表示（オフ＝自分だけ）</span>
+          </label>
+          <label class="user-filter" style="display:block;margin:10px 2px;font-size:14px;">
+            <span style="display:block;margin-bottom:4px;">利用者で絞り込み</span>
+            <select id="user-filter" style="width:100%;padding:10px;border-radius:10px;border:1px solid #d8c0a0;background:#fff;font-size:15px;">
+              <option value="">すべての利用者</option>
+            </select>
+          </label>
           <p id="list-status" class="status">読み込み中…</p>
           <div id="task-list" class="task-list"></div>
           <div id="empty-state" class="empty-state" hidden>

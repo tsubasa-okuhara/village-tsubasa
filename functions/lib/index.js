@@ -28,9 +28,12 @@ const routes_3 = require("./self-matching/routes");
 // ↑ CloudSign secret 未設定のため一時無効化（次回チャットで CloudSign 設定後に復活）
 const generateSummary_1 = require("./service-records-home/generateSummary");
 const listUnwritten_1 = require("./service-records-home/listUnwritten");
+const leaderboard_1 = require("./bonus/leaderboard");
+const requireOwner_1 = require("./bonus/requireOwner");
 const saveRecord_1 = require("./service-records-home/saveRecord");
 const feedback_1 = require("./feedback");
 const trainingReport_1 = require("./trainingReport");
+const trainingMaterial_1 = require("./trainingMaterial");
 const push_1 = require("./push");
 const calmCheck_1 = require("./calmCheck");
 const auth_1 = require("./scheduleEditor/auth");
@@ -97,6 +100,8 @@ app.post("/service-records-home/summary", generateSummary_1.handleGenerateHomeSu
 app.post("/api/service-records-home/summary", generateSummary_1.handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHome);
+app.get("/bonus/leaderboard", requireOwner_1.requireOwner, leaderboard_1.handleBonusLeaderboard);
+app.get("/api/bonus/leaderboard", requireOwner_1.requireOwner, leaderboard_1.handleBonusLeaderboard);
 app.post("/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
 app.post("/api/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
 // 匿名フィードバック
@@ -117,6 +122,16 @@ app.post("/training-reports/notice", trainingReport_1.handleSubmitTrainingNotice
 app.post("/api/training-reports/notice", trainingReport_1.handleSubmitTrainingNotice);
 app.post("/training-reports/update-status", trainingReport_1.handleUpdateTrainingReportStatus);
 app.post("/api/training-reports/update-status", trainingReport_1.handleUpdateTrainingReportStatus);
+app.post("/training-materials", trainingMaterial_1.handleCreateTrainingMaterial);
+app.post("/api/training-materials", trainingMaterial_1.handleCreateTrainingMaterial);
+app.get("/training-materials", trainingMaterial_1.handleListTrainingMaterials);
+app.get("/api/training-materials", trainingMaterial_1.handleListTrainingMaterials);
+app.get("/training-materials/:id", trainingMaterial_1.handleGetTrainingMaterial);
+app.get("/api/training-materials/:id", trainingMaterial_1.handleGetTrainingMaterial);
+app.post("/training-materials/update", trainingMaterial_1.handleUpdateTrainingMaterial);
+app.post("/api/training-materials/update", trainingMaterial_1.handleUpdateTrainingMaterial);
+app.post("/training-materials/delete", trainingMaterial_1.handleDeleteTrainingMaterial);
+app.post("/api/training-materials/delete", trainingMaterial_1.handleDeleteTrainingMaterial);
 // 落ち着き確認
 app.get("/calm-checks/pending", calmCheck_1.handleGetPendingCalmChecks);
 app.get("/api/calm-checks/pending", calmCheck_1.handleGetPendingCalmChecks);

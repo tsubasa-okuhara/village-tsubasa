@@ -20,7 +20,6 @@ import { handleScheduleSync } from "./scheduleSync";
 import {
   handleNotifyTodaySchedule,
   handleNotifyTomorrowSchedule,
-  runNotifyToday,
   runNotifyTomorrow,
 } from "./scheduledNotifications";
 
@@ -32,6 +31,9 @@ import { selfMatchingRouter } from "./self-matching/routes";
 
 import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
 import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
+import { handleSamplesHome } from "./service-records-home/samples";
+import { handleBonusLeaderboard } from "./bonus/leaderboard";
+import { requireOwner } from "./bonus/requireOwner";
 import { handleSaveHomeRecord } from "./service-records-home/saveRecord";
 
 import {
@@ -47,6 +49,13 @@ import {
   handleGetTrainingReports,
   handleUpdateTrainingReportStatus,
 } from "./trainingReport";
+import {
+  handleCreateTrainingMaterial,
+  handleListTrainingMaterials,
+  handleGetTrainingMaterial,
+  handleUpdateTrainingMaterial,
+  handleDeleteTrainingMaterial,
+} from "./trainingMaterial";
 
 import {
   handleGetPushPublicKey,
@@ -154,6 +163,10 @@ app.post("/service-records-home/summary", handleGenerateHomeSummary);
 app.post("/api/service-records-home/summary", handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
+app.get("/service-records-home/samples", handleSamplesHome);
+app.get("/api/service-records-home/samples", handleSamplesHome);
+app.get("/bonus/leaderboard", requireOwner, handleBonusLeaderboard);
+app.get("/api/bonus/leaderboard", requireOwner, handleBonusLeaderboard);
 app.post("/service-records-home/save", handleSaveHomeRecord);
 app.post("/api/service-records-home/save", handleSaveHomeRecord);
 
@@ -176,6 +189,16 @@ app.post("/training-reports/notice", handleSubmitTrainingNotice);
 app.post("/api/training-reports/notice", handleSubmitTrainingNotice);
 app.post("/training-reports/update-status", handleUpdateTrainingReportStatus);
 app.post("/api/training-reports/update-status", handleUpdateTrainingReportStatus);
+app.post("/training-materials", handleCreateTrainingMaterial);
+app.post("/api/training-materials", handleCreateTrainingMaterial);
+app.get("/training-materials", handleListTrainingMaterials);
+app.get("/api/training-materials", handleListTrainingMaterials);
+app.get("/training-materials/:id", handleGetTrainingMaterial);
+app.get("/api/training-materials/:id", handleGetTrainingMaterial);
+app.post("/training-materials/update", handleUpdateTrainingMaterial);
+app.post("/api/training-materials/update", handleUpdateTrainingMaterial);
+app.post("/training-materials/delete", handleDeleteTrainingMaterial);
+app.post("/api/training-materials/delete", handleDeleteTrainingMaterial);
 
 // 落ち着き確認
 app.get("/calm-checks/pending", handleGetPendingCalmChecks);
@@ -214,28 +237,11 @@ app.get("/api/schedule-editor/trash", handleScheduleEditorListTrash);
 app.post("/schedule-editor/create", handleScheduleEditorCreate);
 app.post("/api/schedule-editor/create", handleScheduleEditorCreate);
 
-// 毎朝7時（JST）に今日の予定を通知
-export const notifyTodaySchedule = onSchedule(
-  {
-    schedule: "0 7 * * *",  // JST 07:00
-    timeZone: "Asia/Tokyo",
-    region: "asia-northeast1",
-    secrets: [
-      SUPABASE_SERVICE_ROLE_KEY,
-      WEB_PUSH_VAPID_PUBLIC_KEY,
-      WEB_PUSH_VAPID_PRIVATE_KEY,
-      WEB_PUSH_SUBJECT,
-    ],
-  },
-  async () => {
-    await runNotifyToday();
-  },
-);
-
-// 毎晩20時（JST）に明日の予定を通知
+// 毎日18時（JST）に明日の予定を通知（2026-07-16: 18時の1本に集約。
+// 朝7時の notifyTodaySchedule は廃止。手動実行は POST /api/notify-today で可能）
 export const notifyTomorrowSchedule = onSchedule(
   {
-    schedule: "0 20 * * *",  // JST 20:00
+    schedule: "0 18 * * *",  // JST 18:00
     timeZone: "Asia/Tokyo",
     region: "asia-northeast1",
     secrets: [

@@ -79,6 +79,10 @@ input {
   font-weight: 800;
 }
 
+.setting-card .section-status-badge {
+  margin-top: 12px;
+}
+
 .hero__eyebrow,
 .summary-card__eyebrow,
 .menu-card__label,
