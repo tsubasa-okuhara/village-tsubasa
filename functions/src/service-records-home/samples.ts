@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 
 import { getSupabaseClient } from "../lib/supabase";
+import { stripNoteTimePrefix } from "../lib/noteTimePrefix";
 
 // 同じ利用者・同じ種別の過去記録を最大10件、AI下書き生成の参考例として返す。
 // 丸写し用ではなく「書き方のお手本」。当日の実際はオーナーが確定する（設計メモ 2026-07-17）。
@@ -23,17 +24,6 @@ type Sample = {
 function getQueryValue(value: unknown): string {
   if (Array.isArray(value)) return String(value[0] ?? "").trim();
   return String(value ?? "").trim();
-}
-
-// final_note 冒頭の時刻プレフィックス（YYYY-MM-DD HH:MM:SS〜HH:MM:SS）を除去する。
-// admin の parseTimeFromFinalNote が依存する形式なので、参考表示用にはこの前置きを外す。
-function stripTimePrefix(note: string): string {
-  return note
-    .replace(
-      /^\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*[〜~]\s*\d{2}:\d{2}:\d{2}\s*/,
-      "",
-    )
-    .trim();
 }
 
 // Fisher-Yates。元配列は破壊しない。
@@ -82,7 +72,7 @@ export async function handleSamplesHome(
       .map((row) => ({
         service_date: row.service_date ?? "",
         task: row.task ?? "",
-        note: stripTimePrefix(row.final_note ?? ""),
+        note: stripNoteTimePrefix(row.final_note ?? ""),
       }))
       .filter((sample) => sample.note !== "");
 

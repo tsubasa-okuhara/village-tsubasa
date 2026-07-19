@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 
 import { getSupabaseClient } from "../lib/supabase";
+import { stripNoteTimePrefix } from "../lib/noteTimePrefix";
 
 // 同じ利用者の過去の移動支援記録を最大10件、AI下書き生成の参考例として返す。
 // 移動の task は「目的地」で表記ゆれが激しいため種別では絞らず、利用者単位で母集団を取る（設計メモ 2026-07-17）。
@@ -64,7 +65,7 @@ export async function handleSamplesMove(
       .map((row) => ({
         service_date: row.service_date ?? "",
         task: row.task ?? "",
-        note: (row.summary_text ?? "").trim(),
+        note: stripNoteTimePrefix(row.summary_text ?? ""),
       }))
       .filter((sample) => sample.note !== "");
 
