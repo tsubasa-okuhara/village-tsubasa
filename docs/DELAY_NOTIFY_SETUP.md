@@ -101,13 +101,49 @@ curl -X POST https://asia-northeast1-<project>.cloudfunctions.net/api/api/delay-
 
 ここまで通れば、予定取得・氏名突合・ログ保存がすべて動いています。
 
+> **注意**: `users.delay_notice_enabled` の既定値は `false` です。つまり **どの利用者IDで叩いても、まずは送信されず `needsPhoneCall: true` が返ります**。
+> `delay_notices.error_message` を見れば、止まった理由を区別できます。
+>
+> | error_message | 意味 |
+> |---|---|
+> | `users に該当する利用者がいません` | 氏名の突合に失敗 |
+> | `LINE連絡が無効` | `delay_notice_enabled` が false（既定） |
+> | `LINE ID が未登録` | `line_group_id` が空 |
+
 **手順2: 実際の送信を試す**
 
-`users` にテスト用の行を1つ作り、`line_group_id` に自分だけのテストグループIDを入れます。その氏名で `schedule_entries` にテスト予定を1件作って叩けば、自分にだけLINEが届きます。
+`users` にテスト用の行を1つ作り、以下の2つを両方セットします。**どちらか一方だけでは送信されません。**
+
+- `line_group_id` … 自分だけのテストグループID
+- `delay_notice_enabled` … `true`（既定の false のままだと送信されません）
+
+```sql
+-- テスト用ユーザーを送信可能にする
+update users
+set line_group_id = '<自分のテストグループID>',
+    delay_notice_enabled = true
+where name = 'テスト太郎';
+```
+
+その氏名で `schedule_entries` にテスト予定を1件作って叩けば、自分にだけLINEが届きます。
 
 ```sql
 -- テスト後は必ず削除する
 delete from delay_notices where client_name like 'テスト%';
+```
+
+**本番の利用者に配信を始めるとき**
+
+既定が false なので、対象者を明示的に有効化するまで LINE は1通も飛びません。
+
+```sql
+-- 配信対象を1人ずつ有効化する（一括 update は誤配信の元なので避ける）
+update users set delay_notice_enabled = true where name = '<利用者名>';
+
+-- 現在の配信対象を確認
+select name, line_group_id is not null as has_line_id, delay_notice_enabled
+from users
+where delay_notice_enabled = true;
 ```
 
 ## 6. 動作確認用のクエリ
