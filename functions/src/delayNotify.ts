@@ -9,8 +9,11 @@
  *   3) LINE Messaging API で push
  *   4) delay_notices に送信ログを保存
  *
- * line_group_id が無い利用者は LINE 送信を行わず、
+ * 次のいずれかに当てはまる利用者は LINE 送信を行わず、
  * needsPhoneCall: true を返して画面側に「電話連絡が必要」と表示させる。
+ *   - users に突合できない
+ *   - delay_notice_enabled が false（＝LINE連絡を使わない設定。既定値は false）
+ *   - line_group_id が無い
  *
  * 事前に必要な Secret:
  *   LINE_CHANNEL_ACCESS_TOKEN … Messaging API のチャネルアクセストークン
@@ -31,6 +34,14 @@ type DelayMinutes = (typeof ALLOWED_MINUTES)[number];
 
 /** 30分以上は管理者にもエスカレーションする */
 const ESCALATION_THRESHOLD = 30;
+
+interface UserRow {
+  id: string;
+  name: string;
+  line_group_id: string | null;
+  /** LINE で遅延連絡を送ってよいか。既定は false（＝送らない） */
+  delay_notice_enabled: boolean | null;
+}
 
 interface ScheduleRow {
   id: number;
@@ -123,17 +134,22 @@ export async function handleDelayNotify(req: Request, res: Response) {
 
     const { data: user, error: userErr } = await supabase
       .from("users")
-      .select("id, name, line_group_id")
+      .select("id, name, line_group_id, delay_notice_enabled")
       .eq("name", normalized)
-      .maybeSingle<{ id: string; name: string; line_group_id: string | null }>();
+      .maybeSingle<UserRow>();
 
     if (userErr) throw new Error(`利用者の取得に失敗しました: ${userErr.message}`);
 
     const timeLabel = formatTime(schedule.start_time);
     const messageText = buildMessage(userName, timeLabel, minutes);
 
-    // 突合できない、または LINE ID が無い場合は送信せず電話連絡へ回す
-    if (!user || !user.line_group_id) {
+    // 送らない理由を先に確定させる。判定順は
+    //   1) 突合できない → 2) LINE連絡が無効 → 3) LINE ID が未登録
+    // delay_notice_enabled は line_group_id より先に見る。
+    // グループIDが残っていても「送らない」と決めた利用者には送らないため。
+    const block = resolveBlockReason(user, userName);
+
+    if (block) {
       await logNotice(supabase, {
         schedule_id: scheduleId,
         client_name: userName,
@@ -142,7 +158,7 @@ export async function handleDelayNotify(req: Request, res: Response) {
         line_group_id: null,
         status: "needs_phone_call",
         message: messageText,
-        error_message: user ? "LINE ID が未登録" : "users に該当する利用者がいません",
+        error_message: block.errorMessage,
       });
 
       return res.json({
@@ -150,16 +166,21 @@ export async function handleDelayNotify(req: Request, res: Response) {
         sent: false,
         needsPhoneCall: true,
         clientName: userName,
-        message: user
-          ? `${userName} はLINE未登録です。お電話でご連絡ください。`
-          : `${userName} の利用者情報が見つかりません。事業所へご連絡ください。`,
-        reason: user ? "この利用者様はLINE未登録です" : "利用者情報が見つかりません",
+        message: block.message,
+        reason: block.reason,
       });
     }
 
     // ---- 4) LINE 送信 ------------------------------------------------------
+    // block が null なら送信先は確定しているが、型の上でも明示しておく。
+    // ここが落ちるのは resolveBlockReason との整合が崩れたときだけ（本来到達しない）
+    const lineGroupId = user?.line_group_id;
+    if (!lineGroupId) {
+      throw new Error("送信先の判定に失敗しました");
+    }
+
     try {
-      await linePush(user.line_group_id, messageText, `delay-${scheduleId}-${minutes}`);
+      await linePush(lineGroupId, messageText, `delay-${scheduleId}-${minutes}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await logNotice(supabase, {
@@ -167,7 +188,7 @@ export async function handleDelayNotify(req: Request, res: Response) {
         client_name: userName,
         helper_name: helperName || schedule.helper_name,
         minutes,
-        line_group_id: user.line_group_id,
+        line_group_id: lineGroupId,
         status: "failed",
         message: messageText,
         error_message: msg,
@@ -187,7 +208,7 @@ export async function handleDelayNotify(req: Request, res: Response) {
       client_name: userName,
       helper_name: helperName || schedule.helper_name,
       minutes,
-      line_group_id: user.line_group_id,
+      line_group_id: lineGroupId,
       status: "sent",
       message: messageText,
       error_message: null,
@@ -219,6 +240,51 @@ export async function handleDelayNotify(req: Request, res: Response) {
 }
 
 // ========== ヘルパー ==========
+
+interface BlockReason {
+  /** delay_notices.error_message に残す内部向けの理由 */
+  errorMessage: string;
+  /** 画面にそのまま出す日本語 */
+  message: string;
+  /** 既存クライアント互換のため残している短い理由 */
+  reason: string;
+}
+
+/**
+ * LINE を送らない理由を判定する。送ってよい場合は null。
+ *
+ * 判定順は 突合できない → LINE連絡が無効 → LINE ID が未登録。
+ * delay_notice_enabled を line_group_id より先に見るのは、
+ * グループIDが残ったままでも「送らない」設定を優先するため。
+ */
+function resolveBlockReason(user: UserRow | null, userName: string): BlockReason | null {
+  if (!user) {
+    return {
+      errorMessage: "users に該当する利用者がいません",
+      message: `${userName} の利用者情報が見つかりません。事業所へご連絡ください。`,
+      reason: "利用者情報が見つかりません",
+    };
+  }
+
+  // null（未設定）も false と同じく「送らない」に倒す
+  if (user.delay_notice_enabled !== true) {
+    return {
+      errorMessage: "LINE連絡が無効",
+      message: `${userName}へのLINE連絡は設定されていません。お電話でご連絡ください。`,
+      reason: "この利用者様はLINE連絡が無効です",
+    };
+  }
+
+  if (!user.line_group_id) {
+    return {
+      errorMessage: "LINE ID が未登録",
+      message: `${userName} はLINE未登録です。お電話でご連絡ください。`,
+      reason: "この利用者様はLINE未登録です",
+    };
+  }
+
+  return null;
+}
 
 /** 「小川貴也様」→「小川貴也」。全角/半角スペースも除去する */
 function normalizeName(raw: string): string {

@@ -13,9 +13,20 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-20（遅延通知API `/api/delay-notify` を追加）
+最終更新: 2026-07-20（遅延通知API に送信可否 `delay_notice_enabled` の判定を追加）
 
 ---
+
+## 2026-07-20 [village-tsubasa] 遅延通知API に送信可否判定（`users.delay_notice_enabled`）を追加
+
+- sub2 の `users` に `delay_notice_enabled`（boolean, default false）を追加済み（列追加は奥原さん実施）。`false` の利用者には LINE を送らず電話連絡へ回す
+- `delayNotify.ts` の users select に `delay_notice_enabled` を追加。判定を `resolveBlockReason()` に集約
+- 判定順: ①users に突合できない → ②`delay_notice_enabled` が false → ③`line_group_id` が無い。**②を③より先に見る**（グループIDが残っていても「送らない」設定を優先するため）
+- `null`（未設定）も `false` と同じく「送らない」に倒す
+- `delay_notices.error_message` は「LINE連絡が無効」「LINE ID が未登録」「users に該当する利用者がいません」を区別して記録
+- 影響範囲: 本リポ内のみ。`users` への **nullable 列追加のみ**でルール2に適合、既存列の変更なし。他アプリは当該列を参照していないため影響なし
+- ⚠️ **既定値が false なので、デプロイ直後は全利用者が「LINE連絡は設定されていません」になる。** 送信対象の利用者を `delay_notice_enabled = true` に更新するまで LINE は1通も飛ばない
+- 未デプロイ
 
 ## 2026-07-20 [village-tsubasa] 遅延通知API `/api/delay-notify` を追加
 
