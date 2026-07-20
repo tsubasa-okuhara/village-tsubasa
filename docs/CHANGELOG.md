@@ -13,9 +13,20 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-16（ひろばダッシュボード: 設定カード移動 / 通知解除の修正 / 通知を18時1本に集約）
+最終更新: 2026-07-20（遅延通知API `/api/delay-notify` を追加）
 
 ---
+
+## 2026-07-20 [village-tsubasa] 遅延通知API `/api/delay-notify` を追加
+
+- `functions/src/delayNotify.ts` を新規追加。ヘルパーの遅れ（10/20/30分）を利用者の LINE グループへ push し、`delay_notices`（sub2）に送信ログを残す
+- `functions/src/index.ts` に `POST /delay-notify` と `POST /api/delay-notify` を追加。`api` の secrets に `LINE_CHANNEL_ACCESS_TOKEN` を追加
+- sub2 接続は既存の `getSupabaseSub2Client()` を流用（新規クライアント・新規 Supabase Secret は作っていない）
+- 手順書は `docs/DELAY_NOTIFY_SETUP.md`
+- **フェイルクローズ設計**: 二重送信チェックのクエリが失敗したら送信せず 500 で止める（送信済みか判定できない状態で送ると二重送信になるため）。二重送信チェックは `status = 'sent'` の行のみを見るので、`failed` / `needs_phone_call` の記録が残っていても再送可能
+- **レスポンス規約**: 全レスポンスに画面表示用の日本語 `message` を持たせ、技術的詳細は `error` に分離。送信できなかった全経路（502 / 500）に `needsPhoneCall: true` を付け「送れなかった＝電話連絡」に倒す。4xx には `needsPhoneCall` を付けない（409「すでに連絡済み」で電話に倒すと二重連絡になるため）
+- 影響範囲: 本リポ内のみ。新規エンドポイントのみで既存 API の変更なし。`delay_notices` は sub2 の新規テーブル（作成済み・RLS 有効／ポリシーなし = service_role のみ）で、既存テーブルへの変更はないため他アプリへの影響なし
+- 未デプロイ。デプロイ前に `firebase functions:secrets:set LINE_CHANNEL_ACCESS_TOKEN` が必要
 
 ## 2026-07-16 [village-tsubasa] ひろばダッシュボード — 設定カード移動・通知解除の修正・Push 通知を18時1本に集約
 

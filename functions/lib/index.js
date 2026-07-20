@@ -44,6 +44,7 @@ const create_1 = require("./scheduleEditor/create");
 const delete_1 = require("./scheduleEditor/delete");
 const restore_1 = require("./scheduleEditor/restore");
 const listTrash_1 = require("./scheduleEditor/listTrash");
+const delayNotify_1 = require("./delayNotify");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: true,
@@ -74,6 +75,9 @@ app.post("/push/unsubscribe", push_1.handleUnsubscribePush);
 app.post("/api/push/unsubscribe", push_1.handleUnsubscribePush);
 app.post("/push/test", push_1.handleSendTestPush);
 app.post("/api/push/test", push_1.handleSendTestPush);
+// 遅延通知（ヘルパーが遅れる旨を利用者の LINE グループへ push）
+app.post("/delay-notify", delayNotify_1.handleDelayNotify);
+app.post("/api/delay-notify", delayNotify_1.handleDelayNotify);
 app.get("/notifications", notifications_1.handleGetNotifications);
 app.get("/api/notifications", notifications_1.handleGetNotifications);
 app.post("/notifications/read", notifications_1.handleReadNotification);
@@ -194,5 +198,6 @@ exports.api = (0, https_1.onRequest)({
         push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
         push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
         push_1.WEB_PUSH_SUBJECT,
+        delayNotify_1.LINE_CHANNEL_ACCESS_TOKEN,
     ],
 }, app);

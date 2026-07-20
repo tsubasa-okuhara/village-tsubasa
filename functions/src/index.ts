@@ -85,6 +85,8 @@ import { handleScheduleEditorDelete } from "./scheduleEditor/delete";
 import { handleScheduleEditorRestore } from "./scheduleEditor/restore";
 import { handleScheduleEditorListTrash } from "./scheduleEditor/listTrash";
 
+import { handleDelayNotify, LINE_CHANNEL_ACCESS_TOKEN } from "./delayNotify";
+
 const app = express();
 
 app.use(
@@ -125,6 +127,10 @@ app.post("/push/unsubscribe", handleUnsubscribePush);
 app.post("/api/push/unsubscribe", handleUnsubscribePush);
 app.post("/push/test", handleSendTestPush);
 app.post("/api/push/test", handleSendTestPush);
+
+// 遅延通知（ヘルパーが遅れる旨を利用者の LINE グループへ push）
+app.post("/delay-notify", handleDelayNotify);
+app.post("/api/delay-notify", handleDelayNotify);
 
 app.get("/notifications", handleGetNotifications);
 app.get("/api/notifications", handleGetNotifications);
@@ -269,6 +275,7 @@ export const api = onRequest(
       WEB_PUSH_VAPID_PUBLIC_KEY,
       WEB_PUSH_VAPID_PRIVATE_KEY,
       WEB_PUSH_SUBJECT,
+      LINE_CHANNEL_ACCESS_TOKEN,
     ],
   },
   app,
