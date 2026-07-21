@@ -264,11 +264,13 @@ function formatClock(ts) {
   return `${padTwo(d.getHours())}:${padTwo(d.getMinutes())}`;
 }
 
-// 分数選択肢。ラベルは画面表示、minutes はサーバーへ送る値
+// 分数選択肢。label は選択ボタンの表示、minutes はサーバーへ送る値、
+// confirmLabel は確認文に入れる表現。30分はサーバーが送るLINE文面が
+// 「30分以上遅れる見込みです」なので、確認文も「30分以上遅れます」に揃える
 const DELAY_OPTIONS = [
-  { minutes: 10, label: "10分ほど遅れます" },
-  { minutes: 20, label: "20分ほど遅れます" },
-  { minutes: 30, label: "30分以上遅れます" },
+  { minutes: 10, label: "10分ほど遅れます", confirmLabel: "10分ほど遅れます" },
+  { minutes: 20, label: "20分ほど遅れます", confirmLabel: "20分ほど遅れます" },
+  { minutes: 30, label: "30分以上遅れます", confirmLabel: "30分以上遅れます" },
 ];
 
 const delaySheet = {
@@ -334,7 +336,7 @@ function renderDelayChoose() {
     btn.className = "delay-opt";
     btn.textContent = opt.label;
     btn.addEventListener("click", function () {
-      renderDelayConfirm(opt.minutes);
+      renderDelayConfirm(opt);
     });
     body.appendChild(btn);
   });
@@ -347,7 +349,8 @@ function renderDelayChoose() {
 }
 
 // ステップ2: 確認
-function renderDelayConfirm(minutes) {
+function renderDelayConfirm(option) {
+  const minutes = option.minutes;
   const item = delaySheet.active.item;
   const name = getDisplayValue(item.userName, "利用者様");
   setDelayTitle(`${name} に遅延の連絡をします`);
@@ -357,7 +360,7 @@ function renderDelayConfirm(minutes) {
 
   const text = document.createElement("p");
   text.className = "delay-confirm-text";
-  text.textContent = `${name} に『${minutes}分ほど遅れます』と送信します。よろしいですか？`;
+  text.textContent = `${name} に『${option.confirmLabel}』と送信します。よろしいですか？`;
   body.appendChild(text);
 
   const send = document.createElement("button");
