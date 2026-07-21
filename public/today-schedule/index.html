@@ -264,6 +264,134 @@
         cursor: pointer;
       }
 
+      /* 遅延連絡ボタン（📢 遅れる連絡）: cal-buttons の並びに置き、幅いっぱいで1段使う */
+      .delay-btn {
+        flex: 1 1 100%;
+        min-height: 44px;
+        padding: 12px 18px;
+        font-size: 0.98rem;
+        font-weight: 700;
+        color: #fff;
+        background: #e08a3c;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(224, 138, 60, 0.28);
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+      .delay-btn:hover { background: #cc7a2f; }
+      .delay-btn:active { background: #b86e2a; }
+
+      .delay-badge {
+        flex: 1 1 100%;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 44px;
+        padding: 10px 16px;
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: #3f7a4f;
+        background: rgba(93, 160, 110, 0.12);
+        border: 1px solid rgba(93, 160, 110, 0.4);
+        border-radius: 12px;
+      }
+
+      /* 遅延連絡シート（画面下から出るモーダル） */
+      .delay-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        background: rgba(70, 56, 48, 0.45);
+      }
+      .delay-overlay[hidden] { display: none; }
+
+      .delay-sheet {
+        width: min(560px, 100%);
+        max-height: 88vh;
+        overflow-y: auto;
+        padding: 22px 20px calc(22px + env(safe-area-inset-bottom));
+        background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+        border: 1px solid var(--line);
+        border-radius: 24px 24px 0 0;
+        box-shadow: 0 -12px 40px rgba(70, 56, 48, 0.25);
+        animation: delay-sheet-up 0.22s ease;
+      }
+      @keyframes delay-sheet-up {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+      }
+
+      .delay-title {
+        font-size: 1.1rem;
+        font-weight: 800;
+        line-height: 1.5;
+        margin-bottom: 16px;
+      }
+      .delay-body {
+        display: grid;
+        gap: 12px;
+      }
+
+      .delay-opt {
+        min-height: 48px;
+        padding: 12px 18px;
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text);
+        background: var(--beige);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        cursor: pointer;
+        transition: background 0.2s, opacity 0.2s;
+      }
+      .delay-opt:hover { background: #efe0cd; }
+      .delay-opt:active { background: #e7d5be; }
+      .delay-opt--send {
+        color: #fff;
+        background: #e08a3c;
+        border-color: #e08a3c;
+      }
+      .delay-opt--send:hover { background: #cc7a2f; }
+      .delay-opt:disabled { opacity: 0.6; cursor: default; }
+
+      .delay-cancel {
+        min-height: 44px;
+        padding: 10px 18px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--muted);
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        cursor: pointer;
+      }
+      .delay-cancel:hover { background: rgba(0, 0, 0, 0.04); }
+      .delay-cancel:disabled { opacity: 0.6; cursor: default; }
+
+      .delay-confirm-text {
+        margin: 0 0 4px;
+        font-size: 1rem;
+        line-height: 1.7;
+      }
+      .delay-result {
+        margin: 0;
+        padding: 14px 16px;
+        font-size: 1rem;
+        line-height: 1.7;
+        font-weight: 700;
+        border-radius: 14px;
+        background: rgba(0, 0, 0, 0.03);
+      }
+      .delay-result--danger {
+        color: var(--danger);
+        background: rgba(255, 245, 246, 0.95);
+        border: 1px solid rgba(219, 157, 166, 0.88);
+      }
+
       @media (max-width: 640px) {
         .page {
           width: min(100%, calc(100% - 16px));

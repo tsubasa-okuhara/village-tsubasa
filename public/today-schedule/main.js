@@ -1,7 +1,32 @@
 import { getSavedHelperEmail } from "../lib/helperEmail.js";
 
 const TODAY_SCHEDULE_ENDPOINT = "/api/today-schedule";
+const DELAY_NOTIFY_ENDPOINT = "/api/delay-notify";
 const CAL_STORAGE_KEY = "village_cal_added";
+const DELAY_STORAGE_KEY = "village_delay_sent";
+const DELAY_FETCH_TIMEOUT_MS = 15000;
+
+// localStorage は「このカードは連絡済み」というバッジ表示のためだけに持つ。
+// 送信の真実は Supabase の delay_notices テーブル側にあり、二重送信は
+// サーバー /api/delay-notify の 409（status='sent' 済み判定）が防ぐ。
+// なので端末をまたいだり localStorage が消えても安全側に倒れる
+// （最悪もう一度タップしてもサーバーが 409 で弾く）。ここは表示専用と割り切る。
+function getDelaySent() {
+  try {
+    return JSON.parse(localStorage.getItem(DELAY_STORAGE_KEY) || "{}");
+  } catch { return {}; }
+}
+
+function markDelaySent(dateStr, scheduleId, minutes) {
+  const data = getDelaySent();
+  data[`${dateStr}_${scheduleId}`] = { minutes, at: Date.now() };
+  localStorage.setItem(DELAY_STORAGE_KEY, JSON.stringify(data));
+}
+
+function getDelayRecord(dateStr, scheduleId) {
+  const data = getDelaySent();
+  return data[`${dateStr}_${scheduleId}`] || null;
+}
 
 function getCalAdded() {
   try {
@@ -232,6 +257,242 @@ function openGoogleCalendar(item, dateStr) {
   window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, "_blank");
 }
 
+// ========== 遅延連絡（📢 遅れる連絡）==========
+
+function formatClock(ts) {
+  const d = new Date(ts);
+  return `${padTwo(d.getHours())}:${padTwo(d.getMinutes())}`;
+}
+
+// 分数選択肢。ラベルは画面表示、minutes はサーバーへ送る値
+const DELAY_OPTIONS = [
+  { minutes: 10, label: "10分ほど遅れます" },
+  { minutes: 20, label: "20分ほど遅れます" },
+  { minutes: 30, label: "30分以上遅れます" },
+];
+
+const delaySheet = {
+  active: null,   // { item } 送信対象
+  sending: false, // 送信中は外側タップで閉じない
+};
+
+function ensureDelaySheet() {
+  if (document.getElementById("delay-overlay")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "delay-overlay";
+  overlay.className = "delay-overlay";
+  overlay.hidden = true;
+  overlay.innerHTML = `
+    <div class="delay-sheet" role="dialog" aria-modal="true" aria-labelledby="delay-title">
+      <div class="delay-title" id="delay-title"></div>
+      <div class="delay-body" id="delay-body"></div>
+    </div>`;
+
+  // シート外（暗い部分）タップで閉じる。ただし送信中は閉じない
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay && !delaySheet.sending) {
+      closeDelaySheet();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function setDelayTitle(text) {
+  document.getElementById("delay-title").textContent = text;
+}
+
+function openDelaySheet(item) {
+  ensureDelaySheet();
+  delaySheet.active = { item };
+  delaySheet.sending = false;
+  document.getElementById("delay-overlay").hidden = false;
+  document.body.style.overflow = "hidden";
+  renderDelayChoose();
+}
+
+function closeDelaySheet() {
+  const overlay = document.getElementById("delay-overlay");
+  if (overlay) overlay.hidden = true;
+  document.body.style.overflow = "";
+  delaySheet.active = null;
+  delaySheet.sending = false;
+}
+
+// ステップ1: 分数を選ぶ
+function renderDelayChoose() {
+  const item = delaySheet.active.item;
+  const name = getDisplayValue(item.userName, "利用者様");
+  setDelayTitle(`${name} に遅延の連絡をします`);
+
+  const body = document.getElementById("delay-body");
+  body.innerHTML = "";
+
+  DELAY_OPTIONS.forEach(function (opt) {
+    const btn = document.createElement("button");
+    btn.className = "delay-opt";
+    btn.textContent = opt.label;
+    btn.addEventListener("click", function () {
+      renderDelayConfirm(opt.minutes);
+    });
+    body.appendChild(btn);
+  });
+
+  const cancel = document.createElement("button");
+  cancel.className = "delay-cancel";
+  cancel.textContent = "キャンセル";
+  cancel.addEventListener("click", closeDelaySheet);
+  body.appendChild(cancel);
+}
+
+// ステップ2: 確認
+function renderDelayConfirm(minutes) {
+  const item = delaySheet.active.item;
+  const name = getDisplayValue(item.userName, "利用者様");
+  setDelayTitle(`${name} に遅延の連絡をします`);
+
+  const body = document.getElementById("delay-body");
+  body.innerHTML = "";
+
+  const text = document.createElement("p");
+  text.className = "delay-confirm-text";
+  text.textContent = `${name} に『${minutes}分ほど遅れます』と送信します。よろしいですか？`;
+  body.appendChild(text);
+
+  const send = document.createElement("button");
+  send.className = "delay-opt delay-opt--send";
+  send.textContent = "送信する";
+
+  const back = document.createElement("button");
+  back.className = "delay-cancel";
+  back.textContent = "戻る";
+  back.addEventListener("click", renderDelayChoose);
+
+  // 二重タップ防止: 送信開始で両ボタンを disabled
+  send.addEventListener("click", function () {
+    send.disabled = true;
+    back.disabled = true;
+    send.textContent = "送信中...";
+    submitDelay(item, minutes);
+  });
+
+  body.appendChild(send);
+  body.appendChild(back);
+}
+
+async function submitDelay(item, minutes) {
+  delaySheet.sending = true;
+  const result = await postDelayNotify(item, minutes);
+  delaySheet.sending = false;
+
+  // 送信中は閉じられないので active は生きているが、念のため確認
+  if (!delaySheet.active) return;
+
+  if (result.kind === "sent") {
+    // バッジは localStorage から復元する方式なので、保存 → 再描画で反映
+    markDelaySent(state.date, item.id, minutes);
+    closeDelaySheet();
+    render();
+    return;
+  }
+
+  // 以下はシートを閉じずにメッセージを見せる
+  let text;
+  let danger = false;
+
+  if (result.kind === "timeout") {
+    // タイムアウト＝未送信とは限らない。再送を促さず、電話確認へ倒す
+    text = "送信状況を確認できませんでした。LINEが届いているか分からないため、事業所へお電話ください。";
+    danger = true;
+  } else if (result.kind === "phone") {
+    text = result.message || "送信できませんでした。事業所へご連絡ください。";
+    danger = true;
+  } else if (result.kind === "conflict") {
+    text = result.message || "この予定はすでに連絡済みです。";
+    if (result.previous && result.previous.minutes != null) {
+      text += `（${result.previous.minutes}分遅れで連絡済み）`;
+    }
+  } else {
+    text = result.message || "送信できませんでした。事業所へご連絡ください。";
+  }
+
+  showDelayMessage(text, danger);
+}
+
+function showDelayMessage(text, danger) {
+  const body = document.getElementById("delay-body");
+  body.innerHTML = "";
+
+  const p = document.createElement("p");
+  p.className = "delay-result" + (danger ? " delay-result--danger" : "");
+  p.textContent = text; // サーバー文言をそのまま表示（textContent で XSS 回避）
+  body.appendChild(p);
+
+  const close = document.createElement("button");
+  close.className = "delay-cancel";
+  close.textContent = "閉じる";
+  close.addEventListener("click", closeDelaySheet);
+  body.appendChild(close);
+}
+
+/**
+ * /api/delay-notify を叩く。戻り値は
+ *   { kind: "sent",     message, minutes }
+ *   { kind: "phone",    message }            … needsPhoneCall
+ *   { kind: "conflict", message, previous }  … 409 連絡済み
+ *   { kind: "error",    message }            … その他
+ *   { kind: "timeout" }                      … 15秒超過 / 通信失敗 / JSON パース失敗
+ * のいずれか。timeout は「確認できなかった」を意味し、未送信とは限らない。
+ */
+async function postDelayNotify(item, minutes) {
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, DELAY_FETCH_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(DELAY_NOTIFY_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        scheduleId: item.id,
+        minutes,
+        helperName: item.helperName ?? "",
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    // abort（タイムアウト）も通信エラーも「確認できなかった」に倒す
+    console.error("[delay-notify] fetch error:", error);
+    return { kind: "timeout" };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (error) {
+    // ボディが読めない＝結果を確認できない。タイムアウトと同じ扱い
+    console.error("[delay-notify] json parse error:", error);
+    return { kind: "timeout" };
+  }
+
+  if (data && data.sent === true) {
+    return { kind: "sent", message: data.message, minutes };
+  }
+  if (data && data.needsPhoneCall === true) {
+    return { kind: "phone", message: data.message };
+  }
+  if (response.status === 409) {
+    return { kind: "conflict", message: data?.message, previous: data?.previous };
+  }
+  return { kind: "error", message: data?.message };
+}
+
 function renderItems() {
   if (state.status !== "success" || state.items.length === 0) {
     scheduleListElement.innerHTML = "";
@@ -241,6 +502,15 @@ function renderItems() {
   scheduleListElement.innerHTML = state.items.map(function (item, index) {
     const googleAdded = isCalAdded(state.date, index, "google");
     const appleAdded = isCalAdded(state.date, index, "apple");
+
+    // item.id が無い予定は遅延連絡できない（サーバーは scheduleId 必須）ので出さない
+    const hasId = item.id !== null && item.id !== undefined && item.id !== "";
+    const delayRecord = hasId ? getDelayRecord(state.date, item.id) : null;
+    const delayHtml = delayRecord
+      ? `<span class="delay-badge">✅ ${escapeHtml(delayRecord.minutes)}分遅れ・${escapeHtml(formatClock(delayRecord.at))} 連絡済</span>`
+      : hasId
+        ? `<button class="delay-btn" data-index="${index}">📢 遅れる連絡</button>`
+        : "";
 
     const coHelpers = Array.isArray(item.coHelpers) ? item.coHelpers : [];
     const coHelpersHtml = coHelpers.length > 0
@@ -272,6 +542,7 @@ function renderItems() {
         <div class="cal-buttons">
           <button class="cal-btn ${googleAdded ? "cal-btn--added" : "cal-btn--google"}" data-index="${index}" data-cal="google">${googleAdded ? "Google追加済み" : "Googleカレンダーに追加"}</button>
           <button class="cal-btn ${appleAdded ? "cal-btn--added" : "cal-btn--apple"}" data-index="${index}" data-cal="apple">${appleAdded ? "iPhone追加済み" : "iPhoneカレンダー"}</button>
+          ${delayHtml}
         </div>
       </article>
     `;
@@ -301,6 +572,15 @@ function renderItems() {
       btn.textContent = calType === "google" ? "Google追加済み" : "iPhone追加済み";
       btn.classList.remove("cal-btn--google", "cal-btn--apple");
       btn.classList.add("cal-btn--added");
+    });
+  });
+
+  scheduleListElement.querySelectorAll(".delay-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const idx = parseInt(btn.dataset.index, 10);
+      const item = state.items[idx];
+      if (!item) return;
+      openDelaySheet(item);
     });
   });
 }

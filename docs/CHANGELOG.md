@@ -13,9 +13,18 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-21（LINE Webhook 受信口 `/api/line-webhook` を一時追加）
+最終更新: 2026-07-22（today-schedule に遅延連絡ボタンを追加）
 
 ---
+
+## 2026-07-22 [village-tsubasa] today-schedule（ヘルパー用）に遅延連絡ボタンを追加
+
+- `public/today-schedule/`（main.js / index.html）に「📢 遅れる連絡」ボタン + 下スライドのシートUIを追加。10/20/30分を選び、確認後 `POST /api/delay-notify { scheduleId, minutes, helperName }` を送信
+- サーバー側 `/api/delay-notify` は変更なし（既存の実装・テスト済みをそのまま利用）
+- `item.id` の無い予定にはボタンを出さない。送信中はボタン disabled（二重タップ防止）、fetch は 15秒タイムアウト（AbortController）
+- 連絡済みバッジは localStorage `village_delay_sent`（`{date}_{scheduleId}` → `{minutes, at}`）に保存し再読込で復元。**表示専用**で、二重送信防止の真実はサーバーの 409
+- 影響範囲: 本リポ内のフロントのみ。API・スキーマ変更なし、他アプリ非影響
+- 未デプロイ（ブラウザ実機での動作確認は未実施）
 
 ## 2026-07-21 [village-tsubasa] LINE Webhook 受信口 `/api/line-webhook` を追加（一時 / ID取得用）
 
