@@ -24,7 +24,8 @@
 - `item.id` の無い予定にはボタンを出さない。送信中はボタン disabled（二重タップ防止）、fetch は 15秒タイムアウト（AbortController）
 - 連絡済みバッジは localStorage `village_delay_sent`（`{date}_{scheduleId}` → `{minutes, at}`）に保存し再読込で復元。**表示専用**で、二重送信防止の真実はサーバーの 409
 - 影響範囲: 本リポ内のフロントのみ。API・スキーマ変更なし、他アプリ非影響
-- 未デプロイ（ブラウザ実機での動作確認は未実施）
+- 追補（同日）: ボタン表示条件を「数値の正の整数ID」に限定。7月以前の旧DB由来（UUID の id）予定はサーバーが `Number(scheduleId)→NaN` で 400 になるため、遅延通知対応は sub2（8月以降）の予定のみとし、UUID 予定にはボタン/バッジを出さない
+- デプロイ: `firebase deploy --only hosting` 済み
 
 ## 2026-07-21 [village-tsubasa] LINE Webhook 受信口 `/api/line-webhook` を追加（一時 / ID取得用）
 

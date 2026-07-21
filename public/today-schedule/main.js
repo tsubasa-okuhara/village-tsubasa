@@ -506,12 +506,16 @@ function renderItems() {
     const googleAdded = isCalAdded(state.date, index, "google");
     const appleAdded = isCalAdded(state.date, index, "apple");
 
-    // item.id が無い予定は遅延連絡できない（サーバーは scheduleId 必須）ので出さない
-    const hasId = item.id !== null && item.id !== undefined && item.id !== "";
-    const delayRecord = hasId ? getDelayRecord(state.date, item.id) : null;
+    // 遅延通知は sub2（2026年8月以降）の数値ID予定のみ対応。
+    // 7月以前の旧DB由来の予定は id が UUID で、サーバー /api/delay-notify が
+    // Number(scheduleId) → NaN で 400「scheduleId が不正です」を返す。
+    // なので数値として妥当な正の整数IDのときだけボタン/バッジを出す。
+    const numericId = Number(item.id);
+    const hasDelayId = Number.isInteger(numericId) && numericId > 0;
+    const delayRecord = hasDelayId ? getDelayRecord(state.date, item.id) : null;
     const delayHtml = delayRecord
       ? `<span class="delay-badge">✅ ${escapeHtml(delayRecord.minutes)}分遅れ・${escapeHtml(formatClock(delayRecord.at))} 連絡済</span>`
-      : hasId
+      : hasDelayId
         ? `<button class="delay-btn" data-index="${index}">📢 遅れる連絡</button>`
         : "";
 
