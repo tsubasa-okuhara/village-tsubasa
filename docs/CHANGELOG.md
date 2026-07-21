@@ -13,9 +13,19 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-20（遅延通知API に送信可否 `delay_notice_enabled` の判定を追加）
+最終更新: 2026-07-21（LINE Webhook 受信口 `/api/line-webhook` を一時追加）
 
 ---
+
+## 2026-07-21 [village-tsubasa] LINE Webhook 受信口 `/api/line-webhook` を追加（一時 / ID取得用）
+
+- `functions/src/lineWebhook.ts` を新規追加。LINE の join / message イベントの `source.groupId` を Cloud Logging に `[line-webhook] groupId=Cxxxx type=join` 形式で出力するだけ。DB書き込み・LINE送信はしない
+- `index.ts` に `POST /line-webhook` と `POST /api/line-webhook` を追加。`api` の secrets に `LINE_CHANNEL_SECRET` を追加
+- `X-Line-Signature` を検証（HMAC-SHA256 + timingSafeEqual）。生ボディは Firebase の `req.rawBody` を使用。検証失敗でも 200 を返す（LINE の再送ループ防止）
+- **用途**: テスト用グループの groupId 取得。将来のグループID自動登録の足場でもある
+- **要 Secret 登録**: `firebase functions:secrets:set LINE_CHANNEL_SECRET`（channel secret。アクセストークンとは別物）。未登録のままだと署名検証が必ず失敗し、全イベントが無視される
+- 影響範囲: 本リポ内のみ。新規エンドポイントのみで既存 API の変更なし
+- 未デプロイ
 
 ## 2026-07-20 [village-tsubasa] 遅延通知API に送信可否判定（`users.delay_notice_enabled`）を追加
 

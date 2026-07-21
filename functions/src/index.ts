@@ -86,6 +86,7 @@ import { handleScheduleEditorRestore } from "./scheduleEditor/restore";
 import { handleScheduleEditorListTrash } from "./scheduleEditor/listTrash";
 
 import { handleDelayNotify, LINE_CHANNEL_ACCESS_TOKEN } from "./delayNotify";
+import { handleLineWebhook, LINE_CHANNEL_SECRET } from "./lineWebhook";
 
 const app = express();
 
@@ -131,6 +132,10 @@ app.post("/api/push/test", handleSendTestPush);
 // 遅延通知（ヘルパーが遅れる旨を利用者の LINE グループへ push）
 app.post("/delay-notify", handleDelayNotify);
 app.post("/api/delay-notify", handleDelayNotify);
+
+// LINE Webhook（一時: テスト用グループの groupId 取得。将来のID自動登録の足場）
+app.post("/line-webhook", handleLineWebhook);
+app.post("/api/line-webhook", handleLineWebhook);
 
 app.get("/notifications", handleGetNotifications);
 app.get("/api/notifications", handleGetNotifications);
@@ -276,6 +281,7 @@ export const api = onRequest(
       WEB_PUSH_VAPID_PRIVATE_KEY,
       WEB_PUSH_SUBJECT,
       LINE_CHANNEL_ACCESS_TOKEN,
+      LINE_CHANNEL_SECRET,
     ],
   },
   app,
