@@ -27,10 +27,11 @@ async function handleServiceRecordsMoveSave(req, res) {
     const haisha = getStringValue(req.body.haisha);
     const notes = getStringValue(req.body.notes);
     const summaryText = getStringValue(req.body.summaryText);
-    if (!taskId || !helperEmail || !notes || !summaryText) {
+    // notes（メモ）は任意。空メモでも記録本文（summaryText）があれば保存を許可する。
+    if (!taskId || !helperEmail || !summaryText) {
         res.status(400).json({
             ok: false,
-            message: "taskId, helperEmail, notes and summaryText are required",
+            message: "taskId, helperEmail and summaryText are required",
         });
         return;
     }

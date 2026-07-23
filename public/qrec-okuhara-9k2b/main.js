@@ -646,12 +646,8 @@ async function save({ next }) {
   const memo = formMemo.value.trim();
   const finalNote = formFinalNote.value.trim();
 
-  if (!memo) {
-    formStatus.textContent = "メモを入力してください。";
-    formStatus.className = "status is-error";
-    formMemo.focus();
-    return;
-  }
+  // メモは任意（空メモでもAI生成した記録本文があれば保存できる）。
+  // 保存を止めるのは記録本文が空のときだけ。
   if (!finalNote) {
     formStatus.textContent = "記録本文が空です。";
     formStatus.className = "status is-error";
