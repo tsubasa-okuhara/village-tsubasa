@@ -523,10 +523,10 @@ function generateFinalNote(task, memo) {
 }
 
 // ─── AI 整形（既存 generateSummary エンドポイント流用） ─────
-//   - メモが空のとき: AI を呼ばずテンプレ（generateFinalNote）で即時プレースホルダ
-//   - メモがあるとき: 居宅 → /service-records-home/summary
-//                     移動 → /service-records-move/summary（OpenAI gpt-4o-mini）
-//   - API 失敗時はローカルテンプレにフォールバックして画面を固めない
+//   - メモの有無に関わらず AI を呼ぶ。メモが空でも区分・参考記録の書きぶりから
+//     一般的な支援内容の下書きを生成する（保存前に必ず人間が確認する前提）。
+//   - 居宅 → /service-records-home/summary / 移動 → /service-records-move/summary（gpt-4o-mini）
+//   - API 失敗・空応答時はローカルテンプレにフォールバックして画面を固めない
 const HOME_SUMMARY_ENDPOINT = `${API_BASE}/service-records-home/summary`;
 const MOVE_SUMMARY_ENDPOINT = `${API_BASE}/service-records-move/summary`;
 
@@ -537,12 +537,6 @@ async function regenerateNote() {
 
   const task = state.selectedTask;
   const memo = formMemo.value.trim();
-
-  // メモが無ければ AI を呼ばず、テンプレのプレースホルダを表示
-  if (!memo) {
-    formFinalNote.value = generateFinalNote(task, "");
-    return;
-  }
 
   if (isGenerating) return;
   isGenerating = true;
