@@ -11,7 +11,22 @@ type HomeSummaryRequestBody = {
   items?: unknown;
   otherDetail?: unknown;
   memo?: unknown;
+  referenceNotes?: unknown;
 };
+
+// 同じ利用者の過去記録を「書き方の手本」としてのみ渡す。空要素は除外し最大5件に制限。
+const MAX_REFERENCE_NOTES = 5;
+
+function getReferenceNotes(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean)
+    .slice(0, MAX_REFERENCE_NOTES);
+}
 
 type HomeSummarySuccessResponse = {
   ok: true;
@@ -101,10 +116,22 @@ export async function handleGenerateHomeSummary(
   const otherDetail = getStringValue(body.otherDetail);
   const memo = getStringValue(body.memo);
   const items = getItems(body.items);
+  const referenceNotes = getReferenceNotes(body.referenceNotes);
 
   const itemText =
     [...items, ...(otherDetail ? [otherDetail] : [])].join("、") ||
     "必要な支援";
+
+  // 参考記録がある場合のみ、手本ブロックを組み立てる。事実の流用は禁止する。
+  const referenceBlock =
+    referenceNotes.length > 0
+      ? `
+
+【参考記録（書き方の手本としてのみ使う）】
+${referenceNotes.map((note, index) => `${index + 1}. ${note}`).join("\n")}
+
+※ 上の参考記録は文体・書き方の手本としてのみ使う。日付・時刻・外出先・人物など具体的な"事実"は流用せず、当日の【入力】の値だけを使うこと。`
+      : "";
 
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -123,15 +150,14 @@ export async function handleGenerateHomeSummary(
     const prompt = `
 あなたは介護記録を作成する専門家です。
 
-以下の情報を元に、自然で読みやすい介護記録文を日本語で作成してください。
+以下の情報を元に、介護記録文を日本語で作成してください。
 
 【条件】
-- 丁寧な日本語
+- 文体は常体（だ・である調）
 - 主語は「${userName || "利用者"}様」
 - 箇条書き禁止
-- 1〜3文
-- 事実ベースで簡潔にまとめる
-- 不明な情報を勝手に補わない
+- 2〜3文で簡潔に
+- 事実ベースでまとめ、不明な情報を勝手に補わない
 
 【入力】
 日付: ${serviceDate || "未設定"}
@@ -140,7 +166,7 @@ export async function handleGenerateHomeSummary(
 担当者: ${helperName || "未設定"}
 区分: ${category || "未設定"}
 実施内容: ${itemText}
-補足: ${memo || "なし"}
+補足: ${memo || "なし"}${referenceBlock}
 
 【出力】
 介護記録文のみを出力してください。
