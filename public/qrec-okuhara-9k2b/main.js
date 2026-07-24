@@ -637,6 +637,11 @@ async function fetchAiSummaryMove(task, memo) {
 }
 
 // ─── 保存処理 ─────────────────────────────────────────
+// タスクの一意キー。移動は taskId、居宅は id を持つため両対応する。
+function taskKey(t) {
+  return t.taskId || t.id;
+}
+
 formSaveNext.addEventListener("click", () => save({ next: true }));
 formSaveClose.addEventListener("click", () => save({ next: false }));
 
@@ -667,15 +672,12 @@ async function save({ next }) {
       await saveMove(state.selectedTask, memo, finalNote);
     }
 
-    // 一覧から削除
+    // 一覧から削除（移動=taskId / 居宅=id の両対応キーで照合）
+    const savedKey = taskKey(state.selectedTask);
     if (state.currentCategory === "home") {
-      state.homeTasks = state.homeTasks.filter(
-        (t) => t.id !== state.selectedTask.id
-      );
+      state.homeTasks = state.homeTasks.filter((t) => taskKey(t) !== savedKey);
     } else {
-      state.moveTasks = state.moveTasks.filter(
-        (t) => t.id !== state.selectedTask.id
-      );
+      state.moveTasks = state.moveTasks.filter((t) => taskKey(t) !== savedKey);
     }
     updateBadges();
 
