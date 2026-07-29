@@ -4,6 +4,7 @@ exports.parseYearMonthParams = parseYearMonthParams;
 exports.fetchScheduleListSub2 = fetchScheduleListSub2;
 exports.fetchScheduleList = fetchScheduleList;
 exports.handleScheduleList = handleScheduleList;
+const scheduleSource_1 = require("./lib/scheduleSource");
 const supabase_1 = require("./lib/supabase");
 function parseYearMonthParams(req) {
     const yearValue = Array.isArray(req.query.year) ? req.query.year[0] : req.query.year;
@@ -60,12 +61,9 @@ async function fetchScheduleListSub2(year, month) {
     });
 }
 async function fetchScheduleList(year, month) {
-    // これは一時的な移行処理ではなく恒久的なデータ境界。
+    // データ境界の判定は lib/scheduleSource.ts に集約している（定数の二重持ち禁止）。
     // 2026年7月以前 = 旧DB(schedule_web_v) / 2026年8月以降 = sub2(schedule_entries)。
-    // 過去データ参照のため、この分岐を削除すると7月以前が表示されなくなる。
-    const CUTOVER_YEAR = Number(process.env.CUTOVER_YEAR ?? 2026);
-    const CUTOVER_MONTH = Number(process.env.CUTOVER_MONTH ?? 8);
-    if (year > CUTOVER_YEAR || (year === CUTOVER_YEAR && month >= CUTOVER_MONTH)) {
+    if ((0, scheduleSource_1.isSub2YearMonth)(year, month)) {
         return fetchScheduleListSub2(year, month);
     }
     const supabase = (0, supabase_1.getSupabaseClient)();

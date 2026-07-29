@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 
 import { getDateJstByOffset } from "./helperSummary";
+import { fetchSub2ScheduleAllByDate, isSub2Date } from "./lib/scheduleSource";
 import { getSupabaseClient } from "./lib/supabase";
 
 export type ScheduleAllItem = {
@@ -39,6 +40,11 @@ type ScheduleRow = {
 };
 
 export async function fetchScheduleAllByDate(date: string): Promise<ScheduleAllItem[]> {
+  // 2026年8月以降は sub2（schedule_entries）。以下の旧DB経路は変更していない
+  if (isSub2Date(date)) {
+    return fetchSub2ScheduleAllByDate(date);
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("schedule")

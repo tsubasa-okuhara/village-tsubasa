@@ -186,6 +186,10 @@ exports.notifyTomorrowSchedule = (0, scheduler_1.onSchedule)({
     region: "asia-northeast1",
     secrets: [
         supabase_1.SUPABASE_SERVICE_ROLE_KEY,
+        // 2026年8月以降の予定は sub2 から引くため、スケジューラにも sub2 のキーが要る。
+        // 未指定だと 8/1 以降 getSupabaseSub2Client() が Secret 未解決で落ち、
+        // 18時通知が丸ごと止まる（RLS が絡まないので手前では気付けない）
+        supabase_1.SUPABASE_SUB2_SERVICE_ROLE_KEY,
         push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
         push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
         push_1.WEB_PUSH_SUBJECT,

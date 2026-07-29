@@ -1,8 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchTomorrowScheduleByHelperEmail = fetchTomorrowScheduleByHelperEmail;
+exports.fetchTomorrowScheduleItems = fetchTomorrowScheduleItems;
 exports.handleTomorrowSchedule = handleTomorrowSchedule;
 const helperSummary_1 = require("./helperSummary");
+const scheduleSource_1 = require("./lib/scheduleSource");
 const supabase_1 = require("./lib/supabase");
 async function fetchTomorrowScheduleByHelperEmail(helperEmail, date) {
     const supabase = (0, supabase_1.getSupabaseClient)();
@@ -50,6 +52,17 @@ async function fetchTomorrowScheduleByHelperEmail(helperEmail, date) {
         };
     });
 }
+/**
+ * 対象日に応じてデータソースを切り替える。
+ * 2026年7月以前は旧DB（schedule_web_v）、8月以降は sub2（schedule_entries）。
+ * 旧DB経路 fetchTomorrowScheduleByHelperEmail は一切変更していない。
+ */
+async function fetchTomorrowScheduleItems(helperEmail, date) {
+    if ((0, scheduleSource_1.isSub2Date)(date)) {
+        return (0, scheduleSource_1.fetchSub2ScheduleByHelperEmail)(helperEmail, date, "tomorrow-schedule");
+    }
+    return fetchTomorrowScheduleByHelperEmail(helperEmail, date);
+}
 async function handleTomorrowSchedule(req, res) {
     const helperEmailValue = Array.isArray(req.query.helper_email)
         ? req.query.helper_email[0]
@@ -64,7 +77,7 @@ async function handleTomorrowSchedule(req, res) {
     }
     try {
         const tomorrowDate = (0, helperSummary_1.getDateJstByOffset)(1);
-        const items = await fetchTomorrowScheduleByHelperEmail(helperEmail, tomorrowDate);
+        const items = await fetchTomorrowScheduleItems(helperEmail, tomorrowDate);
         res.status(200).json({
             ok: true,
             date: tomorrowDate,

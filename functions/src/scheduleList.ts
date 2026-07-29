@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 
+import { isSub2YearMonth } from "./lib/scheduleSource";
 import { getSupabaseClient, getSupabaseSub2Client } from "./lib/supabase";
 
 type ScheduleListItem = {
@@ -130,13 +131,9 @@ export async function fetchScheduleList(
   year: number,
   month: number
 ): Promise<ScheduleListItem[]> {
-  // これは一時的な移行処理ではなく恒久的なデータ境界。
+  // データ境界の判定は lib/scheduleSource.ts に集約している（定数の二重持ち禁止）。
   // 2026年7月以前 = 旧DB(schedule_web_v) / 2026年8月以降 = sub2(schedule_entries)。
-  // 過去データ参照のため、この分岐を削除すると7月以前が表示されなくなる。
-  const CUTOVER_YEAR = Number(process.env.CUTOVER_YEAR ?? 2026);
-  const CUTOVER_MONTH = Number(process.env.CUTOVER_MONTH ?? 8);
-
-  if (year > CUTOVER_YEAR || (year === CUTOVER_YEAR && month >= CUTOVER_MONTH)) {
+  if (isSub2YearMonth(year, month)) {
     return fetchScheduleListSub2(year, month);
   }
 

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 
 import { getDateJstByOffset } from "./helperSummary";
+import { fetchSub2ScheduleByHelperEmail, isSub2Date } from "./lib/scheduleSource";
 import { getSupabaseClient } from "./lib/supabase";
 
 type TomorrowScheduleItem = {
@@ -92,6 +93,22 @@ export async function fetchTomorrowScheduleByHelperEmail(
   });
 }
 
+/**
+ * 対象日に応じてデータソースを切り替える。
+ * 2026年7月以前は旧DB（schedule_web_v）、8月以降は sub2（schedule_entries）。
+ * 旧DB経路 fetchTomorrowScheduleByHelperEmail は一切変更していない。
+ */
+export async function fetchTomorrowScheduleItems(
+  helperEmail: string,
+  date: string
+): Promise<TomorrowScheduleItem[]> {
+  if (isSub2Date(date)) {
+    return fetchSub2ScheduleByHelperEmail(helperEmail, date, "tomorrow-schedule");
+  }
+
+  return fetchTomorrowScheduleByHelperEmail(helperEmail, date);
+}
+
 export async function handleTomorrowSchedule(
   req: Request,
   res: Response<TomorrowScheduleSuccessResponse | TomorrowScheduleErrorResponse>
@@ -111,7 +128,7 @@ export async function handleTomorrowSchedule(
 
   try {
     const tomorrowDate = getDateJstByOffset(1);
-    const items = await fetchTomorrowScheduleByHelperEmail(helperEmail, tomorrowDate);
+    const items = await fetchTomorrowScheduleItems(helperEmail, tomorrowDate);
 
     res.status(200).json({
       ok: true,

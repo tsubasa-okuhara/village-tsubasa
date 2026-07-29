@@ -8,6 +8,7 @@ exports.runNotifyTomorrow = runNotifyTomorrow;
 exports.handleNotifyTodaySchedule = handleNotifyTodaySchedule;
 exports.handleNotifyTomorrowSchedule = handleNotifyTomorrowSchedule;
 const web_push_1 = __importDefault(require("web-push"));
+const scheduleSource_1 = require("./lib/scheduleSource");
 const supabase_1 = require("./lib/supabase");
 const push_1 = require("./push");
 function configureWebPush() {
@@ -34,19 +35,29 @@ function getJstDateByOffset(dayOffset) {
 }
 async function sendNotificationsForDate(targetDate, notificationType, titlePrefix, linkPath) {
     const supabase = (0, supabase_1.getSupabaseClient)();
-    // 対象日に予定があるヘルパーのメールアドレスを取得
-    const { data: scheduleData, error: scheduleError } = await supabase
-        .from("schedule_web_v")
-        .select("helper_email")
-        .eq("date", targetDate)
-        .not("helper_email", "is", null)
-        .neq("helper_email", "");
-    if (scheduleError) {
-        throw scheduleError;
+    // 対象日に予定があるヘルパーのメールアドレスを取得。
+    // 2026年8月以降は sub2（schedule_entries + helper マスタで email を補完）。
+    // 通知先はメール単位なので、helper にメール未登録のヘルパーは対象外になる
+    // （fetchSub2SummaryRowsByDate が対象者名を warn に出す）
+    let emailRows;
+    if ((0, scheduleSource_1.isSub2Date)(targetDate)) {
+        emailRows = await (0, scheduleSource_1.fetchSub2SummaryRowsByDate)(targetDate, `scheduled-notify-${notificationType}`);
+    }
+    else {
+        const { data: scheduleData, error: scheduleError } = await supabase
+            .from("schedule_web_v")
+            .select("helper_email")
+            .eq("date", targetDate)
+            .not("helper_email", "is", null)
+            .neq("helper_email", "");
+        if (scheduleError) {
+            throw scheduleError;
+        }
+        emailRows = (scheduleData ?? []);
     }
     // ヘルパーごとの予定件数を集計
     const helperCounts = new Map();
-    for (const row of (scheduleData ?? [])) {
+    for (const row of emailRows) {
         const email = row.helper_email.toLowerCase();
         helperCounts.set(email, (helperCounts.get(email) ?? 0) + 1);
     }

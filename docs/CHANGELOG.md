@@ -13,9 +13,27 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-22（today-schedule に遅延連絡ボタンを追加）
+最終更新: 2026-07-30（当日・翌日系APIを sub2 対応、データ境界を lib に集約）
 
 ---
+
+## 2026-07-30 [village-tsubasa] 当日・翌日系APIを sub2 対応（データ境界を `lib/scheduleSource.ts` に集約）
+
+- **`functions/src/lib/scheduleSource.ts` を新規追加**。旧DB / sub2 のデータ境界（2026年7月以前 = 旧DB、8月以降 = sub2）の判定と、sub2 アクセスの共通処理を集約。`CUTOVER_YEAR` / `CUTOVER_MONTH` の env 名と既定値（2026 / 8）は従来どおりで、**定数の二重持ちを禁止**（判定は必ず `isSub2YearMonth` / `isSub2Date` を使う）
+- `scheduleList.ts` はインラインの cutover 判定を `isSub2YearMonth` の import に差し替え。**挙動は不変**
+- **`todaySchedule.ts`**: 8月以降は sub2 を参照。あわせて **`?date=YYYY-MM-DD` を接続**（未指定なら従来どおり JST の今日。不正な日付は 400 `invalid date`。期間制限なし）
+- `tomorrowSchedule.ts` / `scheduleAll.ts`（today/tomorrow 全体一覧）/ `helperSummary.ts`（today/tomorrow サマリ）/ `nextHelperSchedule.ts` / `scheduledNotifications.ts`（18時通知）も同じ境界で sub2 対応
+- **`index.ts` の `notifyTomorrowSchedule`（18時ジョブ）の `secrets` に `SUPABASE_SUB2_SERVICE_ROLE_KEY` を追加**。未指定だと 8/1 以降に Secret 未解決で18時通知が丸ごと止まる
+- sub2 にはヘルパーのメール列が無いため、`email → helper.helper_name → schedule_entries.helper_name` の2段引き。**突合は完全一致のみ**（`.ilike()` や部分一致は不使用。「木野」が「木野(真)」「木野(遙)」を巻き込まないため）。メール比較は前後空白除去＋小文字化
+- 列マッピング: `transport → haisha` / `support_flow → task` / `helper_note → summary`。**`summary` の出所は `helper_note` で確定**（sub2 に7月データが無く旧DBと突合不可のため。月次一覧 `scheduleList.ts` の既存対応と揃えた）
+- 時刻整形: sub2 の time 型は `"10:00:00"` で返るので `formatClockTime()` で `"HH:MM"` に変換。**ゼロ詰めは維持**（`09:00` を `9:00` にしない）。`delayNotify.ts` の `formatTime()` は文面用にゼロ詰めを落とす別物なので流用していない
+- 合同シフト（`coHelpers`）は sub2 でも同 `(user_name, start_time)` で再現。ただし **sub2 経路のみ `start_time` が null の行を除外**（旧経路は null 同士が一致して誤って合同扱いになる。旧経路は表示を変えないため未修正）
+- `nextHelperSchedule.ts` は境界を跨ぐため、旧DB側の未来検索に `date < 2026-08-01` の上限を追加し、見つからなければ sub2 を引く2段構え
+- **旧DB経路のコードは無改修**（`fetchTodayScheduleByHelperEmail` / `fetchTomorrowScheduleByHelperEmail` ほか）。7月以前の表示・レスポンス形式は一切変えていない
+- 影響範囲: 本リポ内のみ。API のレスポンス形式変更なし（`?date=` はクエリの**追加**）。Supabase のスキーマ変更なし。sub2 への**読み取り追加のみ**で他アプリ非影響
+- **副作用（重要）**: 8月以降は `schedule_entries.id` が数値になるため、today-schedule の遅延連絡ボタンの表示条件（数値の正の整数ID）を満たすようになり、**8/1 から遅延連絡ボタンが実際に表示される**
+- **未対応（8/1 までに必着）**: `delayNotify.ts` の visit_key 化。`schedule_entries.id` は週シート再同期のたびに振り直されるため（同一予定で +6259 ずれた実測あり）、現行の `schedule_id` 単独での二重送信判定（409）が機能しない。`delay_notices` に `visit_date` / `visit_start_time` / `visit_user_name` / `visit_helper_name` / `visit_key` / `notice_type` を追加するマイグレーションとセットで対応する
+- 未デプロイ・未コミット（`firebase deploy --only functions:api` + 18時ジョブの再デプロイが必要）
 
 ## 2026-07-22 [village-tsubasa] today-schedule（ヘルパー用）に遅延連絡ボタンを追加
 

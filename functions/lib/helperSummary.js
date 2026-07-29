@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDateJstByOffset = getDateJstByOffset;
 exports.fetchHelperSummaryByDate = fetchHelperSummaryByDate;
 exports.createHelperSummaryHandler = createHelperSummaryHandler;
+const scheduleSource_1 = require("./lib/scheduleSource");
 const supabase_1 = require("./lib/supabase");
 function getJstDateParts(date) {
     const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -52,7 +53,15 @@ function compareStartTime(a, b) {
     }
     return a.localeCompare(b);
 }
-async function fetchHelperSummaryByDate(date, routePath) {
+/**
+ * 集計元の行を取得する。2026年8月以降は sub2（schedule_entries + helper マスタ）。
+ * sub2 には helper_email 列が無いので helper マスタで補完している
+ * （メール未登録のヘルパーは旧DB経路と同じく除外。除外分は warn に出る）。
+ */
+async function fetchSummarySourceRows(date, logLabel) {
+    if ((0, scheduleSource_1.isSub2Date)(date)) {
+        return (0, scheduleSource_1.fetchSub2SummaryRowsByDate)(date, logLabel);
+    }
     const supabase = (0, supabase_1.getSupabaseClient)();
     const { data, error } = await supabase
         .from("schedule_web_v")
@@ -64,7 +73,10 @@ async function fetchHelperSummaryByDate(date, routePath) {
     if (error) {
         throw error;
     }
-    const rows = (data ?? []);
+    return (data ?? []);
+}
+async function fetchHelperSummaryByDate(date, routePath, logLabel = "helper-summary") {
+    const rows = await fetchSummarySourceRows(date, logLabel);
     const helperMap = new Map();
     for (const row of rows) {
         const helperEmail = row.helper_email.trim();
@@ -111,7 +123,7 @@ function createHelperSummaryHandler(dayOffset, logLabel, routePath) {
     return async function handleHelperSummary(_req, res) {
         try {
             const targetDate = getDateJstByOffset(dayOffset);
-            const helpers = await fetchHelperSummaryByDate(targetDate, routePath);
+            const helpers = await fetchHelperSummaryByDate(targetDate, routePath, logLabel);
             res.status(200).json({
                 ok: true,
                 date: targetDate,
