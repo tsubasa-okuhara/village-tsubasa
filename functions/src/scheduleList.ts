@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 
-import { isSub2YearMonth } from "./lib/scheduleSource";
+import { formatClockTime, isSub2YearMonth } from "./lib/scheduleSource";
 import { getSupabaseClient, getSupabaseSub2Client } from "./lib/supabase";
 
 type ScheduleListItem = {
@@ -117,8 +117,11 @@ export async function fetchScheduleListSub2(
       date: row.date,
       helperName: row.helper_name,
       userName: row.user_name,
-      startTime: row.start_time,
-      endTime: row.end_time,
+      // sub2 の time 型は "09:40:00" で返るので旧DBと同じ "HH:MM" に揃える。
+      // 旧DB経路は既に "HH:MM" で、かつ end_time に "16:00以降" のような
+      // 自由記述が混ざっているため通さない（通すと "16:00" に化けて情報が消える）
+      startTime: formatClockTime(row.start_time),
+      endTime: formatClockTime(row.end_time),
       haisha: row.transport,
       task: row.support_flow,
       summary: row.helper_note,
