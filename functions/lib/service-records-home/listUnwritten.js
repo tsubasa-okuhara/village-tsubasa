@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleListUnwrittenHome = handleListUnwrittenHome;
+const recordCutoff_1 = require("../lib/recordCutoff");
 const supabase_1 = require("../lib/supabase");
 function getHelperEmailFilter(req) {
     const helperEmailValue = Array.isArray(req.query.helper_email)
@@ -28,6 +29,8 @@ async function handleListUnwrittenHome(req, res) {
             .select("id, schedule_id, service_date, helper_name, helper_email, user_name, start_time, end_time, task, summary, beneficiary_number, status")
             .eq("status", "unwritten")
             .is("deleted_at", null)
+            // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
+            .gte("service_date", recordCutoff_1.RECORD_LIST_CUTOFF_DATE)
             .order("service_date", { ascending: true })
             .order("start_time", { ascending: true, nullsFirst: true })
             .order("helper_name", { ascending: true });

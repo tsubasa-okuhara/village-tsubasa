@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleServiceRecordsMoveListUnwritten = handleServiceRecordsMoveListUnwritten;
+const recordCutoff_1 = require("../lib/recordCutoff");
 const supabase_1 = require("../lib/supabase");
 function getQueryValue(value) {
     if (Array.isArray(value)) {
@@ -48,6 +49,8 @@ async function handleServiceRecordsMoveListUnwritten(req, res) {
           beneficiary_number
         `)
             .eq("status", "unwritten")
+            // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
+            .gte("service_date", recordCutoff_1.RECORD_LIST_CUTOFF_DATE)
             .order("service_date", { ascending: true })
             .order("start_time", { ascending: true });
         if (helperEmail) {

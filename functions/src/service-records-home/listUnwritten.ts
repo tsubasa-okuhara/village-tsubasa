@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 
+import { RECORD_LIST_CUTOFF_DATE } from "../lib/recordCutoff";
 import { getSupabaseClient } from "../lib/supabase";
 
 type HomeScheduleTaskRow = {
@@ -63,6 +64,8 @@ export async function handleListUnwrittenHome(
       )
       .eq("status", "unwritten")
       .is("deleted_at", null)
+      // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
+      .gte("service_date", RECORD_LIST_CUTOFF_DATE)
       .order("service_date", { ascending: true })
       .order("start_time", { ascending: true, nullsFirst: true })
       .order("helper_name", { ascending: true });

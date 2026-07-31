@@ -1,3 +1,7 @@
+// 未記入一覧の下限日（表示用ラベル）。実際の絞り込みはサーバー側が行う。
+// 変更するときは functions/src/lib/recordCutoff.ts と必ずセットで直す。
+const RECORD_LIST_CUTOFF_LABEL = "2026年8月1日";
+
 const HOME_UNWRITTEN_API = "/api/service-records-home/unwritten";
 const HOME_SUMMARY_API = "/api/service-records-home/summary";
 const HOME_SAVE_API = "/api/service-records-home/save";
@@ -1089,7 +1093,11 @@ async function loadHomeTasks(helperEmail, options) {
     state.items = Array.isArray(data.items) ? data.items : [];
 
     if (state.items.length === 0) {
-      setStatus(listStatusElement, "未記入の予定はありません。");
+      // 0件でも「壊れた」と誤解されないよう、表示範囲の下限を必ず添える
+      setStatus(
+        listStatusElement,
+        `${RECORD_LIST_CUTOFF_LABEL}以降の未記入予定はありません。（7月以前の記録は事業所側で確認します）`,
+      );
       renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
       return;
     }
