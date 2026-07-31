@@ -13,7 +13,39 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-30（当日・翌日系APIを sub2 対応、データ境界を lib に集約）
+最終更新: 2026-07-31（遅延通知を visit_key 化し、開始遅れ／終了遅れの2種別を導入）
+
+---
+
+## 2026-07-31 [village-tsubasa] 遅延通知の二重送信判定を visit_key 化し、開始遅れ／終了遅れの2種別を導入
+
+**背景**: `schedule_entries.id` は週シートの再同期のたびに振り直される（同一予定で `+6259` ずれた実測あり）。そのため `schedule_id` は永続的な参照キーとして使えず、これに依存していた二重送信判定（409）が機能しない。7/30 の sub2 対応で 8/1 から遅延連絡ボタンが実際に表示されるようになるため、その前に差し替えた。
+
+### サーバー（`functions/src/delayNotify.ts`／コミット `25ae848`）
+
+- 予定から引いた値だけで `visit_key = "YYYY-MM-DD|HH:MM|利用者名|ヘルパー名"` を組み立て、`delay_notices` に保存。**HH:MM は終了遅れでも開始時刻基準に固定**（同じ訪問が2つのキーに割れないため）。氏名は `normalizeName()` 済みの値をキーに使い、生値は `visit_user_name` / `visit_helper_name` に保存
+- 時刻整形は `lib/scheduleSource.ts` の `formatClockTime()` を使用（ゼロ詰め維持）。同ファイルの `formatTime()` は LINE 文面用にゼロ詰めを落とす別物なので**流用しない**
+- **409判定を `schedule_id` 単独から `visit_key + destination + notice_type + arrival_time` の60分窓（`DUPLICATE_WINDOW_MINUTES`）に変更**。到着時刻が違えば「時刻の訂正」として通す。窓を過ぎれば再送可能（「さらに遅れた」を塞がない）。destination 違いも通るようになった（旧仕様は同一予定なら一律409）
+- API に **`noticeType: "start" | "end"` を追加（必須）**。`minutes` はクライアント値を使わず、基準時刻（start は `start_time` / end は `end_time`）からサーバーで再計算。日跨ぎは24時間ラップ、12時間超は `null`
+- クライアント由来の `helperName` は**受け取るが使わない**。`schedule.helper_name` を正とする
+- `noticeType="end"` かつ `end_time` が null は **400** で停止
+- `REASON_MAP` に `clientTextEnd` を追加（既存 `clientText` は無変更）。文面は到着予定／終了予定を種別で出し分け
+- 管理者控えの条件を `reason.notifyAdmin` **OR**「計算後の時刻 > 同ヘルパーの当日の次の予定の開始 − `NEXT_VISIT_BUFFER_MINUTES`(20分)」に拡張。次の予定が無ければ送らず、クエリ失敗など判定不能なら送る側に倒す
+- LINE の `X-Line-Retry-Key` のシードを `visit_key + notice_type + arrival_time` ベースに変更（`schedule_id` の再利用による誤った重複判定を避け、正当な再送は通す）
+- `delay_notices` の列追加（`visit_date` / `visit_start_time` / `visit_user_name` / `visit_helper_name` / `visit_key` / `notice_type`）と index `idx_delay_notices_visit_key_sent` は**別途 SQL Editor で適用済み**。既存行のバックフィルはしない（適用時点で0行）
+- `minutes` 列の意味が変わった: 新規行は「基準時刻からのオフセット分」。`notice_type` が null の行は旧仕様（10/20/30 の遅延分数）なので**集計時は分けること**
+
+### クライアント（`public/today-schedule/`／コミット `c82fabc`）
+
+- ステップ2の先頭に種別トグル（開始が遅れます / 終了が遅れます）。既定は `start`
+- `endTime` が空の予定は「終了が遅れます」を disabled にし、理由を画面にも表示
+- 候補時刻（+10/+20/+30分）の基準を種別で切替。**切替時は選択済みの時刻をクリア**（14:00基準で選んだ 14:20 が 16:00 基準では前倒しになるため）
+- 送信ボディに `noticeType` を追加。`minutes` は送らない
+- 確認画面に「種類」行、時刻の見出しを到着予定／終了予定で出し分け
+- バッジの localStorage キーを `{date}_{scheduleId}_{noticeType}` に変更（旧キーは開始遅れとしてフォールバック）。開始遅れと終了遅れは別々に送れるため、**片方のみ送信済みならバッジとボタンを併存**させる
+- 影響範囲: 本リポ内のみ。他アプリ非影響
+- デプロイ: `functions:api` / `hosting` ともに 2026-07-31 実施済み
+- **未検証**: 実データでの動作確認は未実施（7/31 時点では id が UUID でボタンが出ないため）。8/1 に「ボタン表示 → 送信 → 409 → 時刻変更で再送 → 終了遅れ → `delay_notices` の中身」を確認すること。ヘルパー端末に**古い `main.js` がキャッシュされていると `noticeType` 欠落で400**になる点にも注意
 
 ---
 
