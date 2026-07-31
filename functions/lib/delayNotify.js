@@ -6,11 +6,22 @@
  *     {
  *       scheduleId: number,
  *       destination: "client" | "office",
- *       reasonCode: string,        // 下記 REASON_MAP のキー
- *       reasonNote?: string,       // 自由入力の補足（任意）
- *       arrivalTime: "HH:MM",      // 到着予定時刻
- *       helperName?: string
+ *       noticeType: "start" | "end",  // start=開始遅れ / end=終了遅れ
+ *       reasonCode: string,           // 下記 REASON_MAP のキー
+ *       reasonNote?: string,          // 自由入力の補足（任意）
+ *       arrivalTime: "HH:MM",         // 計算後の絶対時刻（start=到着予定 / end=終了予定）
+ *       helperName?: string           // 受け取るが使わない（下記「訪問の同一性」参照）
  *     }
+ *
+ * 【訪問の同一性は schedule_id ではなく visit_key で見る】
+ *   schedule_entries.id は週シートの再同期のたびに振り直される（同一予定で
+ *   +6259 ずれた実測あり）。そのため schedule_id は永続的な参照キーに使えない。
+ *   予定を1回引いて date / start_time / user_name / helper_name を取得し、
+ *     visit_key = "YYYY-MM-DD|HH:MM|利用者名|ヘルパー名"
+ *   を組み立てて delay_notices に保存し、二重送信判定もこれで行う。
+ *   HH:MM は終了遅れでも **開始時刻** 基準で固定する（同じ訪問が2つのキーに割れないため）。
+ *   氏名は normalizeName() を通したものをキーに使い、生値は visit_* 列に残す。
+ *   予定が引けなければ 404 で停止する（クライアントから来た helperName 等で代替しない）。
  *
  *   destination="client"（利用者へ連絡）
  *     1) schedule_entries（sub2）から予定を取得
@@ -41,28 +52,44 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LINE_CHANNEL_ACCESS_TOKEN = void 0;
 exports.handleDelayNotify = handleDelayNotify;
 const params_1 = require("firebase-functions/params");
+const scheduleSource_1 = require("./lib/scheduleSource");
 const supabase_1 = require("./lib/supabase");
 exports.LINE_CHANNEL_ACCESS_TOKEN = (0, params_1.defineSecret)("LINE_CHANNEL_ACCESS_TOKEN");
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
 /** 管理者グループIDが入っている app_settings のキー */
 const ADMIN_GROUP_SETTING_KEY = "admin_line_group_id";
 /**
+ * 二重送信とみなす時間窓（分）。
+ * 同じ訪問・同じ宛先・同じ種別・同じ到着時刻への送信がこの窓の中にあれば 409。
+ * 窓を過ぎれば再送できる（「さらに遅れた」の連絡を塞がないため）。
+ */
+const DUPLICATE_WINDOW_MINUTES = 60;
+/**
+ * 次の予定に食い込んだと判断する余裕（分）。
+ * 「計算後の時刻 > 次の予定の開始 - この値」なら管理者へ控えを送る。
+ */
+const NEXT_VISIT_BUFFER_MINUTES = 20;
+/**
  * 理由コード → 文面マッピング。
  *
- * clientText  : 利用者向けのやわらげた文面（嘘ではなく表現をやわらげただけ）
- * adminLabel  : 管理者通知・保存に載せる「実際の理由」ラベル
- * notifyAdmin : client 送信時に管理者へも控えを通知するか
+ * clientText    : 利用者向けのやわらげた文面（開始遅れ用。嘘ではなく表現をやわらげただけ）
+ * clientTextEnd : 同上の終了遅れ用。clientText は「〜遅れております」で終わる
+ *                 開始前提の文なので、終了遅れに流用すると日本語が壊れる
+ *                 （「前の支援が長引いており遅れております。16:30頃の終了予定です。」）。
+ *                 そのため別文面を持つ。既存の clientText は変更しない。
+ * adminLabel    : 管理者通知・保存に載せる「実際の理由」ラベル
+ * notifyAdmin   : client 送信時に管理者へも控えを通知するか（次の予定への食い込み判定と OR）
  *
  * 不明な reasonCode は 400 で弾く（誤送信を防ぐ）。
  */
 const REASON_MAP = {
-    prev_support: { clientText: "前の支援が長引いており遅れております", adminLabel: "前の支援の長引き", notifyAdmin: false },
-    traffic: { clientText: "交通事情により遅れております", adminLabel: "交通渋滞", notifyAdmin: false },
-    train: { clientText: "交通事情により遅れております", adminLabel: "電車遅延", notifyAdmin: false },
-    vehicle: { clientText: "交通事情により遅れております", adminLabel: "車両トラブル", notifyAdmin: true },
-    sick: { clientText: "体調不良のため遅れております", adminLabel: "体調不良", notifyAdmin: true },
-    overslept: { clientText: "出発が遅れております", adminLabel: "寝坊", notifyAdmin: true },
-    other: { clientText: "出発が遅れております", adminLabel: "その他", notifyAdmin: false },
+    prev_support: { clientText: "前の支援が長引いており遅れております", clientTextEnd: "支援に時間がかかっております", adminLabel: "前の支援の長引き", notifyAdmin: false },
+    traffic: { clientText: "交通事情により遅れております", clientTextEnd: "交通事情により時間がかかっております", adminLabel: "交通渋滞", notifyAdmin: false },
+    train: { clientText: "交通事情により遅れております", clientTextEnd: "交通事情により時間がかかっております", adminLabel: "電車遅延", notifyAdmin: false },
+    vehicle: { clientText: "交通事情により遅れております", clientTextEnd: "交通事情により時間がかかっております", adminLabel: "車両トラブル", notifyAdmin: true },
+    sick: { clientText: "体調不良のため遅れております", clientTextEnd: "体調不良のため時間がかかっております", adminLabel: "体調不良", notifyAdmin: true },
+    overslept: { clientText: "出発が遅れております", clientTextEnd: "支援に時間がかかっております", adminLabel: "寝坊", notifyAdmin: true },
+    other: { clientText: "出発が遅れております", clientTextEnd: "支援に時間がかかっております", adminLabel: "その他", notifyAdmin: false },
 };
 function isReasonCode(v) {
     return Object.prototype.hasOwnProperty.call(REASON_MAP, v);
@@ -73,10 +100,12 @@ async function handleDelayNotify(req, res) {
     try {
         const scheduleId = Number(req.body?.scheduleId);
         const destination = String(req.body?.destination ?? "");
+        const noticeType = String(req.body?.noticeType ?? "");
         const reasonCode = String(req.body?.reasonCode ?? "");
         const reasonNote = String(req.body?.reasonNote ?? "").trim();
         const arrivalTime = String(req.body?.arrivalTime ?? "").trim();
-        const helperName = String(req.body?.helperName ?? "").trim();
+        // helperName は受け取るだけで使わない。ヘルパー名は予定（DB）の値を正とする。
+        // 画面の表示値とDBがズレていたときに、記録とLINE文面がDBと食い違わないようにするため。
         // 400 はいずれも呼び出し側の実装バグ。ヘルパーに原因を見せても行動が変わらないので
         // 画面には共通の文言だけ出し、原因は error に残して調査に回す
         if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
@@ -89,6 +118,12 @@ async function handleDelayNotify(req, res) {
             return res.status(400).json({
                 message: "送信できませんでした。事業所へご連絡ください。",
                 error: 'destination は "client" / "office" のみ指定できます',
+            });
+        }
+        if (noticeType !== "start" && noticeType !== "end") {
+            return res.status(400).json({
+                message: "送信できませんでした。事業所へご連絡ください。",
+                error: 'noticeType は "start" / "end" のみ指定できます',
             });
         }
         if (!isReasonCode(reasonCode)) {
@@ -134,15 +169,46 @@ async function handleDelayNotify(req, res) {
                 error: "予定に利用者名が入っていません",
             });
         }
-        const helper = helperName || (schedule.helper_name ?? "").trim();
+        // 終了遅れは終了時刻が無いと成立しない。画面側でもボタンを無効化しているが、
+        // 古いキャッシュのJSから飛んでくることがあるのでサーバーでも必ず塞ぐ
+        if (noticeType === "end" && !schedule.end_time) {
+            return res.status(400).json({
+                message: "この予定は終了時刻が未設定のため、終了遅れの連絡はできません。",
+                error: "end_time が未設定の予定に noticeType=end が指定されました",
+            });
+        }
+        const helper = (schedule.helper_name ?? "").trim();
         const timeLabel = formatTime(schedule.start_time);
-        // ---- 2) 二重送信チェック ----------------------------------------------
-        // 同じ予定に対して既に送信済みなら弾く（destination 違いでも同じ予定なら弾く）
+        // ---- 2) 訪問の同一性（visit_key）を組み立てる -------------------------
+        // 予定から引いた値だけで作る。クライアントから来た値は混ぜない。
+        // 開始時刻は終了遅れでも start_time 基準で固定する（同じ訪問が2キーに割れないため）。
+        const visitDate = String(schedule.date ?? "").slice(0, 10);
+        const visitStartLabel = (0, scheduleSource_1.formatClockTime)(schedule.start_time) ?? "";
+        const visitUserName = userName;
+        const visitHelperName = helper;
+        const visitKey = [
+            visitDate,
+            visitStartLabel,
+            normalizeName(visitUserName),
+            normalizeName(visitHelperName),
+        ].join("|");
+        // 基準時刻からのオフセット（分）。クライアントの申告値は使わず必ずここで計算する。
+        const baseTime = noticeType === "end" ? schedule.end_time : schedule.start_time;
+        const offsetMinutes = diffMinutes(baseTime, arrivalTime);
+        // ---- 3) 二重送信チェック ----------------------------------------------
+        // 同じ訪問・同じ宛先・同じ種別・同じ到着時刻への送信が直近 N 分以内にあれば弾く。
+        // schedule_id は再同期で振り直されるため判定に使えない（ファイル冒頭参照）。
+        // 到着時刻が違えば「時刻の訂正」なので通す。
+        const duplicateSince = new Date(Date.now() - DUPLICATE_WINDOW_MINUTES * 60 * 1000).toISOString();
         const { data: already, error: alreadyErr } = await supabase
             .from("delay_notices")
-            .select("id, destination, sent_at")
-            .eq("schedule_id", scheduleId)
+            .select("id, destination, notice_type, arrival_time, visit_key, sent_at")
+            .eq("visit_key", visitKey)
+            .eq("destination", destination)
+            .eq("notice_type", noticeType)
+            .eq("arrival_time", arrivalTime)
             .eq("status", "sent")
+            .gte("sent_at", duplicateSince)
             .order("sent_at", { ascending: false })
             .limit(1);
         // 送信済みか判定できないまま送ると二重送信になる。ここは送らずに止める
@@ -156,6 +222,21 @@ async function handleDelayNotify(req, res) {
                 previous: already[0],
             });
         }
+        // 各 logNotice 呼び出しへ同じ内容を確実に渡すためのスナップショット。
+        // 個別に書くと1経路だけ渡し忘れて二重送信判定から漏れる
+        const visit = {
+            schedule_id: scheduleId,
+            visit_date: visitDate || null,
+            visit_start_time: schedule.start_time,
+            visit_user_name: visitUserName || null,
+            visit_helper_name: visitHelperName || null,
+            visit_key: visitKey,
+            notice_type: noticeType,
+            reason_code: reasonCode,
+            reason_note: reasonNote || null,
+            arrival_time: arrivalTime,
+            minutes: offsetMinutes,
+        };
         // ========================================================================
         //  destination = "office" : 事業所（メイン組 LINE）へ電話連絡を依頼
         // ========================================================================
@@ -163,21 +244,17 @@ async function handleDelayNotify(req, res) {
             // 届かないのに成功と返さないため、ここで取得失敗なら 500 で止める（外側 catch へ）
             const adminGroupId = await getAdminLineGroupId(supabase);
             const clientLabel = userName || "利用者";
-            const officeText = buildOfficeMessage(helper, clientLabel, timeLabel, reason.adminLabel, reasonNote, arrivalTime);
+            const officeText = buildOfficeMessage(helper, clientLabel, timeLabel, noticeType, reason.adminLabel, reasonNote, arrivalTime);
             try {
-                await linePush(adminGroupId, officeText, `delay-office-${scheduleId}`);
+                await linePush(adminGroupId, officeText, buildRetryKeySeed("office", visitKey, noticeType, arrivalTime));
             }
             catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
                 await logNotice(supabase, {
-                    schedule_id: scheduleId,
+                    ...visit,
                     client_name: userName || null,
                     helper_name: helper || null,
                     destination,
-                    reason_code: reasonCode,
-                    reason_note: reasonNote || null,
-                    arrival_time: arrivalTime,
-                    minutes: null,
                     line_group_id: adminGroupId,
                     admin_notified: false,
                     status: "failed",
@@ -193,14 +270,10 @@ async function handleDelayNotify(req, res) {
                 });
             }
             await logNotice(supabase, {
-                schedule_id: scheduleId,
+                ...visit,
                 client_name: userName || null,
                 helper_name: helper || null,
                 destination,
-                reason_code: reasonCode,
-                reason_note: reasonNote || null,
-                arrival_time: arrivalTime,
-                minutes: null,
                 line_group_id: adminGroupId,
                 admin_notified: true,
                 status: "sent",
@@ -229,7 +302,7 @@ async function handleDelayNotify(req, res) {
             .maybeSingle();
         if (userErr)
             throw new Error(`利用者の取得に失敗しました: ${userErr.message}`);
-        const clientText = buildClientMessage(userName, timeLabel, reason.clientText, arrivalTime);
+        const clientText = buildClientMessage(userName, timeLabel, noticeType, noticeType === "end" ? reason.clientTextEnd : reason.clientText, arrivalTime);
         // 送らない理由を先に確定させる。判定順は
         //   1) 突合できない → 2) LINE連絡が無効 → 3) LINE ID が未登録
         // delay_notice_enabled は line_group_id より先に見る。
@@ -237,14 +310,10 @@ async function handleDelayNotify(req, res) {
         const block = resolveBlockReason(user, userName);
         if (block) {
             await logNotice(supabase, {
-                schedule_id: scheduleId,
+                ...visit,
                 client_name: userName,
                 helper_name: helper || null,
                 destination,
-                reason_code: reasonCode,
-                reason_note: reasonNote || null,
-                arrival_time: arrivalTime,
-                minutes: null,
                 line_group_id: null,
                 admin_notified: false,
                 status: "needs_phone_call",
@@ -267,19 +336,15 @@ async function handleDelayNotify(req, res) {
             throw new Error("送信先の判定に失敗しました");
         }
         try {
-            await linePush(lineGroupId, clientText, `delay-client-${scheduleId}`);
+            await linePush(lineGroupId, clientText, buildRetryKeySeed("client", visitKey, noticeType, arrivalTime));
         }
         catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             await logNotice(supabase, {
-                schedule_id: scheduleId,
+                ...visit,
                 client_name: userName,
                 helper_name: helper || null,
                 destination,
-                reason_code: reasonCode,
-                reason_note: reasonNote || null,
-                arrival_time: arrivalTime,
-                minutes: null,
                 line_group_id: lineGroupId,
                 admin_notified: false,
                 status: "failed",
@@ -298,12 +363,22 @@ async function handleDelayNotify(req, res) {
         // ---- 利用者送信は成功。理由によっては管理者へも控えを通知 ----------------
         // LINE は取り消せないので、管理者通知の失敗で利用者送信を巻き戻さない。
         // ただし失敗は必ず console.error に残し、admin_notified=false で記録する。
+        //
+        // 送る条件は「理由が重大」OR「次の予定に食い込む」。
+        // 食い込み判定が不能だった場合は送る側に倒す（管理者に1通余分に飛ぶ害より、
+        // 食い込みを誰も知らない害の方が大きいため）。
         let adminNotified = false;
-        if (reason.notifyAdmin) {
+        const intrudesNextVisit = await checkIntrudesNextVisit(supabase, {
+            helperName: helper,
+            date: schedule.date,
+            startTime: schedule.start_time,
+            arrivalTime,
+        });
+        if (reason.notifyAdmin || intrudesNextVisit) {
             try {
                 const adminGroupId = await getAdminLineGroupId(supabase);
-                const adminText = buildAdminEscalationMessage(helper, userName, timeLabel, reason.adminLabel, reasonNote, arrivalTime);
-                await linePush(adminGroupId, adminText, `delay-escalate-${scheduleId}`);
+                const adminText = buildAdminEscalationMessage(helper, userName, timeLabel, noticeType, reason.adminLabel, reasonNote, arrivalTime, intrudesNextVisit);
+                await linePush(adminGroupId, adminText, buildRetryKeySeed("escalate", visitKey, noticeType, arrivalTime));
                 adminNotified = true;
             }
             catch (e) {
@@ -312,14 +387,10 @@ async function handleDelayNotify(req, res) {
             }
         }
         await logNotice(supabase, {
-            schedule_id: scheduleId,
+            ...visit,
             client_name: userName,
             helper_name: helper || null,
             destination,
-            reason_code: reasonCode,
-            reason_note: reasonNote || null,
-            arrival_time: arrivalTime,
-            minutes: null,
             line_group_id: lineGroupId,
             admin_notified: adminNotified,
             status: "sent",
@@ -418,48 +489,139 @@ function nowLabelJst() {
         minute: "2-digit",
     });
 }
+/** 時刻の見出し。開始遅れ=到着予定 / 終了遅れ=終了予定 */
+function timeFieldLabel(noticeType) {
+    return noticeType === "end" ? "終了予定" : "到着予定";
+}
 /**
  * 利用者向け文面（やわらげた理由）。
- * 「【ビレッジつばさ】{利用者名} 本日{開始時刻}〜のご訪問 /
- *   {理由文面}。{到着時刻}頃の到着予定です。/ ご迷惑をおかけし申し訳ありません。」
+ *   開始遅れ: 「{理由文面}。{時刻}頃の到着予定です。」
+ *   終了遅れ: 「{理由文面}。{時刻}頃の終了予定です。」
+ * reasonText は呼び出し側で clientText / clientTextEnd を選んで渡す。
  */
-function buildClientMessage(userName, timeLabel, reasonText, arrivalTime) {
+function buildClientMessage(userName, timeLabel, noticeType, reasonText, arrivalTime) {
     const when = timeLabel ? `本日${timeLabel}〜のご訪問` : "本日のご訪問";
+    const closing = noticeType === "end" ? "終了予定です" : "到着予定です";
     return [
         `【ビレッジつばさ】${userName} ${when}`,
-        `${reasonText}。${arrivalTime}頃の到着予定です。`,
+        `${reasonText}。${arrivalTime}頃の${closing}。`,
         "ご迷惑をおかけし申し訳ありません。",
     ].join("\n");
 }
 /**
  * 管理者向け「電話連絡の依頼」文面（destination=office）。実際の理由を載せる。
  */
-function buildOfficeMessage(helper, clientLabel, timeLabel, adminLabel, reasonNote, arrivalTime) {
+function buildOfficeMessage(helper, clientLabel, timeLabel, noticeType, adminLabel, reasonNote, arrivalTime) {
     const who = helper || "ヘルパー";
     const start = timeLabel || "時間未定";
+    const kind = noticeType === "end" ? "終了遅れ" : "開始遅れ";
     const reasonLine = reasonNote ? `理由:${adminLabel}（${reasonNote}）` : `理由:${adminLabel}`;
     return [
-        `【電話連絡の依頼】${nowLabelJst()}`,
+        `【電話連絡の依頼／${kind}】${nowLabelJst()}`,
         `${who} → ${clientLabel}（${start}〜）`,
         "訪問先への電話連絡をお願いします。",
         reasonLine,
-        `到着予定:${arrivalTime}`,
+        `${timeFieldLabel(noticeType)}:${arrivalTime}`,
     ].join("\n");
 }
 /**
- * 管理者向け「控え」文面（destination=client かつ管理者通知対象の理由）。実際の理由を載せる。
+ * 管理者向け「控え」文面（destination=client）。実際の理由を載せる。
+ * 次の予定に食い込む場合はその旨も1行足す（対応の要否を判断できるように）。
  */
-function buildAdminEscalationMessage(helper, userName, timeLabel, adminLabel, reasonNote, arrivalTime) {
+function buildAdminEscalationMessage(helper, userName, timeLabel, noticeType, adminLabel, reasonNote, arrivalTime, intrudesNextVisit) {
     const who = helper || "ヘルパー";
     const start = timeLabel || "時間未定";
+    const kind = noticeType === "end" ? "終了遅れ" : "開始遅れ";
     const reasonLine = reasonNote ? `理由:${adminLabel}（${reasonNote}）` : `理由:${adminLabel}`;
-    return [
-        `【遅延連絡（管理者控え）】${nowLabelJst()}`,
+    const lines = [
+        `【遅延連絡（管理者控え）／${kind}】${nowLabelJst()}`,
         `${who} → ${userName}（${start}〜）`,
         "利用者へ LINE で遅延をご連絡しました。",
         reasonLine,
-        `到着予定:${arrivalTime}`,
-    ].join("\n");
+        `${timeFieldLabel(noticeType)}:${arrivalTime}`,
+    ];
+    if (intrudesNextVisit) {
+        lines.push(`⚠️ 次の予定に食い込む見込みです（${NEXT_VISIT_BUFFER_MINUTES}分前を超過）`);
+    }
+    return lines.join("\n");
+}
+/**
+ * LINE の X-Line-Retry-Key のシード。
+ * schedule_id は再同期で振り直され、別の訪問が過去の id を再利用しうるため使わない
+ * （使うと無関係な訪問同士でキーが衝突し、LINE 側の重複判定で配信されなくなる）。
+ * 種別と時刻を混ぜて、内容が変われば別キーになるようにする（正当な再送を塞がないため）。
+ */
+function buildRetryKeySeed(kind, visitKey, noticeType, arrivalTime) {
+    return `delay-${kind}-${visitKey}-${noticeType}-${arrivalTime}`;
+}
+/** "HH:MM" / "HH:MM:SS" → 0時からの分。読めなければ null */
+function toMinutesOfDay(raw) {
+    if (!raw)
+        return null;
+    const matched = /^(\d{1,2}):(\d{2})/.exec(String(raw).trim());
+    if (!matched)
+        return null;
+    const hour = Number(matched[1]);
+    const minute = Number(matched[2]);
+    if (hour > 23 || minute > 59)
+        return null;
+    return hour * 60 + minute;
+}
+/**
+ * 基準時刻から到着（終了）時刻までの分。
+ * 日跨ぎは24時間ラップで前向きに補正する（22:30 の予定に 00:10 なら 100分）。
+ * 基準が読めない場合と、12時間を超える異常値は null（時刻自体は arrival_time に残る）。
+ */
+function diffMinutes(baseTime, arrivalTime) {
+    const base = toMinutesOfDay(baseTime);
+    const arrival = toMinutesOfDay(arrivalTime);
+    if (base === null || arrival === null)
+        return null;
+    const diff = ((arrival - base) % 1440 + 1440) % 1440;
+    return diff > 720 ? null : diff;
+}
+/**
+ * 計算後の時刻が「同じヘルパーの当日の次の予定の開始 - NEXT_VISIT_BUFFER_MINUTES」を
+ * 超えるか。次の予定が無ければ false。
+ *
+ * schedule_entries に helper_email が無いのでヘルパー名で引く（完全一致）。
+ * 同姓同名がいると誤検知するが、実害は控えが1通余分に飛ぶだけなので許容する。
+ * クエリ失敗・時刻が読めないなど判定不能なときは true（送る側）に倒す。
+ */
+async function checkIntrudesNextVisit(supabase, params) {
+    const { helperName, date, startTime, arrivalTime } = params;
+    if (!helperName || !date)
+        return true; // 判定できない → 送る側
+    if (!startTime)
+        return true; // 並び順を決められない → 送る側
+    try {
+        const { data, error } = await supabase
+            .from("schedule_entries")
+            .select("start_time")
+            .eq("helper_name", helperName)
+            .eq("date", date)
+            .eq("is_published", true)
+            .is("cancelled_at", null)
+            .gt("start_time", startTime)
+            .order("start_time", { ascending: true })
+            .limit(1);
+        if (error) {
+            console.error(`[delay-notify] 次の予定の確認に失敗（控えは送る側に倒す）: ${error.message}`);
+            return true;
+        }
+        const nextStart = (data ?? [])[0]?.start_time;
+        const nextStartMinutes = toMinutesOfDay(nextStart ?? null);
+        const arrivalMinutes = toMinutesOfDay(arrivalTime);
+        if (nextStartMinutes === null)
+            return false; // 次の予定なし → 送らない
+        if (arrivalMinutes === null)
+            return true; // 判定できない → 送る側
+        return arrivalMinutes > nextStartMinutes - NEXT_VISIT_BUFFER_MINUTES;
+    }
+    catch (e) {
+        console.error("[delay-notify] 次の予定の確認で例外（控えは送る側に倒す）", e);
+        return true;
+    }
 }
 /**
  * LINE Messaging API へ push する。
