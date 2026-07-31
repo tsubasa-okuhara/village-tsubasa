@@ -17,9 +17,14 @@ function getDelaySent() {
   } catch { return {}; }
 }
 
-function markDelaySent(dateStr, scheduleId, minutes) {
+function markDelaySent(dateStr, scheduleId, record) {
   const data = getDelaySent();
-  data[`${dateStr}_${scheduleId}`] = { minutes, at: Date.now() };
+  data[`${dateStr}_${scheduleId}`] = {
+    destination: record.destination,
+    reasonCode: record.reasonCode,
+    arrivalTime: record.arrivalTime,
+    at: Date.now(),
+  };
   localStorage.setItem(DELAY_STORAGE_KEY, JSON.stringify(data));
 }
 
@@ -264,19 +269,68 @@ function formatClock(ts) {
   return `${padTwo(d.getHours())}:${padTwo(d.getMinutes())}`;
 }
 
-// 分数選択肢。label は選択ボタンの表示、minutes はサーバーへ送る値、
-// confirmLabel は確認文に入れる表現。30分はサーバーが送るLINE文面が
-// 「30分以上遅れる見込みです」なので、確認文も「30分以上遅れます」に揃える
-const DELAY_OPTIONS = [
-  { minutes: 10, label: "10分ほど遅れます", confirmLabel: "10分ほど遅れます" },
-  { minutes: 20, label: "20分ほど遅れます", confirmLabel: "20分ほど遅れます" },
-  { minutes: 30, label: "30分以上遅れます", confirmLabel: "30分以上遅れます" },
+// 宛先。client=利用者（ご自宅・グループホーム）へ LINE、
+// office=事業所へ電話連絡を依頼（福祉園など、利用者側に LINE が無い先）
+const DELAY_DESTINATIONS = [
+  { destination: "client", label: "ご自宅・グループホームへ連絡", confirmLabel: "ご自宅・GHへ連絡します" },
+  { destination: "office", label: "事業所へ電話を依頼（福祉園など）", confirmLabel: "事業所へ電話連絡を依頼します" },
 ];
 
+// 理由コード。code はサーバー /api/delay-notify の REASON_MAP のキーと
+// 完全に一致していること（不一致は 400「reasonCode が不正です」になる）。
+// 利用者へ送る文面のやわらげはサーバー側が持つので、ここは現場の言葉のまま。
+const DELAY_REASONS = [
+  { code: "prev_support", label: "前の支援が長引いています" },
+  { code: "traffic", label: "渋滞" },
+  { code: "train", label: "電車遅延" },
+  { code: "vehicle", label: "車のトラブル" },
+  { code: "sick", label: "体調不良" },
+  { code: "overslept", label: "寝坊" },
+  { code: "other", label: "その他" },
+];
+
+const ARRIVAL_QUICK_OFFSETS = [10, 20, 30];
+
+function getReasonLabel(code) {
+  const found = DELAY_REASONS.find(function (r) { return r.code === code; });
+  return found ? found.label : code;
+}
+
+// active は入力途中の下書きも兼ねる。
+// { item, destination, reasonCode, reasonNote, arrivalTime }
+// 確認画面から「戻る」で入力画面に戻っても値が消えないよう、
+// 入力は都度 active に書き戻す。
 const delaySheet = {
-  active: null,   // { item } 送信対象
+  active: null,
   sending: false, // 送信中は外側タップで閉じない
 };
+
+/** "HH:MM" / "HH:MM:SS" → 0時からの分。読めなければ null */
+function parseHm(value) {
+  const matched = /^(\d{1,2}):(\d{2})/.exec(String(value ?? "").trim());
+  if (!matched) return null;
+
+  const hour = Number(matched[1]);
+  const minute = Number(matched[2]);
+  if (hour > 23 || minute > 59) return null;
+
+  return hour * 60 + minute;
+}
+
+/** 0時からの分 → "HH:MM"（24時をまたいだら 0 時に戻す） */
+function formatHm(totalMinutes) {
+  const wrapped = ((totalMinutes % 1440) + 1440) % 1440;
+  return `${padTwo(Math.floor(wrapped / 60))}:${padTwo(wrapped % 60)}`;
+}
+
+/** 到着時刻候補の基準。予定開始時刻が読めないときだけ現在時刻に倒す */
+function getArrivalBaseMinutes(item) {
+  const start = parseHm(item.startTime);
+  if (start !== null) return start;
+
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
 
 function ensureDelaySheet() {
   if (document.getElementById("delay-overlay")) return;
@@ -307,11 +361,17 @@ function setDelayTitle(text) {
 
 function openDelaySheet(item) {
   ensureDelaySheet();
-  delaySheet.active = { item };
+  delaySheet.active = {
+    item,
+    destination: "",
+    reasonCode: "",
+    reasonNote: "",
+    arrivalTime: "",
+  };
   delaySheet.sending = false;
   document.getElementById("delay-overlay").hidden = false;
   document.body.style.overflow = "hidden";
-  renderDelayChoose();
+  renderDelayDestination();
 }
 
 function closeDelaySheet() {
@@ -322,81 +382,288 @@ function closeDelaySheet() {
   delaySheet.sending = false;
 }
 
-// ステップ1: 分数を選ぶ
-function renderDelayChoose() {
-  const item = delaySheet.active.item;
-  const name = getDisplayValue(item.userName, "利用者様");
-  setDelayTitle(`${name} に遅延の連絡をします`);
+// ステップ1: 宛先（誰に連絡するか）を選ぶ
+function renderDelayDestination() {
+  const draft = delaySheet.active;
+  const name = getDisplayValue(draft.item.userName, "利用者様");
+  setDelayTitle(`${name} への連絡方法を選んでください`);
 
   const body = document.getElementById("delay-body");
   body.innerHTML = "";
 
-  DELAY_OPTIONS.forEach(function (opt) {
+  DELAY_DESTINATIONS.forEach(function (opt) {
     const btn = document.createElement("button");
+    btn.type = "button";
     btn.className = "delay-opt";
     btn.textContent = opt.label;
     btn.addEventListener("click", function () {
-      renderDelayConfirm(opt);
+      draft.destination = opt.destination;
+      renderDelayInput();
     });
     body.appendChild(btn);
   });
 
   const cancel = document.createElement("button");
+  cancel.type = "button";
   cancel.className = "delay-cancel";
   cancel.textContent = "キャンセル";
   cancel.addEventListener("click", closeDelaySheet);
   body.appendChild(cancel);
 }
 
-// ステップ2: 確認
-function renderDelayConfirm(option) {
-  const minutes = option.minutes;
-  const item = delaySheet.active.item;
+// ステップ2: 理由（必須）と到着予定時刻（必須）を入力する
+function renderDelayInput() {
+  const draft = delaySheet.active;
+  const item = draft.item;
   const name = getDisplayValue(item.userName, "利用者様");
-  setDelayTitle(`${name} に遅延の連絡をします`);
+  setDelayTitle(`${name} への連絡内容を入力してください`);
 
   const body = document.getElementById("delay-body");
   body.innerHTML = "";
 
-  const text = document.createElement("p");
-  text.className = "delay-confirm-text";
-  text.textContent = `${name} に『${option.confirmLabel}』と送信します。よろしいですか？`;
-  body.appendChild(text);
+  // ---- 理由（ラジオ的挙動。選べるのは常に1つ） ----
+  const reasonLabel = document.createElement("div");
+  reasonLabel.className = "delay-section-label";
+  reasonLabel.textContent = "遅れる理由（必須）";
+  body.appendChild(reasonLabel);
+
+  const reasonList = document.createElement("div");
+  reasonList.className = "delay-reason-list";
+  reasonList.setAttribute("role", "radiogroup");
+  reasonList.setAttribute("aria-label", "遅れる理由");
+
+  const reasonButtons = [];
+  DELAY_REASONS.forEach(function (reason) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "delay-reason-opt";
+    btn.textContent = reason.label;
+    btn.setAttribute("role", "radio");
+    btn.setAttribute("aria-checked", "false");
+    btn.addEventListener("click", function () {
+      draft.reasonCode = reason.code;
+      syncReasonSelection();
+      updateSendState();
+    });
+    reasonButtons.push({ code: reason.code, element: btn });
+    reasonList.appendChild(btn);
+  });
+  body.appendChild(reasonList);
+
+  // 「その他」を選んだときだけ出る自由入力。任意なので空でも送れる
+  const note = document.createElement("textarea");
+  note.className = "delay-note";
+  note.rows = 3;
+  note.placeholder = "その他の理由（任意・空欄のままでも送れます）";
+  note.value = draft.reasonNote || "";
+  note.addEventListener("input", function () {
+    draft.reasonNote = note.value;
+  });
+  body.appendChild(note);
+
+  // ---- 到着予定時刻 ----
+  const timeLabel = document.createElement("div");
+  timeLabel.className = "delay-section-label";
+  timeLabel.textContent = "到着予定時刻（必須）";
+  body.appendChild(timeLabel);
+
+  // 予定開始時刻からの候補。押すと下の time 入力にも反映する
+  const baseMinutes = getArrivalBaseMinutes(item);
+  const quickRow = document.createElement("div");
+  quickRow.className = "delay-quick-row";
+
+  const quickButtons = [];
+  ARRIVAL_QUICK_OFFSETS.forEach(function (offset) {
+    const value = formatHm(baseMinutes + offset);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "delay-quick";
+    btn.innerHTML = `<span class="delay-quick-offset">+${offset}分</span><span class="delay-quick-time">${escapeHtml(value)}</span>`;
+    btn.addEventListener("click", function () {
+      draft.arrivalTime = value;
+      timeInput.value = value;
+      syncQuickSelection();
+      updateSendState();
+    });
+    quickButtons.push({ value, element: btn });
+    quickRow.appendChild(btn);
+  });
+  body.appendChild(quickRow);
+
+  // 手入力・iOSのドラム・音声入力はこの input が受ける。
+  // 最終的にサーバーへ送るのは常にこの input の値
+  const timeInput = document.createElement("input");
+  timeInput.type = "time";
+  timeInput.className = "delay-time-input";
+  timeInput.setAttribute("aria-label", "到着予定時刻");
+  timeInput.value = draft.arrivalTime || "";
+  timeInput.addEventListener("input", function () {
+    draft.arrivalTime = timeInput.value;
+    syncQuickSelection();
+    updateSendState();
+  });
+  timeInput.addEventListener("change", function () {
+    draft.arrivalTime = timeInput.value;
+    syncQuickSelection();
+    updateSendState();
+  });
+  body.appendChild(timeInput);
+
+  // input[type=time] 非対応ブラウザはただのテキスト欄になる。
+  // その場合だけ手入力が HH:MM でないことがあるので、送る前に止める
+  const timeError = document.createElement("p");
+  timeError.className = "delay-inline-error";
+  timeError.textContent = "到着予定時刻は 14:20 のように入力してください。";
+  timeError.hidden = true;
+  body.appendChild(timeError);
+
+  // ---- 送信 / 戻る ----
+  const send = document.createElement("button");
+  send.type = "button";
+  send.className = "delay-opt delay-opt--send";
+  send.textContent = "確認へ進む";
+  send.addEventListener("click", function () {
+    if (!draft.reasonCode || !draft.arrivalTime) return;
+
+    const parsed = parseHm(draft.arrivalTime);
+    if (parsed === null) {
+      timeError.hidden = false;
+      return;
+    }
+
+    timeError.hidden = true;
+    draft.arrivalTime = formatHm(parsed); // "9:05" などを "09:05" に揃える
+    renderDelayConfirm();
+  });
+  body.appendChild(send);
+
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "delay-cancel";
+  back.textContent = "戻る";
+  back.addEventListener("click", renderDelayDestination);
+  body.appendChild(back);
+
+  function syncReasonSelection() {
+    reasonButtons.forEach(function (entry) {
+      const selected = entry.code === draft.reasonCode;
+      entry.element.classList.toggle("is-selected", selected);
+      entry.element.setAttribute("aria-checked", selected ? "true" : "false");
+    });
+    // その他以外を選んだら自由入力は隠す（送信時も送らない）
+    note.hidden = draft.reasonCode !== "other";
+  }
+
+  function syncQuickSelection() {
+    quickButtons.forEach(function (entry) {
+      entry.element.classList.toggle("is-selected", entry.value === draft.arrivalTime);
+    });
+  }
+
+  function updateSendState() {
+    send.disabled = !draft.reasonCode || !draft.arrivalTime;
+  }
+
+  syncReasonSelection();
+  syncQuickSelection();
+  updateSendState();
+}
+
+/** その他以外を選んでいるときは自由入力を送らない（切り替え前の入力が残るため） */
+function getEffectiveReasonNote(draft) {
+  if (draft.reasonCode !== "other") return "";
+  return (draft.reasonNote || "").trim();
+}
+
+// ステップ3: 確認
+function renderDelayConfirm() {
+  const draft = delaySheet.active;
+  const name = getDisplayValue(draft.item.userName, "利用者様");
+  setDelayTitle(`${name} への連絡内容を確認してください`);
+
+  const body = document.getElementById("delay-body");
+  body.innerHTML = "";
+
+  const destination = DELAY_DESTINATIONS.find(function (d) {
+    return d.destination === draft.destination;
+  });
+  const note = getEffectiveReasonNote(draft);
+  const reasonText = note
+    ? `${getReasonLabel(draft.reasonCode)}（${note}）`
+    : getReasonLabel(draft.reasonCode);
+
+  const lines = [
+    `${name}へ`,
+    destination ? destination.confirmLabel : "",
+    `理由: ${reasonText}`,
+    `到着予定: ${draft.arrivalTime}`,
+  ].filter(Boolean);
+
+  const box = document.createElement("div");
+  box.className = "delay-confirm-box";
+  lines.forEach(function (line) {
+    const row = document.createElement("p");
+    row.className = "delay-confirm-text";
+    row.textContent = line;
+    box.appendChild(row);
+  });
+  body.appendChild(box);
 
   const send = document.createElement("button");
+  send.type = "button";
   send.className = "delay-opt delay-opt--send";
   send.textContent = "送信する";
 
   const back = document.createElement("button");
+  back.type = "button";
   back.className = "delay-cancel";
   back.textContent = "戻る";
-  back.addEventListener("click", renderDelayChoose);
+  back.addEventListener("click", renderDelayInput);
 
   // 二重タップ防止: 送信開始で両ボタンを disabled
   send.addEventListener("click", function () {
     send.disabled = true;
     back.disabled = true;
     send.textContent = "送信中...";
-    submitDelay(item, minutes);
+    submitDelay();
   });
 
   body.appendChild(send);
   body.appendChild(back);
 }
 
-async function submitDelay(item, minutes) {
+async function submitDelay() {
+  const draft = delaySheet.active;
+  const item = draft.item;
+  const payload = {
+    scheduleId: item.id,
+    destination: draft.destination,
+    reasonCode: draft.reasonCode,
+    reasonNote: getEffectiveReasonNote(draft) || null,
+    arrivalTime: draft.arrivalTime,
+    helperName: item.helperName ?? "",
+  };
+
   delaySheet.sending = true;
-  const result = await postDelayNotify(item, minutes);
+  const result = await postDelayNotify(payload);
   delaySheet.sending = false;
 
   // 送信中は閉じられないので active は生きているが、念のため確認
   if (!delaySheet.active) return;
 
   if (result.kind === "sent") {
-    // バッジは localStorage から復元する方式なので、保存 → 再描画で反映
-    markDelaySent(state.date, item.id, minutes);
-    closeDelaySheet();
+    // バッジは localStorage から復元する方式なので、保存 → 再描画で反映。
+    // シートは閉じずに結果文言を見せる（届いたことを目で確認してから閉じる）
+    markDelaySent(state.date, item.id, {
+      destination: draft.destination,
+      reasonCode: draft.reasonCode,
+      arrivalTime: draft.arrivalTime,
+    });
     render();
+    const fallback = draft.destination === "office"
+      ? "事業所へ電話連絡を依頼しました。"
+      : `${getDisplayValue(item.userName, "利用者様")}へ連絡しました。`;
+    showDelayMessage(result.message || fallback, false);
     return;
   }
 
@@ -413,8 +680,10 @@ async function submitDelay(item, minutes) {
     danger = true;
   } else if (result.kind === "conflict") {
     text = result.message || "この予定はすでに連絡済みです。";
-    if (result.previous && result.previous.minutes != null) {
-      text += `（${result.previous.minutes}分遅れで連絡済み）`;
+    if (result.previous && result.previous.destination === "office") {
+      text += "（事業所への電話依頼が記録されています）";
+    } else if (result.previous && result.previous.destination === "client") {
+      text += "（ご自宅・GHへの連絡が記録されています）";
     }
   } else {
     text = result.message || "送信できませんでした。事業所へご連絡ください。";
@@ -440,15 +709,17 @@ function showDelayMessage(text, danger) {
 }
 
 /**
- * /api/delay-notify を叩く。戻り値は
- *   { kind: "sent",     message, minutes }
+ * /api/delay-notify を叩く。payload は
+ *   { scheduleId, destination, reasonCode, reasonNote, arrivalTime, helperName }
+ * 戻り値は
+ *   { kind: "sent",     message }
  *   { kind: "phone",    message }            … needsPhoneCall
  *   { kind: "conflict", message, previous }  … 409 連絡済み
  *   { kind: "error",    message }            … その他
  *   { kind: "timeout" }                      … 15秒超過 / 通信失敗 / JSON パース失敗
  * のいずれか。timeout は「確認できなかった」を意味し、未送信とは限らない。
  */
-async function postDelayNotify(item, minutes) {
+async function postDelayNotify(payload) {
   const controller = new AbortController();
   const timer = setTimeout(function () { controller.abort(); }, DELAY_FETCH_TIMEOUT_MS);
 
@@ -460,11 +731,7 @@ async function postDelayNotify(item, minutes) {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({
-        scheduleId: item.id,
-        minutes,
-        helperName: item.helperName ?? "",
-      }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (error) {
@@ -485,7 +752,7 @@ async function postDelayNotify(item, minutes) {
   }
 
   if (data && data.sent === true) {
-    return { kind: "sent", message: data.message, minutes };
+    return { kind: "sent", message: data.message };
   }
   if (data && data.needsPhoneCall === true) {
     return { kind: "phone", message: data.message };
@@ -513,8 +780,14 @@ function renderItems() {
     const numericId = Number(item.id);
     const hasDelayId = Number.isInteger(numericId) && numericId > 0;
     const delayRecord = hasDelayId ? getDelayRecord(state.date, item.id) : null;
+    // destination が無いのは旧仕様（分数選択）で保存されたバッジ。利用者連絡扱いにする
+    const delayBadgeText = delayRecord && delayRecord.destination === "office"
+      ? `✅ ${formatClock(delayRecord.at)} 電話依頼済`
+      : delayRecord
+        ? `✅ ${formatClock(delayRecord.at)} 連絡済`
+        : "";
     const delayHtml = delayRecord
-      ? `<span class="delay-badge">✅ ${escapeHtml(delayRecord.minutes)}分遅れ・${escapeHtml(formatClock(delayRecord.at))} 連絡済</span>`
+      ? `<span class="delay-badge">${escapeHtml(delayBadgeText)}</span>`
       : hasDelayId
         ? `<button class="delay-btn" data-index="${index}">📢 遅れる連絡</button>`
         : "";

@@ -372,10 +372,129 @@
       .delay-cancel:hover { background: rgba(0, 0, 0, 0.04); }
       .delay-cancel:disabled { opacity: 0.6; cursor: default; }
 
+      /* 遅延連絡シート内の入力フォーム（理由・到着予定時刻） */
+      .delay-section-label {
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: var(--muted);
+      }
+
+      .delay-reason-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .delay-reason-opt {
+        min-height: 46px;
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+      .delay-reason-opt:hover { background: rgba(0, 0, 0, 0.03); }
+      .delay-reason-opt.is-selected {
+        color: #fff;
+        background: #e08a3c;
+        border-color: #cc7a2f;
+        box-shadow: 0 2px 8px rgba(224, 138, 60, 0.28);
+      }
+
+      .delay-note {
+        width: 100%;
+        padding: 12px 14px;
+        font-family: inherit;
+        font-size: 1rem;
+        line-height: 1.6;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        resize: vertical;
+      }
+      .delay-note[hidden] { display: none; }
+
+      .delay-quick-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .delay-quick {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-height: 52px;
+        padding: 8px 6px;
+        font-family: inherit;
+        color: var(--text);
+        background: var(--beige);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+      .delay-quick:hover { background: #efe0cd; }
+      .delay-quick.is-selected {
+        color: #fff;
+        background: #e08a3c;
+        border-color: #cc7a2f;
+      }
+      .delay-quick-offset {
+        font-size: 0.8rem;
+        font-weight: 700;
+        opacity: 0.85;
+      }
+      .delay-quick-time {
+        font-size: 1.05rem;
+        font-weight: 800;
+      }
+
+      .delay-time-input {
+        width: 100%;
+        min-height: 48px;
+        padding: 10px 14px;
+        font-family: inherit;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }
+
+      .delay-inline-error {
+        margin: 0;
+        font-size: 0.92rem;
+        font-weight: 700;
+        line-height: 1.6;
+        color: var(--danger);
+      }
+      .delay-inline-error[hidden] { display: none; }
+
+      .delay-confirm-box {
+        display: grid;
+        gap: 6px;
+        padding: 14px 16px;
+        background: rgba(0, 0, 0, 0.03);
+        border-radius: 14px;
+      }
+
       .delay-confirm-text {
         margin: 0 0 4px;
         font-size: 1rem;
         line-height: 1.7;
+      }
+      .delay-confirm-box .delay-confirm-text {
+        margin: 0;
+        font-weight: 700;
       }
       .delay-result {
         margin: 0;
