@@ -379,6 +379,45 @@
         color: var(--muted);
       }
 
+      /* 連絡の種類（開始が遅れます / 終了が遅れます）。横並び2つ */
+      .delay-type-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .delay-type-opt {
+        flex: 1 1 0;
+        min-height: 48px;
+        padding: 12px 10px;
+        font-family: inherit;
+        font-size: 0.98rem;
+        font-weight: 700;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+      .delay-type-opt:hover:not(:disabled) { background: rgba(0, 0, 0, 0.03); }
+      .delay-type-opt.is-selected {
+        color: #fff;
+        background: #e08a3c;
+        border-color: #cc7a2f;
+        box-shadow: 0 2px 8px rgba(224, 138, 60, 0.28);
+      }
+      .delay-type-opt:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .delay-inline-hint {
+        margin: 0;
+        font-size: 0.88rem;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
       .delay-reason-list {
         display: grid;
         gap: 8px;

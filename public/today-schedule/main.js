@@ -17,10 +17,18 @@ function getDelaySent() {
   } catch { return {}; }
 }
 
+// バッジのキーは種別込み。開始遅れを送ったあとに終了遅れも送れるので、
+// 種別を含めないと後から送った方でバッジが上書きされて消えてしまう。
+// 旧キー（種別なし）で保存された記録は開始遅れ扱いで読む。
+function buildDelayKey(dateStr, scheduleId, noticeType) {
+  return `${dateStr}_${scheduleId}_${noticeType}`;
+}
+
 function markDelaySent(dateStr, scheduleId, record) {
   const data = getDelaySent();
-  data[`${dateStr}_${scheduleId}`] = {
+  data[buildDelayKey(dateStr, scheduleId, record.noticeType)] = {
     destination: record.destination,
+    noticeType: record.noticeType,
     reasonCode: record.reasonCode,
     arrivalTime: record.arrivalTime,
     at: Date.now(),
@@ -28,9 +36,17 @@ function markDelaySent(dateStr, scheduleId, record) {
   localStorage.setItem(DELAY_STORAGE_KEY, JSON.stringify(data));
 }
 
-function getDelayRecord(dateStr, scheduleId) {
+function getDelayRecord(dateStr, scheduleId, noticeType) {
   const data = getDelaySent();
-  return data[`${dateStr}_${scheduleId}`] || null;
+  const record = data[buildDelayKey(dateStr, scheduleId, noticeType)];
+  if (record) return record;
+
+  // 旧キー（種別導入前）のフォールバック。開始遅れとしてのみ復元する
+  if (noticeType === "start") {
+    return data[`${dateStr}_${scheduleId}`] || null;
+  }
+
+  return null;
 }
 
 function getCalAdded() {
@@ -289,6 +305,32 @@ const DELAY_REASONS = [
   { code: "other", label: "その他" },
 ];
 
+// 連絡の種別。start=開始が遅れる（基準は開始時刻）/ end=終了が遅れる（基準は終了時刻）。
+// サーバーは noticeType を必須で検証するので、送らないと 400 になる。
+const DELAY_NOTICE_TYPES = [
+  {
+    noticeType: "start",
+    label: "開始が遅れます",
+    timeLabel: "到着予定時刻",
+    confirmLabel: "開始遅れ",
+    confirmTimeLabel: "到着予定",
+    badgeLabel: "連絡済",
+  },
+  {
+    noticeType: "end",
+    label: "終了が遅れます",
+    timeLabel: "終了予定時刻",
+    confirmLabel: "終了遅れ",
+    confirmTimeLabel: "終了予定",
+    badgeLabel: "終了遅れ連絡済",
+  },
+];
+
+function getNoticeType(noticeType) {
+  return DELAY_NOTICE_TYPES.find(function (t) { return t.noticeType === noticeType; })
+    || DELAY_NOTICE_TYPES[0];
+}
+
 const ARRIVAL_QUICK_OFFSETS = [10, 20, 30];
 
 function getReasonLabel(code) {
@@ -323,13 +365,22 @@ function formatHm(totalMinutes) {
   return `${padTwo(Math.floor(wrapped / 60))}:${padTwo(wrapped % 60)}`;
 }
 
-/** 到着時刻候補の基準。予定開始時刻が読めないときだけ現在時刻に倒す */
-function getArrivalBaseMinutes(item) {
-  const start = parseHm(item.startTime);
-  if (start !== null) return start;
+/**
+ * 候補時刻の基準。開始遅れは予定開始、終了遅れは予定終了が基準。
+ * 終了時刻が無い予定では「終了が遅れます」を選べないようにしているので、
+ * 現在時刻へのフォールバックは開始遅れのときだけ効く。
+ */
+function getArrivalBaseMinutes(item, noticeType) {
+  const base = parseHm(noticeType === "end" ? item.endTime : item.startTime);
+  if (base !== null) return base;
 
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes();
+}
+
+/** 終了時刻が無い予定では終了遅れを選べない（サーバーも 400 で弾く） */
+function canSelectEndNotice(item) {
+  return parseHm(item.endTime) !== null;
 }
 
 function ensureDelaySheet() {
@@ -364,6 +415,7 @@ function openDelaySheet(item) {
   delaySheet.active = {
     item,
     destination: "",
+    noticeType: "start",   // 運用上ほとんどが開始遅れなので既定はこちら
     reasonCode: "",
     reasonNote: "",
     arrivalTime: "",
@@ -421,6 +473,53 @@ function renderDelayInput() {
   const body = document.getElementById("delay-body");
   body.innerHTML = "";
 
+  // ---- 種別（開始が遅れる / 終了が遅れる） ----
+  const typeLabel = document.createElement("div");
+  typeLabel.className = "delay-section-label";
+  typeLabel.textContent = "連絡の種類（必須）";
+  body.appendChild(typeLabel);
+
+  const typeRow = document.createElement("div");
+  typeRow.className = "delay-type-row";
+  typeRow.setAttribute("role", "radiogroup");
+  typeRow.setAttribute("aria-label", "連絡の種類");
+
+  const endSelectable = canSelectEndNotice(item);
+  const typeButtons = [];
+
+  DELAY_NOTICE_TYPES.forEach(function (type) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "delay-type-opt";
+    btn.textContent = type.label;
+    btn.setAttribute("role", "radio");
+    btn.setAttribute("aria-checked", "false");
+
+    if (type.noticeType === "end" && !endSelectable) {
+      btn.disabled = true;
+    }
+
+    btn.addEventListener("click", function () {
+      if (draft.noticeType === type.noticeType) return;
+      draft.noticeType = type.noticeType;
+      // 基準時刻が変わるので、選択済みの時刻は必ず捨てる。
+      // 14:00 基準で選んだ 14:20 が 16:00 基準では「20分前倒し」になってしまうため
+      draft.arrivalTime = "";
+      renderDelayInput();
+    });
+
+    typeButtons.push({ noticeType: type.noticeType, element: btn });
+    typeRow.appendChild(btn);
+  });
+  body.appendChild(typeRow);
+
+  if (!endSelectable) {
+    const hint = document.createElement("p");
+    hint.className = "delay-inline-hint";
+    hint.textContent = "この予定は終了時刻が未設定のため「終了が遅れます」は選べません。";
+    body.appendChild(hint);
+  }
+
   // ---- 理由（ラジオ的挙動。選べるのは常に1つ） ----
   const reasonLabel = document.createElement("div");
   reasonLabel.className = "delay-section-label";
@@ -461,14 +560,15 @@ function renderDelayInput() {
   });
   body.appendChild(note);
 
-  // ---- 到着予定時刻 ----
+  // ---- 到着（終了）予定時刻 ----
+  const typeConfig = getNoticeType(draft.noticeType);
   const timeLabel = document.createElement("div");
   timeLabel.className = "delay-section-label";
-  timeLabel.textContent = "到着予定時刻（必須）";
+  timeLabel.textContent = `${typeConfig.timeLabel}（必須）`;
   body.appendChild(timeLabel);
 
-  // 予定開始時刻からの候補。押すと下の time 入力にも反映する
-  const baseMinutes = getArrivalBaseMinutes(item);
+  // 基準時刻（開始遅れ=開始 / 終了遅れ=終了）からの候補。押すと下の time 入力にも反映する
+  const baseMinutes = getArrivalBaseMinutes(item, draft.noticeType);
   const quickRow = document.createElement("div");
   quickRow.className = "delay-quick-row";
 
@@ -495,7 +595,7 @@ function renderDelayInput() {
   const timeInput = document.createElement("input");
   timeInput.type = "time";
   timeInput.className = "delay-time-input";
-  timeInput.setAttribute("aria-label", "到着予定時刻");
+  timeInput.setAttribute("aria-label", typeConfig.timeLabel);
   timeInput.value = draft.arrivalTime || "";
   timeInput.addEventListener("input", function () {
     draft.arrivalTime = timeInput.value;
@@ -513,7 +613,7 @@ function renderDelayInput() {
   // その場合だけ手入力が HH:MM でないことがあるので、送る前に止める
   const timeError = document.createElement("p");
   timeError.className = "delay-inline-error";
-  timeError.textContent = "到着予定時刻は 14:20 のように入力してください。";
+  timeError.textContent = `${typeConfig.timeLabel}は 14:20 のように入力してください。`;
   timeError.hidden = true;
   body.appendChild(timeError);
 
@@ -544,6 +644,14 @@ function renderDelayInput() {
   back.addEventListener("click", renderDelayDestination);
   body.appendChild(back);
 
+  function syncTypeSelection() {
+    typeButtons.forEach(function (entry) {
+      const selected = entry.noticeType === draft.noticeType;
+      entry.element.classList.toggle("is-selected", selected);
+      entry.element.setAttribute("aria-checked", selected ? "true" : "false");
+    });
+  }
+
   function syncReasonSelection() {
     reasonButtons.forEach(function (entry) {
       const selected = entry.code === draft.reasonCode;
@@ -564,6 +672,7 @@ function renderDelayInput() {
     send.disabled = !draft.reasonCode || !draft.arrivalTime;
   }
 
+  syncTypeSelection();
   syncReasonSelection();
   syncQuickSelection();
   updateSendState();
@@ -587,6 +696,7 @@ function renderDelayConfirm() {
   const destination = DELAY_DESTINATIONS.find(function (d) {
     return d.destination === draft.destination;
   });
+  const typeConfig = getNoticeType(draft.noticeType);
   const note = getEffectiveReasonNote(draft);
   const reasonText = note
     ? `${getReasonLabel(draft.reasonCode)}（${note}）`
@@ -595,8 +705,9 @@ function renderDelayConfirm() {
   const lines = [
     `${name}へ`,
     destination ? destination.confirmLabel : "",
+    `種類: ${typeConfig.confirmLabel}`,
     `理由: ${reasonText}`,
-    `到着予定: ${draft.arrivalTime}`,
+    `${typeConfig.confirmTimeLabel}: ${draft.arrivalTime}`,
   ].filter(Boolean);
 
   const box = document.createElement("div");
@@ -635,9 +746,12 @@ function renderDelayConfirm() {
 async function submitDelay() {
   const draft = delaySheet.active;
   const item = draft.item;
+  // minutes は送らない。基準時刻（開始／終了）はサーバーがDBから引いた値が正なので、
+  // オフセットの計算もサーバー側に任せる（画面の値とDBがズレても記録が食い違わない）
   const payload = {
     scheduleId: item.id,
     destination: draft.destination,
+    noticeType: draft.noticeType,
     reasonCode: draft.reasonCode,
     reasonNote: getEffectiveReasonNote(draft) || null,
     arrivalTime: draft.arrivalTime,
@@ -656,6 +770,7 @@ async function submitDelay() {
     // シートは閉じずに結果文言を見せる（届いたことを目で確認してから閉じる）
     markDelaySent(state.date, item.id, {
       destination: draft.destination,
+      noticeType: draft.noticeType,
       reasonCode: draft.reasonCode,
       arrivalTime: draft.arrivalTime,
     });
@@ -779,18 +894,25 @@ function renderItems() {
     // なので数値として妥当な正の整数IDのときだけボタン/バッジを出す。
     const numericId = Number(item.id);
     const hasDelayId = Number.isInteger(numericId) && numericId > 0;
-    const delayRecord = hasDelayId ? getDelayRecord(state.date, item.id) : null;
+    // 開始遅れと終了遅れは別々に送れるので、バッジも種別ごとに出す（最大2つ）。
     // destination が無いのは旧仕様（分数選択）で保存されたバッジ。利用者連絡扱いにする
-    const delayBadgeText = delayRecord && delayRecord.destination === "office"
-      ? `✅ ${formatClock(delayRecord.at)} 電話依頼済`
-      : delayRecord
-        ? `✅ ${formatClock(delayRecord.at)} 連絡済`
-        : "";
-    const delayHtml = delayRecord
-      ? `<span class="delay-badge">${escapeHtml(delayBadgeText)}</span>`
-      : hasDelayId
-        ? `<button class="delay-btn" data-index="${index}">📢 遅れる連絡</button>`
-        : "";
+    const delayBadges = hasDelayId
+      ? DELAY_NOTICE_TYPES.map(function (type) {
+          const record = getDelayRecord(state.date, item.id, type.noticeType);
+          if (!record) return "";
+
+          const label = record.destination === "office"
+            ? (type.noticeType === "end" ? "終了遅れ電話依頼済" : "電話依頼済")
+            : type.badgeLabel;
+
+          return `<span class="delay-badge">${escapeHtml(`✅ ${formatClock(record.at)} ${label}`)}</span>`;
+        }).filter(Boolean)
+      : [];
+
+    // 未送信の種別が残っていればボタンも出す（開始だけ送った後に終了も送れるように）
+    const delayHtml = hasDelayId && delayBadges.length < DELAY_NOTICE_TYPES.length
+      ? delayBadges.join("") + `<button class="delay-btn" data-index="${index}">📢 遅れる連絡</button>`
+      : delayBadges.join("");
 
     const coHelpers = Array.isArray(item.coHelpers) ? item.coHelpers : [];
     const coHelpersHtml = coHelpers.length > 0
