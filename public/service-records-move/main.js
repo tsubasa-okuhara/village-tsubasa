@@ -146,20 +146,6 @@ const physicalStateElement = getRequiredElement("structured-physical-state");
 const mentalStateElement = getRequiredElement("structured-mental-state");
 const riskFlagsElement = getRequiredElement("structured-risk-flags");
 const assistLevelElement = getRequiredElement("structured-assist-level");
-const actionResultElement = getRequiredElement("structured-action-result");
-const difficultyElement = getRequiredElement("structured-difficulty");
-const timeOfDayElement = getRequiredElement("structured-time-of-day");
-const actionTypeElement = getRequiredElement("structured-action-type");
-const actionDetailElement = getRequiredElement("structured-action-detail");
-const actionDetailOtherElement = getRequiredElement("structured-action-detail-other");
-const actorElement = getRequiredElement("structured-actor");
-const targetElement = getRequiredElement("structured-target");
-const actionStartTimeElement = getRequiredElement("structured-action-start-time");
-const actionEndTimeElement = getRequiredElement("structured-action-end-time");
-const durationElement = getRequiredElement("structured-duration");
-const locationElement = getRequiredElement("structured-location");
-const temperatureElement = getRequiredElement("structured-temperature");
-const locationNoteElement = getRequiredElement("structured-location-note");
 const eventTypeElement = getRequiredElement("structured-event-type");
 const beforeStateElement = getRequiredElement("structured-before-state");
 const afterActionElement = getRequiredElement("structured-after-action");
@@ -192,27 +178,12 @@ function renderRiskFlagOptions() {
     .join("");
 }
 
-function renderActionDetailOptions() {
-  const actionType = String(actionTypeElement.value || "");
-  const actionDetails =
-    state.structuredOptions.actionDetailsByType[actionType] || [];
-  fillSelectOptions(actionDetailElement, actionDetails, "選択してください");
-}
-
 function renderStructuredOptions() {
   fillSelectOptions(physicalStateElement, state.structuredOptions.physicalStates, "選択してください");
   fillSelectOptions(mentalStateElement, state.structuredOptions.mentalStates, "選択してください");
   fillSelectOptions(assistLevelElement, state.structuredOptions.assistLevels, "選択してください");
-  fillSelectOptions(actionResultElement, state.structuredOptions.actionResults, "選択してください");
-  fillSelectOptions(difficultyElement, state.structuredOptions.difficulties, "選択してください");
-  fillSelectOptions(timeOfDayElement, state.structuredOptions.timeOfDay, "選択してください");
-  fillSelectOptions(actionTypeElement, state.structuredOptions.actionTypes, "選択してください");
-  fillSelectOptions(actorElement, state.structuredOptions.actors, "選択してください");
-  fillSelectOptions(targetElement, state.structuredOptions.targets, "選択してください");
-  fillSelectOptions(locationElement, state.structuredOptions.locations, "選択してください");
   fillSelectOptions(eventTypeElement, state.structuredOptions.eventTypes, "なし");
   renderRiskFlagOptions();
-  renderActionDetailOptions();
 }
 
 async function loadStructuredOptions() {
@@ -258,20 +229,6 @@ function resetStructuredForm() {
   physicalStateElement.value = "";
   mentalStateElement.value = "";
   assistLevelElement.value = "";
-  actionResultElement.value = "";
-  difficultyElement.value = "";
-  timeOfDayElement.value = "";
-  actionTypeElement.value = "";
-  actionDetailElement.value = "";
-  actionDetailOtherElement.value = "";
-  actorElement.value = "helper";
-  targetElement.value = "利用者";
-  actionStartTimeElement.value = "";
-  actionEndTimeElement.value = "";
-  durationElement.value = "";
-  locationElement.value = "";
-  temperatureElement.value = "";
-  locationNoteElement.value = "";
   eventTypeElement.value = "";
   beforeStateElement.value = "";
   afterActionElement.value = "";
@@ -281,12 +238,9 @@ function resetStructuredForm() {
     .forEach(function (inputElement) {
       inputElement.checked = false;
     });
-
-  renderActionDetailOptions();
 }
 
 function buildStructuredPayload(sourceNoteId) {
-  const actionType = normalizeOptionalText(actionTypeElement.value);
   const eventType = normalizeOptionalText(eventTypeElement.value);
   const riskFlags = getCheckedValues(riskFlagsElement);
 
@@ -300,35 +254,13 @@ function buildStructuredPayload(sourceNoteId) {
     serviceDate: state.selectedTask ? state.selectedTask.serviceDate : null,
     startTime: state.selectedTask ? state.selectedTask.startTime : null,
     endTime: state.selectedTask ? state.selectedTask.endTime : null,
-    location: normalizeOptionalText(locationElement.value),
-    locationNote: normalizeOptionalText(locationNoteElement.value),
-    timeOfDay: normalizeOptionalText(timeOfDayElement.value),
-    temperature: normalizeOptionalNumber(temperatureElement.value),
     physicalState: normalizeOptionalText(physicalStateElement.value),
     mentalState: normalizeOptionalText(mentalStateElement.value),
     riskFlags,
-    actionResult: normalizeOptionalText(actionResultElement.value),
-    difficulty: normalizeOptionalText(difficultyElement.value),
     assistLevel: normalizeOptionalText(assistLevelElement.value),
     actions: [],
     irregularEvents: [],
   };
-
-  if (actionType) {
-    payload.actions.push({
-      actionType,
-      actionDetail: normalizeOptionalText(actionDetailElement.value),
-      actionDetailOther: normalizeOptionalText(actionDetailOtherElement.value),
-      actor: normalizeOptionalText(actorElement.value) || "helper",
-      target: normalizeOptionalText(targetElement.value) || "利用者",
-      startTime: normalizeOptionalText(actionStartTimeElement.value),
-      endTime: normalizeOptionalText(actionEndTimeElement.value),
-      duration: normalizeOptionalNumber(durationElement.value),
-      actionResult: payload.actionResult,
-      difficulty: payload.difficulty,
-      assistLevel: payload.assistLevel,
-    });
-  }
 
   if (eventType) {
     payload.irregularEvents.push({
@@ -342,31 +274,15 @@ function buildStructuredPayload(sourceNoteId) {
 }
 
 function hasStructuredInput() {
-  const actionStartTime = normalizeOptionalText(actionStartTimeElement.value);
-  const actionEndTime = normalizeOptionalText(actionEndTimeElement.value);
-  const duration = normalizeOptionalNumber(durationElement.value);
   const checkedRiskFlags = getCheckedValues(riskFlagsElement);
 
   return Boolean(
     normalizeOptionalText(physicalStateElement.value) ||
       normalizeOptionalText(mentalStateElement.value) ||
       normalizeOptionalText(assistLevelElement.value) ||
-      normalizeOptionalText(actionResultElement.value) ||
-      normalizeOptionalText(difficultyElement.value) ||
-      normalizeOptionalText(timeOfDayElement.value) ||
-      normalizeOptionalText(actionTypeElement.value) ||
-      normalizeOptionalText(actionDetailElement.value) ||
-      normalizeOptionalText(actionDetailOtherElement.value) ||
-      normalizeOptionalText(locationElement.value) ||
-      normalizeOptionalText(locationNoteElement.value) ||
-      normalizeOptionalNumber(temperatureElement.value) !== null ||
       normalizeOptionalText(eventTypeElement.value) ||
       normalizeOptionalText(beforeStateElement.value) ||
       normalizeOptionalText(afterActionElement.value) ||
-      actionStartTime ||
-      actionEndTime ||
-      duration !== null ||
-      String(actorElement.value || "").trim() === "user" ||
       checkedRiskFlags.length > 0
   );
 }
@@ -727,7 +643,6 @@ filterFormElement.addEventListener("submit", async function (event) {
   }
 });
 
-actionTypeElement.addEventListener("change", renderActionDetailOptions);
 generateSummaryButtonElement.addEventListener("click", generateSummary);
 entryFormElement.addEventListener("submit", function (event) {
   event.preventDefault();
