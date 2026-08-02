@@ -819,7 +819,71 @@ FK は 10 本のみ。`helper_email` / `helper_name` / `client` / `user_name` / 
 5. （多層防御・任意）`client_users.login_code` 列に対する anon の列レベル REVOKE を追加適用する。現状は RLS deny-all で読めないため不要だが、将来 RLS ポリシーを誤って緩めた場合の保険になる（**現状未適用・必須ではない**）。
 
 ---
+## 13. sub2 プロジェクトのサービス記録テーブル（2026-08-02 新設）
+
+> ⚠️ **ここだけ別の Supabase プロジェクト。** §0〜§12 は旧DB `pbqqqwwgswniuomjlhsh`。
+> 本節は **sub2 `gmellfgcyypfrtjxblla`**（他者が構築した本番環境）。混同しないこと。
+
+2026-08 以降、予定は sub2 の `schedule_entries` に一本化されているが記録側は旧DB に
+取り残されていた。この非対称を解消するため sub2 に記録テーブルを新設した。
+経緯と設計判断は `docs/HANDOFF_2026-08-02_sub2_service_records.md`。
+
+### ✅ `service_records_home` / `service_records_move`（RLS 有効）
+
+| 列 | home | move | 備考 |
+|---|---|---|---|
+| `id` uuid [PK] | ✓ | ✓ | `DEFAULT gen_random_uuid()` |
+| `record_uuid` uuid **NOT NULL UNIQUE** | ✓ | ✓ | GAS が転送シート J 列で発行。**二重保存防止の要**。アプリはこれで行を特定して UPDATE |
+| `service_date` date | ✓ | ✓ | INDEX あり |
+| `start_time` / `end_time` time | ✓ | ✓ | |
+| `helper_name` / `user_name` | ✓ | ✓ | |
+| `helper_email` | ✓ | ✓ | INDEX あり。未記入一覧の絞り込みキー |
+| `recipient_number` | ✓ | ✓ | 旧DB の `beneficiary_number` 相当（**名前が違う**） |
+| `task` | ✓ | ✓ | |
+| `condition` / `special_notes_type` / `special_notes_detail` | ✓ | ✓ | 記載基準3項目。**列だけ作成済み、書き込みは未実装** |
+| `final_note` | ✓ | — | 記録本文。**空＝未記入** |
+| `memo` | ✓ | — | 2026-08-02 追加。village-admin の `parseMemo` が形式に依存（ルール7） |
+| `summary_text` | — | ✓ | 記録本文。**空＝未記入** |
+| `notes` | — | ✓ | 2026-08-02 追加 |
+| `haisha` | — | ✓ | |
+| `transport` text[] | — | ✓ | 記載基準3項目。**書き込みは未実装** |
+| `created_at` / `updated_at` timestamptz | ✓ | ✓ | |
+
+**旧DB から持ち込まなかった列**: `status` / `schedule_task_id` / `schedule_id` /
+`source_key` / `sent_at` / `ai_summary` / `deleted_*` / `visit_key` / `schedule_entry_id`。
+理由は HANDOFF §6-6。
+
+### 旧DB との決定的な違い
+
+| | 旧DB `service_notes_*` | sub2 `service_records_*` |
+|---|---|---|
+| 行を作るのは | アプリ（保存時に INSERT） | **GAS**（転送時に本文が空の行を先に作る） |
+| アプリの操作 | INSERT + タスク表の `status` を written に更新 | **`record_uuid` で UPDATE** |
+| 未記入の判定 | `status = 'unwritten'` | **本文が NULL または空** |
+
+`status` 列は無い。`schedule_entries.id` は週シート再同期のたびに振り直されるため
+`schedule_entry_id` も持たない（HANDOFF §1「行数が動く事実」参照）。
+
+**書き込み責任の分界点**（どの列を GAS が書き、どの列をアプリが書くか）は
+HANDOFF §11 の表を参照。アプリが予定由来の列を上書きしてはいけない。
+
+### DDL
+
+- `sql/2026-08-02_sub2_service_records_add_memo_notes.sql`（`memo` / `notes` 追加・適用済み）
+- `sql/_REJECTED_2026-08-02_sub2_service_records_unified.sql` は**未採用案・実行禁止**
+- 2テーブル本体の CREATE 文はリポジトリ未取り込み（Supabase SQL Editor で直接実行）
+
+### sub2 への DDL 制約
+
+**他者が作った既存テーブル**（`schedule_entries` / `helper` / `delay_notices` 等）は
+`CREATE TABLE` のみ。`ALTER` / `DROP` / `TRUNCATE` / `DELETE` 禁止。
+**こちらが作った `service_records_*`** は nullable 列の `ADD COLUMN` まで可
+（ルール2 は適用されたまま。削除・型変更・NOT NULL 化は禁止）。
+`IF NOT EXISTS` / `OR REPLACE` は出どころに関係なく使わない。
+
+---
 ## 更新履歴
+- 2026-08-02: **別プロジェクト sub2 `gmellfgcyypfrtjxblla` に §13 を新設。** サービス記録テーブル `service_records_home`（17列）/ `service_records_move`（19列）を作成し、`memo` / `notes` を追加（`sql/2026-08-02_sub2_service_records_add_memo_notes.sql`）。旧DB `service_notes_*` の後継だが**アプリの操作が INSERT → UPDATE に変わる**のが最大の差分（GAS が `record_uuid` 付きの空行を先に作る）。`status` 列は持たず、未記入は本文が空かどうかで判定する。旧DB 側のテーブルには一切変更なし
 - 2026-06-10: SCHEMA ドキュメントの整合修正。stash pop 衝突の解決時に紛れていた未デプロイ方式（`verify_client_login` / 列レベル REVOKE）の記述を、ライブ DB 実態（`client_users_anon_all` 撤去＋RLS deny-all＋SECURITY DEFINER 関数 `client_login`、列レベル REVOKE は未適用）に統一。§0 公開関数名、§0.1 グループ分類（A=23 / B=5 / C=0 に再計算、`client_users` を B→A）、§0.2 にスナップショット脚注、§12.2 危険度表、§12.6 改善候補 1・3 を修正し、改善候補 5（多層防御として列レベル REVOKE の任意追加）を新設。コード/SQL の変更なし（ドキュメントのみ）
 - 2026-05-12: セキュリティ修正 2 件。(1) `client_users.login_code` を anon キーから読み取れない構造に変更 — Phase 3 の `client_users_anon_all (FOR ALL TO anon)` ポリシーを撤去し、SECURITY DEFINER RPC `client_login(p_name, p_code)` 経由のみで照合。RPC の返却列に `login_code` を含めない。user-schedule-app/index.html もこの RPC 呼び出しに切り替え（コミット `534edae`）。(2) `user_helper_compatibility` の RLS を有効化（ポリシー無し → service_role のみアクセス可）。GAS の対応可否シート移行は service_role 利用なので無影響。CREATE 文: `sql/2026-05-12_security_client_login_rpc_and_uhc_rls.sql`。`portal_*` テーブル群および他の既存 RLS ポリシー（schedule / helper_master / notifications / Group A 17 テーブル / schedule_claims）には変更なし
 - 2026-05-11: Supabase Management API 経由でライブスキーマを直接照会し、**§0 ライブスキーマ概況**（28 テーブル + 1 ビュー、ポリシー 6、FK 10、トリガー 7、関数 7）を追加。`schedule` / `client_users` 等の RLS 状態を「OFF」→「ON + anon ALL」に修正。`helper_priority` / `process_log` の列構成と「ポリシー名は service role なのに `TO public` で素通り」状態を明記。`client_users` の列を全 16 個列挙（`login_code` 含む）。**§12 portal_* 拡張時の診断**を新設: 名前衝突 0 件、RLS OFF は `user_helper_compatibility` のみ、anon に開いているテーブル 6 個、FK 10 本のみ・テキスト結合キーに FK 無し、改善候補 4 件を整理

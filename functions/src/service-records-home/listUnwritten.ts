@@ -1,26 +1,27 @@
 import type { Request, Response } from "express";
 
 import { RECORD_LIST_CUTOFF_DATE } from "../lib/recordCutoff";
-import { getSupabaseClient } from "../lib/supabase";
+import {
+  fetchSub2UnwrittenHomeRecords,
+  toUnwrittenHomeItem,
+  type UnwrittenHomeItem,
+} from "../lib/serviceRecordsSub2";
 
-type HomeScheduleTaskRow = {
-  id: string;
-  schedule_id: string | null;
-  service_date: string;
-  helper_name: string;
-  helper_email: string | null;
-  user_name: string;
-  start_time: string | null;
-  end_time: string | null;
-  task: string | null;
-  summary: string | null;
-  beneficiary_number: string | null;
-  status: string;
-};
+// 未記入一覧の取得元は sub2 の service_records_home。
+//
+// 旧DB の home_schedule_tasks（status='unwritten'）は見ない。理由は2つ:
+//   1. 一覧の下限が RECORD_LIST_CUTOFF_DATE = 2026-08-01 で、これは sub2 の
+//      データ境界（scheduleSource.ts の getCutoverStartDate()）と同じ日。
+//      つまり一覧に出る範囲は全部 sub2 の担当。
+//   2. 旧DB の home_schedule_tasks は 2026-08-01 以降 0 件（実測）。
+// 旧DB を併読しても常に 0 件が返るだけなので、経路ごと落として単純にしてある。
+//
+// 未記入の判定は status 列ではなく「final_note が空かどうか」。
+// GAS が本文の空な行を先に作り、アプリが UPDATE で埋める設計のため。
 
 type ListUnwrittenHomeSuccessResponse = {
   ok: true;
-  items: HomeScheduleTaskRow[];
+  items: UnwrittenHomeItem[];
 };
 
 type ListUnwrittenHomeErrorResponse = {
@@ -54,35 +55,17 @@ export async function handleListUnwrittenHome(
   }
 
   try {
-    const supabase = getSupabaseClient();
     const helperEmailFilter = getHelperEmailFilter(req);
 
-    let query = supabase
-      .from("home_schedule_tasks")
-      .select(
-        "id, schedule_id, service_date, helper_name, helper_email, user_name, start_time, end_time, task, summary, beneficiary_number, status"
-      )
-      .eq("status", "unwritten")
-      .is("deleted_at", null)
-      // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
-      .gte("service_date", RECORD_LIST_CUTOFF_DATE)
-      .order("service_date", { ascending: true })
-      .order("start_time", { ascending: true, nullsFirst: true })
-      .order("helper_name", { ascending: true });
-
-    if (helperEmailFilter) {
-      query = query.ilike("helper_email", helperEmailFilter);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw error;
-    }
+    // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
+    const rows = await fetchSub2UnwrittenHomeRecords(
+      helperEmailFilter,
+      RECORD_LIST_CUTOFF_DATE,
+    );
 
     res.status(200).json({
       ok: true,
-      items: (data ?? []) as HomeScheduleTaskRow[],
+      items: rows.map(toUnwrittenHomeItem),
     });
   } catch (error) {
     console.error("[service-records-home/unwritten] error:", error);

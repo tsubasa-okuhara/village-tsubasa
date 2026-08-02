@@ -6,7 +6,8 @@
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions,hosting",
     "deploy": "npm run build && firebase deploy --only functions,hosting",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "npm run build && node --test lib/"
   },
   "keywords": [],
   "author": "",

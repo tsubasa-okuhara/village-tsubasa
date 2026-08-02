@@ -559,7 +559,13 @@ async function doSaveRecord() {
     );
   } catch (error) {
     console.error("[service-records-move] save error:", error);
-    setStatus(saveStatusElement, "保存に失敗しました。時間をおいて再試行してください。", "is-error");
+    // サーバは「すでに保存済み」「予定が見つからない」等を日本語の message で返す。
+    // 固定文言に潰すと、再試行しても直らない理由がヘルパーに伝わらない。
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "保存に失敗しました。時間をおいて再試行してください。";
+    setStatus(saveStatusElement, message, "is-error");
     saveRetryAreaElement.hidden = false;
   }
 }

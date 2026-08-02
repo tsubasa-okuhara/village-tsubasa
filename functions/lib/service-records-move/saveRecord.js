@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleServiceRecordsMoveSave = handleServiceRecordsMoveSave;
-const supabase_1 = require("../lib/supabase");
+const scheduleSource_1 = require("../lib/scheduleSource");
+const serviceRecordsSub2_1 = require("../lib/serviceRecordsSub2");
 function hasValidBody(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -12,96 +13,52 @@ async function handleServiceRecordsMoveSave(req, res) {
     if (!hasValidBody(req.body)) {
         res.status(400).json({
             ok: false,
-            message: "invalid request body",
+            message: "保存に必要な情報が足りません。予定を選び直してください。",
         });
         return;
     }
-    const taskId = getStringValue(req.body.taskId);
-    const helperEmail = getStringValue(req.body.helperEmail);
-    const helperName = getStringValue(req.body.helperName);
-    const userName = getStringValue(req.body.userName);
+    const recordUuid = getStringValue(req.body.taskId);
     const serviceDate = getStringValue(req.body.serviceDate);
-    const startTime = getStringValue(req.body.startTime);
-    const endTime = getStringValue(req.body.endTime);
-    const task = getStringValue(req.body.task);
-    const haisha = getStringValue(req.body.haisha);
-    const notes = getStringValue(req.body.notes);
     const summaryText = getStringValue(req.body.summaryText);
-    // notes（メモ）は任意。空メモでも記録本文（summaryText）があれば保存を許可する。
-    if (!taskId || !helperEmail || !summaryText) {
+    // notes（メモ）は任意。空メモでも記録本文があれば保存を許可する
+    const notes = getStringValue(req.body.notes);
+    if (!recordUuid || !summaryText) {
         res.status(400).json({
             ok: false,
-            message: "taskId, helperEmail and summaryText are required",
+            message: "記録本文が未入力です。内容を入力してから保存してください。",
+        });
+        return;
+    }
+    if (!(0, scheduleSource_1.isSub2Date)(serviceDate)) {
+        res.status(400).json({
+            ok: false,
+            message: "2026年7月以前の記録はこの画面から保存できません。事業所にご連絡ください。",
         });
         return;
     }
     try {
-        const supabase = (0, supabase_1.getSupabaseClient)();
-        const insertPayload = {
-            schedule_task_id: taskId,
-            helper_email: helperEmail,
-            helper_name: helperName,
-            user_name: userName,
-            service_date: serviceDate,
-            start_time: startTime,
-            end_time: endTime,
-            task,
-            haisha,
-            notes,
+        const outcome = await (0, serviceRecordsSub2_1.saveSub2MoveRecord)(recordUuid, {
             summary_text: summaryText,
-        };
-        const { data: insertedRecord, error: insertError } = await supabase
-            .from("service_notes_move")
-            .insert(insertPayload)
-            .select("id")
-            .single();
-        if (insertError) {
-            throw insertError;
+            notes: notes === "" ? null : notes,
+        });
+        if (outcome.status === "not_found") {
+            res.status(404).json({
+                ok: false,
+                message: "この予定の記録が見つかりませんでした。予定が変更された可能性があります。一覧を読み込み直してください。",
+            });
+            return;
         }
-        const recordId = String(insertedRecord?.id ?? "").trim();
-        if (!recordId) {
-            throw new Error("failed to resolve inserted move note id");
-        }
-        const { data: updatedRows, error: updateError } = await supabase
-            .from("schedule_tasks_move")
-            .update({
-            status: "written",
-            updated_at: new Date().toISOString(),
-        })
-            .eq("id", taskId)
-            .eq("helper_email", helperEmail)
-            .eq("status", "unwritten")
-            .select("id");
-        if (updateError) {
-            // INSERT済みのレコードを削除して整合性を保つ
-            const { error: rollbackError } = await supabase
-                .from("service_notes_move")
-                .delete()
-                .eq("id", recordId);
-            if (rollbackError) {
-                console.error("[service-records-move/save] rollback failed:", rollbackError);
-            }
-            throw updateError;
-        }
-        if (!updatedRows || updatedRows.length === 0) {
-            // タスクが更新されなかった（既にwritten等）のでINSERTを取り消す
-            const { error: rollbackError } = await supabase
-                .from("service_notes_move")
-                .delete()
-                .eq("id", recordId);
-            if (rollbackError) {
-                console.error("[service-records-move/save] rollback failed:", rollbackError);
-            }
+        if (outcome.status === "already_written") {
             res.status(409).json({
                 ok: false,
-                message: "move task was already updated or not found",
+                message: "この予定はすでに記録が保存されています。修正が必要な場合は事業所にご連絡ください。",
             });
             return;
         }
         res.status(200).json({
             ok: true,
-            recordId,
-            taskId,
+            recordId: recordUuid,
+            taskId: recordUuid,
             message: "move service record saved",
         });
     }
@@ -109,7 +66,7 @@ async function handleServiceRecordsMoveSave(req, res) {
         console.error("[service-records-move/save] error:", error);
         res.status(500).json({
             ok: false,
-            message: "failed to save move service record",
+            message: "保存に失敗しました。時間をおいて再試行してください。",
         });
     }
 }

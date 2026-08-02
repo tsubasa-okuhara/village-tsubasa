@@ -13,9 +13,43 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-31（遅延通知を visit_key 化し、開始遅れ／終了遅れの2種別を導入）
+最終更新: 2026-08-02（サービス記録を sub2 に移行。**8月分は village-admin から見えない**）
 
 ---
+
+## 2026-08-02 [village-tsubasa] サービス記録を sub2 に移行（データソース切替のみ・未デプロイ）
+
+**背景**: 2026-08 以降、予定は sub2 `gmellfgcyypfrtjxblla` に一本化済みだが、記録側は旧DB `pbqqqwwgswniuomjlhsh` を向いたままだった。旧DB の記録系テーブルは 8/1 以降 0 件で、8月の記録がどこにも書けない状態。経緯と設計判断は `docs/HANDOFF_2026-08-02_sub2_service_records.md`。
+
+### Supabase スキーマ（sub2 のみ。**旧DB は無変更**）
+
+- sub2 に `service_records_home`（17列）/ `service_records_move`（19列）を新設（RLS 有効、INDEX: `service_date` / `helper_email`）。詳細は `SUPABASE_SCHEMA.md` §13
+- `memo`（home）/ `notes`（move）を追加（`sql/2026-08-02_sub2_service_records_add_memo_notes.sql`）。`memo` は village-admin の `parseMemo` が形式に依存するため必須
+
+### 設計の変更点（旧DB との非互換）
+
+- **アプリは INSERT ではなく UPDATE する。** GAS（独立プロジェクト「サービス記録転送 sub2」）が `record_uuid` を発行して本文が空の行を先に作り、アプリがその行を埋める
+- **`status` 列を持たない。** 未記入判定は「本文（`final_note` / `summary_text`）が NULL または空」に変更
+- **書き込み責任を分離。** 予定由来の列（日付・時刻・氏名・メール・受給者番号・haisha）は GAS が確定させ、アプリは本文とヘルパー入力列だけを書く。`Sub2HomeSavePayload` / `Sub2MoveSavePayload` の型で担保（HANDOFF §11）
+- **7月以前の保存経路を削除。** 旧DB への INSERT / status 更新 / ロールバックを全廃。古いタブから 7月以前が来たら 400 で断る
+
+### API（レスポンス形式は互換）
+
+- `GET /api/service-records-{home,move}/unwritten` … 取得元を sub2 に変更。**キーは据え置き**（`id` / `taskId` に `record_uuid` を載せるためフロント改修は不要）
+- `POST /api/service-records-{home,move}/save` … sub2 の UPDATE に変更。404（記録行が無い）/ 409（保存済み）を日本語 message で返す
+- 移動の未記入一覧に `haisha` を追加（従来はキーが無く、保存時に常に欠落していた）
+
+### ⚠️ 影響範囲: village-admin が 8月分を読めない
+
+village-admin は旧DB の `service_notes_*` を読んでいる。記録が sub2 に移るため **2026-08-01 以降の記録が管理画面から見えなくなる**。本日はヘルパーが記録を書けることを優先し、village-admin 側は**別途対応**（2026-08-02 奥原判断）。RULES.md ルール4 の事前共有対象。
+
+### 未実装（明日以降）
+
+`previous.ts` ×2 / `samples.ts` ×2 は旧DB を見たまま。`service-records-structured/save.ts` は sub2 の記録に 404 を返すため、移動画面で構造化欄を埋めると保存失敗表示が出る。記載基準3項目（`condition` / `special_notes_*` / `transport`）は列だけ作成済みで UI・保存とも未実装。
+
+**未デプロイ**。本番は旧DB のまま動いている。
+
+- 関連コミット: （このエントリと同じコミット）
 
 ## 2026-07-31 [village-tsubasa] 遅延通知の二重送信判定を visit_key 化し、開始遅れ／終了遅れの2種別を導入
 

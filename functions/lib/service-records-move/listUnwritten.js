@@ -2,28 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleServiceRecordsMoveListUnwritten = handleServiceRecordsMoveListUnwritten;
 const recordCutoff_1 = require("../lib/recordCutoff");
-const supabase_1 = require("../lib/supabase");
+const serviceRecordsSub2_1 = require("../lib/serviceRecordsSub2");
 function getQueryValue(value) {
     if (Array.isArray(value)) {
         return String(value[0] ?? "").trim();
     }
     return String(value ?? "").trim();
-}
-function toItem(row) {
-    return {
-        taskId: String(row.id ?? ""),
-        helperEmail: String(row.helper_email ?? ""),
-        serviceDate: String(row.service_date ?? ""),
-        startTime: String(row.start_time ?? ""),
-        endTime: String(row.end_time ?? ""),
-        userName: String(row.user_name ?? ""),
-        helperName: String(row.helper_name ?? ""),
-        task: String(row.task ?? ""),
-        summary: String(row.summary ?? ""),
-        summaryText: String(row.summary_text ?? ""),
-        beneficiaryNumber: String(row.beneficiary_number ?? ""),
-        raw: row,
-    };
 }
 async function handleServiceRecordsMoveListUnwritten(req, res) {
     const helperEmail = getQueryValue(req.query.helper_email);
@@ -31,37 +15,9 @@ async function handleServiceRecordsMoveListUnwritten(req, res) {
         helperEmail,
     });
     try {
-        const supabase = (0, supabase_1.getSupabaseClient)();
-        let query = supabase
-            .from("schedule_tasks_move")
-            .select(`
-          id,
-          helper_email,
-          status,
-          service_date,
-          start_time,
-          end_time,
-          user_name,
-          helper_name,
-          task,
-          summary,
-          summary_text,
-          beneficiary_number
-        `)
-            .eq("status", "unwritten")
-            // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
-            .gte("service_date", recordCutoff_1.RECORD_LIST_CUTOFF_DATE)
-            .order("service_date", { ascending: true })
-            .order("start_time", { ascending: true });
-        if (helperEmail) {
-            query = query.ilike("helper_email", helperEmail);
-        }
-        const { data, error } = await query;
-        if (error) {
-            console.error("[service-records-move/unwritten] query error:", error);
-            throw error;
-        }
-        const items = (data ?? []).map(toItem);
+        // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
+        const rows = await (0, serviceRecordsSub2_1.fetchSub2UnwrittenMoveRecords)(helperEmail || null, recordCutoff_1.RECORD_LIST_CUTOFF_DATE);
+        const items = rows.map(serviceRecordsSub2_1.toUnwrittenMoveItem);
         console.log("[service-records-move/unwritten] success:", {
             helperEmail,
             count: items.length,
