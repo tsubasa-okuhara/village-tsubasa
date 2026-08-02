@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 
+import { isSub2Date } from "../lib/scheduleSource";
 import { getSupabaseClient } from "../lib/supabase";
 import {
   areAllowedValues,
@@ -58,6 +59,8 @@ type StructuredSaveSuccessResponse = {
   structuredRecordId: string;
   sourceType: string;
   sourceNoteId: string;
+  /** sub2 の記録のため保存せず素通りした場合に true（2026-08-03 追加） */
+  skipped?: boolean;
 };
 
 type StructuredSaveErrorResponse = {
@@ -323,6 +326,38 @@ export async function handleServiceRecordsStructuredSave(
     res.status(400).json({
       ok: false,
       message: validationError,
+    });
+    return;
+  }
+
+  // 2026-08 以降の移動記録は sub2 の service_records_move にある。
+  // 一方、構造化ログの3テーブル（service_record_structured / service_action_logs /
+  // service_irregular_events）は旧DB にしか無く、sub2 に相当テーブルを作らない判断のため
+  // 保存先が存在しない（HANDOFF §6-7）。
+  //
+  // ここで下の 404（source move note not found）に落ちると、移動画面に
+  // 「構造化ログの保存に失敗しました。内容を確認して再保存してください」が出るが、
+  // 保存先が無いので再保存しても永久に直らない。記録本文の保存だけ完了させる。
+  //
+  // 2026-08-03 に移動画面から構造化ログの入力欄自体を削除したので、新しい画面から
+  // ここに来ることはない。ただしヘルパーが古いタブを開いたままだと旧 main.js が
+  // 動き続けるため、サーバー側のこのガードが移行期間の実質的な防波堤になる。
+  //
+  // serviceDate が無い場合は isSub2Date("") が false を返し、従来どおり旧DB 経路へ進む。
+  if (isSub2Date(parsedBody.serviceDate ?? "")) {
+    console.info("[service-records-structured/save] skipped (sub2 record):", {
+      sourceNoteId: parsedBody.sourceNoteId,
+      serviceDate: parsedBody.serviceDate,
+    });
+
+    res.status(200).json({
+      ok: true,
+      skipped: true,
+      // 保存していないので ID は無い。既存フィールドを消すと契約違反になるため
+      // 空文字にする（RULES.md ルール3: 追加は OK / 削除・型変更は NG）
+      structuredRecordId: "",
+      sourceType: parsedBody.sourceType,
+      sourceNoteId: parsedBody.sourceNoteId,
     });
     return;
   }

@@ -13,9 +13,31 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-08-02（サービス記録を sub2 に移行。**8月分は village-admin から見えない**）
+最終更新: 2026-08-03（構造化ログを sub2 でスキップ＋移動画面から入力欄を削除）
 
 ---
+
+## 2026-08-03 [village-tsubasa] 構造化ログを sub2 の記録ではスキップし、移動画面から入力欄を削除
+
+**背景**: 前日の sub2 移行で、8月以降の移動記録は sub2 `service_records_move` に移った。一方、構造化ログの3テーブル（`service_record_structured` / `service_action_logs` / `service_irregular_events`）は旧DB にしか無く、sub2 に相当テーブルを作らない判断のため保存先が存在しない。このまま `POST /api/service-records-structured/save` を呼ぶと `source move note not found` で 404 になり、移動画面に「構造化ログの保存に失敗しました。内容を確認して再保存してください」が出る。再保存しても保存先が無いので永久に直らない。
+
+### API
+
+- `POST /api/service-records-structured/save` … `serviceDate` が `isSub2Date()` に該当する場合、**保存せず 200 + `ok: true` を返す**。レスポンスに `skipped: true` を**追加**（既存フィールドは削除・型変更なし。ルール3 準拠）。`structuredRecordId` は空文字。`serviceDate` 無しは従来どおり旧DB 経路
+- **7月以前の挙動は変更なし。** 旧DB の構造化ログはこれまでどおり保存・参照できる
+
+### UI（移動の記録画面）
+
+- `public/service-records-move/index.html` から構造化ログの入力欄（状態記録: 身体状態 / 精神状態 / 介助レベル / リスク、イレギュラー: 種別 / 発生前の状態 / 対応内容）と「構造化ログを再保存する」ボタンを削除
+- `main.js` から関連コードを削除（DOM 取得9件・`buildStructuredPayload` / `hasStructuredInput` / `saveStructuredRecord` / `retryStructuredRecord` / `loadStructuredOptions` / `resetStructuredForm` ほか）。`escapeHtml` は他で15箇所使うため残置
+- **理由**: 保存先が無いのに入力欄だけ残すと「リスク: 転倒リスク にチェックして画面は保存成功と出たのに DB には何も残っていない」状態になる。監査対応の観点で危険（2026-08-03 奥原判断）。記載基準3項目で差し替える予定の場所でもある
+
+### 居宅は対応不要（調査結果）
+
+居宅の記録画面に構造化ログの入力欄は**存在しない**。`buildStructuredLog()` が送る値は全部メモ本文とチェックリストからの派生値で、元の情報は `memo` と `final_note` に保存されている。サーバー側は 2026-08-02 の改修で `structuredLog` を読んでいない。誤解防止の警告コメントのみ追加（`public/service-records-home/main.js:1454`）。
+
+- 影響範囲: 本リポ内のみ（旧DB のテーブル・データには一切変更なし）
+- テスト: `functions/` で `npm test`（計9件）
 
 ## 2026-08-02 [village-tsubasa] サービス記録を sub2 に移行（データソース切替のみ・未デプロイ）
 

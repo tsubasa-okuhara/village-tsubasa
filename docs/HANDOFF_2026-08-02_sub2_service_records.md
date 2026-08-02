@@ -428,18 +428,40 @@ sub2 転送用 GAS はリポジトリに未取り込み。
 - `lib/serviceRecordsSub2.ts` を新設して sub2 記録テーブルへのアクセスを集約
 - 保存判定のテスト5件（`functions/` で `npm test`）
 
-**❌ 未実装 — 明日ここから再開**
+**✅ 実装済み（2026-08-03 追加）**
+
+- `service-records-structured/save.ts` に `isSub2Date()` のスキップを追加。
+  8月以降は保存せず `ok: true, skipped: true` を返す
+- **移動画面から構造化ログの入力欄（状態記録 / イレギュラー）を削除**。
+  保存先が無いのに入力欄だけ残ると「リスク: 転倒リスク にチェックして保存成功と
+  出たのに DB には何も無い」状態になり、監査対応上あぶないため（2026-08-03 奥原判断）
+- テスト4件追加（境界を両側から固定: 8月・12月はスキップ / 7月・日付なしは非スキップ）
+
+**❌ 未実装**
 
 1. `service-records-{home,move}/previous.ts` … 旧DB のタスク表を見たまま。8月の「前回の記録」が出ない
 2. `service-records-{home,move}/samples.ts` … 旧DB のみ。8月分が AI 下書きの参考例に入らない
-3. `service-records-structured/save.ts` … sub2 の記録に対して 404 を返す。
-   **移動の画面で構造化欄を埋めると「構造化ログの保存に失敗しました」が出る**（優先度高）
-4. `lib/recordCutoff.ts` … コメントが旧テーブル名のまま（動作影響なし）
-5. 記載基準3項目（`condition` / `special_notes_*` / `transport`）の UI と保存（§10-2）
-6. village-admin が旧DB を読んでいる件（§10-3 の4）
+3. `lib/recordCutoff.ts` … コメントが旧テーブル名のまま（動作影響なし）
+4. 記載基準3項目（`condition` / `special_notes_*` / `transport`）の UI と保存（§10-2）
+5. village-admin が旧DB を読んでいる件（§10-3 の4）
+6. 居宅フロントが、サーバーが無視する `structuredLog` を送り続けている。
+   中身が派生値のみで失われる情報が無いため送信は残し、警告コメントだけ入れた
+   （`public/service-records-home/main.js:1454`）。送信をやめるのは後日
 
-**デプロイはまだ。** 未デプロイなので本番のヘルパー画面は旧DB のままで、
-一覧が空になる等の実害は出ていない。
+### 居宅に UI 削除が不要な理由（2026-08-03 調査）
+
+移動と居宅で構造化ログの性質がまったく違う。**同じ対応をしてはいけない。**
+
+| | 移動（入力欄を削除した） | 居宅（削除不要） |
+|---|---|---|
+| 入力欄 | 独立した select / チェックボックス | **無い**（`index.html` に `structured` は0件） |
+| 値の出どころ | ヘルパーが直接選ぶ | メモ本文とチェックリストからの**派生値**（`derivePhysicalState(freeMemo)` 等、`main.js:568-598`） |
+| 元の情報の保存先 | 構造化ログにしか残らない | `memo`（composedMemo）と `final_note` に保存済み |
+| 消えると | ヘルパーの入力が失われる | 失われるものが無い |
+
+居宅は structured エンドポイントを使っておらず、`saveRecord.ts` 内で
+`service_action_logs_home` に直接 INSERT する別経路だった（2026-08-02 に削除済み）。
+そのため `isSub2Date()` のスキップは居宅には無関係。
 
 ### 10-0. 最大の設計変更: INSERT → UPDATE
 
@@ -470,7 +492,8 @@ sub2 転送用 GAS はリポジトリに未取り込み。
 | ❌ | `service-records-move/samples.ts:54` | 同上 |
 | ❌ | `service-records-home/previous.ts:38` | `home_schedule_tasks` status=written のまま。sub2 の記録済み行を引く必要あり |
 | ❌ | `service-records-move/previous.ts:35` | 同上 |
-| ❌ | `service-records-structured/save.ts:335` | 旧DB `service_notes_move.id` の存在確認。sub2 の record_uuid は見つからず **404**。`isSub2Date()` なら保存せず ok を返す形にする |
+| ✅ | `service-records-structured/save.ts` | `isSub2Date()` なら保存せず `ok: true, skipped: true` を返す。移動画面から入力欄を消した後も、**古いタブで旧 main.js が動き続ける場合の防波堤**として必要 |
+| ✅ | `public/service-records-move/index.html` / `main.js` | 構造化ログの入力欄と関連 JS を削除。`escapeHtml` は他で15箇所使うため残置 |
 | ❌ | `lib/recordCutoff.ts` | コメントが旧テーブル名のまま。定数値 `2026-08-01` は据え置きでよい |
 | 対象外 | `services/moveCheckService.ts:48` | 旧DB を読むが **`moveCheckRouter` が index.ts にマウントされておらず、`public/` にも呼び出し元が無い**（到達不能なコード）。動かないものを移植しても検証できないため据え置き。使うときに sub2 へ向けること。`.order("date")` の既知バグ（RULES.md ルール7）もその時に直す |
 | 変更不要 | `public/service-records-home/main.js:1464` | `scheduleTaskId: task.id` を POST。`id` に `record_uuid` が載るので改修不要 |

@@ -1451,6 +1451,18 @@ function initializeHomeUi() {
     try {
       setStatus(saveStatusElement, "保存しています...");
 
+      // ⚠️ structuredLog は 2026-08-03 時点で **サーバー側が保存していない**。
+      // 旧DB の service_action_logs_home に INSERT していたが、8月以降の記録は
+      // sub2 の service_records_home にあり、sub2 に相当テーブルを作らない判断のため
+      // 保存先が無い（functions/src/service-records-home/saveRecord.ts:20 のコメント参照）。
+      //
+      // 送信をやめていないのは、中身が全部「派生値」で失われる情報が無いため。
+      // physicalState / mentalState / riskFlag はメモ本文からの自動抽出、
+      // actionDetail / assistLevel はチェックリストからの導出で、元の情報は
+      // memo（composedMemo）と final_note に保存されている。
+      // 移動画面の構造化ログは独立した入力欄だったので、そちらは入力欄ごと削除した。
+      //
+      // 送信自体をやめるのは後日（2026-08-03 奥原判断）。
       const structuredLog = buildStructuredLog(
         state.selectedCategory,
         derived.primaryItems,

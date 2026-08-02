@@ -7,49 +7,10 @@ const RECORD_LIST_CUTOFF_LABEL = "2026年8月1日";
 const MOVE_UNWRITTEN_ENDPOINT = `${BASE_URL}/service-records-move/unwritten`;
 const MOVE_SUMMARY_ENDPOINT = `${BASE_URL}/service-records-move/summary`;
 const MOVE_SAVE_ENDPOINT = `${BASE_URL}/service-records-move/save`;
-const STRUCTURED_OPTIONS_ENDPOINT = `${BASE_URL}/service-records-structured/options`;
-const STRUCTURED_SAVE_ENDPOINT = `${BASE_URL}/service-records-structured/save`;
 
-const FALLBACK_STRUCTURED_OPTIONS = {
-  sourceTypes: ["move"],
-  physicalStates: ["良好", "不安定", "疲労", "その他"],
-  mentalStates: ["落ち着き", "不穏", "拒否", "無反応"],
-  riskFlags: [
-    "転倒リスク",
-    "ふらつき",
-    "交通量多い",
-    "段差注意",
-    "混雑あり",
-    "待機長い",
-    "体調不安",
-  ],
-  actionTypes: [
-    "移動",
-    "乗車",
-    "降車",
-    "歩行見守り",
-    "買い物同行",
-    "声かけ",
-    "安全確認",
-  ],
-  actionDetailsByType: {
-    移動: ["徒歩移動", "バス利用", "電車利用", "タクシー利用", "施設間移動"],
-    乗車: ["車両乗り込み支援", "シート着席支援", "手すり利用確認"],
-    降車: ["車両降り支援", "足元確認", "周囲安全確認"],
-    歩行見守り: ["屋外歩行見守り", "横断歩道見守り", "段差通過支援"],
-    買い物同行: ["店舗内同行", "商品確認支援", "会計同行"],
-    声かけ: ["移動促し", "不安軽減", "順番案内"],
-    安全確認: ["周囲確認", "体調確認", "持ち物確認"],
-  },
-  actors: ["helper", "user"],
-  targets: ["利用者"],
-  actionResults: ["成功", "失敗"],
-  difficulties: ["楽", "普通", "大変"],
-  assistLevels: ["全介助", "半介助", "見守り"],
-  eventTypes: ["転倒未遂", "拒否", "体調変化", "遅延", "その他"],
-  locations: ["indoor", "outdoor", "transit", "facility", "home"],
-  timeOfDay: ["朝", "昼", "夕"],
-};
+// 構造化ログ（/service-records-structured/*）への参照はすべて削除した（2026-08-03）。
+// 保存先3テーブルが旧DB にしか無く、8月以降の記録には保存先が存在しないため。
+// 詳細は index.html の同名コメントを参照。
 
 const HELPER_EMAIL_STORAGE_KEY = "helper_email";
 
@@ -76,8 +37,6 @@ const state = {
   helperEmail: "",
   items: [],
   selectedTask: null,
-  structuredOptions: FALLBACK_STRUCTURED_OPTIONS,
-  pendingStructuredSourceNoteId: null,
 };
 
 function getRequiredElement(id) {
@@ -140,152 +99,6 @@ const generateSummaryButtonElement = getRequiredElement(
 const saveStatusElement = getRequiredElement("move-records-save-status");
 const saveRetryAreaElement = getRequiredElement("move-save-retry-area");
 const retrySaveButtonElement = getRequiredElement("move-retry-save-button");
-const structuredRetryAreaElement = getRequiredElement("move-structured-retry-area");
-const retryStructuredButtonElement = getRequiredElement("move-retry-structured-button");
-const physicalStateElement = getRequiredElement("structured-physical-state");
-const mentalStateElement = getRequiredElement("structured-mental-state");
-const riskFlagsElement = getRequiredElement("structured-risk-flags");
-const assistLevelElement = getRequiredElement("structured-assist-level");
-const eventTypeElement = getRequiredElement("structured-event-type");
-const beforeStateElement = getRequiredElement("structured-before-state");
-const afterActionElement = getRequiredElement("structured-after-action");
-
-function fillSelectOptions(selectElement, values, placeholder) {
-  const currentValue = String(selectElement.value || "");
-  const optionsHtml = [`<option value="">${escapeHtml(placeholder)}</option>`]
-    .concat(
-      values.map(function (value) {
-        return `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`;
-      }),
-    )
-    .join("");
-
-  selectElement.innerHTML = optionsHtml;
-  selectElement.value = values.includes(currentValue) ? currentValue : "";
-}
-
-function renderRiskFlagOptions() {
-  riskFlagsElement.innerHTML = state.structuredOptions.riskFlags
-    .map(function (value, index) {
-      const id = `structured-risk-flag-${index}`;
-      return `
-        <label class="move-records-check" for="${escapeHtml(id)}">
-          <input id="${escapeHtml(id)}" type="checkbox" name="structuredRiskFlags" value="${escapeHtml(value)}" />
-          <span>${escapeHtml(value)}</span>
-        </label>
-      `;
-    })
-    .join("");
-}
-
-function renderStructuredOptions() {
-  fillSelectOptions(physicalStateElement, state.structuredOptions.physicalStates, "選択してください");
-  fillSelectOptions(mentalStateElement, state.structuredOptions.mentalStates, "選択してください");
-  fillSelectOptions(assistLevelElement, state.structuredOptions.assistLevels, "選択してください");
-  fillSelectOptions(eventTypeElement, state.structuredOptions.eventTypes, "なし");
-  renderRiskFlagOptions();
-}
-
-async function loadStructuredOptions() {
-  try {
-    const response = await fetch(STRUCTURED_OPTIONS_ENDPOINT);
-    const data = await response.json();
-
-    if (response.ok && data.ok && data.options) {
-      state.structuredOptions = data.options;
-    }
-  } catch (error) {
-    console.error("[service-records-move] structured options error:", error);
-  }
-
-  renderStructuredOptions();
-}
-
-function getCheckedValues(containerElement) {
-  return Array.from(
-    containerElement.querySelectorAll('input[type="checkbox"]:checked'),
-  ).map(function (inputElement) {
-    return String(inputElement.value || "").trim();
-  });
-}
-
-function normalizeOptionalNumber(value) {
-  const normalizedValue = String(value ?? "").trim();
-
-  if (!normalizedValue) {
-    return null;
-  }
-
-  const parsedValue = Number(normalizedValue);
-  return Number.isFinite(parsedValue) ? parsedValue : null;
-}
-
-function normalizeOptionalText(value) {
-  const normalizedValue = String(value ?? "").trim();
-  return normalizedValue || null;
-}
-
-function resetStructuredForm() {
-  physicalStateElement.value = "";
-  mentalStateElement.value = "";
-  assistLevelElement.value = "";
-  eventTypeElement.value = "";
-  beforeStateElement.value = "";
-  afterActionElement.value = "";
-
-  riskFlagsElement
-    .querySelectorAll('input[type="checkbox"]')
-    .forEach(function (inputElement) {
-      inputElement.checked = false;
-    });
-}
-
-function buildStructuredPayload(sourceNoteId) {
-  const eventType = normalizeOptionalText(eventTypeElement.value);
-  const riskFlags = getCheckedValues(riskFlagsElement);
-
-  const payload = {
-    sourceType: "move",
-    sourceNoteId,
-    scheduleTaskId: state.selectedTask ? state.selectedTask.taskId : null,
-    helperEmail: state.selectedTask ? state.selectedTask.helperEmail : null,
-    helperName: state.selectedTask ? state.selectedTask.helperName : null,
-    userName: state.selectedTask ? state.selectedTask.userName : null,
-    serviceDate: state.selectedTask ? state.selectedTask.serviceDate : null,
-    startTime: state.selectedTask ? state.selectedTask.startTime : null,
-    endTime: state.selectedTask ? state.selectedTask.endTime : null,
-    physicalState: normalizeOptionalText(physicalStateElement.value),
-    mentalState: normalizeOptionalText(mentalStateElement.value),
-    riskFlags,
-    assistLevel: normalizeOptionalText(assistLevelElement.value),
-    actions: [],
-    irregularEvents: [],
-  };
-
-  if (eventType) {
-    payload.irregularEvents.push({
-      eventType,
-      beforeState: normalizeOptionalText(beforeStateElement.value),
-      afterAction: normalizeOptionalText(afterActionElement.value),
-    });
-  }
-
-  return payload;
-}
-
-function hasStructuredInput() {
-  const checkedRiskFlags = getCheckedValues(riskFlagsElement);
-
-  return Boolean(
-    normalizeOptionalText(physicalStateElement.value) ||
-      normalizeOptionalText(mentalStateElement.value) ||
-      normalizeOptionalText(assistLevelElement.value) ||
-      normalizeOptionalText(eventTypeElement.value) ||
-      normalizeOptionalText(beforeStateElement.value) ||
-      normalizeOptionalText(afterActionElement.value) ||
-      checkedRiskFlags.length > 0
-  );
-}
 
 function renderTaskList() {
   if (!Array.isArray(state.items) || state.items.length === 0) {
@@ -442,22 +255,6 @@ async function generateSummary() {
   }
 }
 
-async function saveStructuredRecord(sourceNoteId) {
-  const structuredResponse = await fetch(STRUCTURED_SAVE_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(buildStructuredPayload(sourceNoteId)),
-  });
-
-  const structuredData = await structuredResponse.json();
-
-  if (!structuredResponse.ok || !structuredData.ok) {
-    throw new Error(structuredData.message || "failed to save structured record");
-  }
-}
-
 async function doSaveRecord() {
   if (!state.selectedTask) {
     setStatus(
@@ -512,46 +309,14 @@ async function doSaveRecord() {
       throw new Error(data.message || "failed to save move record");
     }
 
-    const sourceNoteId = String(data.recordId || "").trim();
-    let structuredSaveFailed = false;
-
-    if (hasStructuredInput()) {
-      try {
-        if (!sourceNoteId) {
-          throw new Error("missing move record id");
-        }
-
-        await saveStructuredRecord(sourceNoteId);
-      } catch (error) {
-        structuredSaveFailed = true;
-        console.error("[service-records-move] structured save error:", error);
-      }
-    }
-
     notesElement.value = "";
     summaryTextElement.value = "";
-
-    if (structuredSaveFailed) {
-      state.pendingStructuredSourceNoteId = sourceNoteId;
-      structuredRetryAreaElement.hidden = false;
-      setStatus(
-        saveStatusElement,
-        "記録本文は保存しました。構造化ログの保存に失敗しました。内容を確認して再保存してください。",
-        "is-error",
-      );
-    } else {
-      structuredRetryAreaElement.hidden = true;
-      state.pendingStructuredSourceNoteId = null;
-      resetStructuredForm();
-      state.selectedTask = null;
-      setStatus(saveStatusElement, "保存しました。未記入予定一覧を再読み込みします。", "is-success");
-    }
+    state.selectedTask = null;
+    setStatus(saveStatusElement, "保存しました。未記入予定一覧を再読み込みします。", "is-success");
 
     state.items = await fetchUnwrittenTasks(state.helperEmail);
     renderTaskList();
-    if (!structuredSaveFailed) {
-      renderSelectedTask();
-    }
+    renderSelectedTask();
     setStatus(
       listStatusElement,
       `${state.items.length}件の未記入予定を表示しています。helper_email: ${state.helperEmail}`,
@@ -567,34 +332,6 @@ async function doSaveRecord() {
         : "保存に失敗しました。時間をおいて再試行してください。";
     setStatus(saveStatusElement, message, "is-error");
     saveRetryAreaElement.hidden = false;
-  }
-}
-
-async function retryStructuredRecord() {
-  const sourceNoteId = state.pendingStructuredSourceNoteId;
-
-  if (!sourceNoteId) {
-    setStatus(saveStatusElement, "再保存に必要な情報がありません。", "is-error");
-    return;
-  }
-
-  retryStructuredButtonElement.disabled = true;
-  setStatus(saveStatusElement, "構造化ログを再保存しています...");
-
-  try {
-    await saveStructuredRecord(sourceNoteId);
-
-    structuredRetryAreaElement.hidden = true;
-    state.pendingStructuredSourceNoteId = null;
-    resetStructuredForm();
-    state.selectedTask = null;
-    renderSelectedTask();
-    setStatus(saveStatusElement, "構造化ログを保存しました。", "is-success");
-  } catch (error) {
-    console.error("[service-records-move] structured retry error:", error);
-    setStatus(saveStatusElement, "構造化ログの再保存に失敗しました。再度お試しください。", "is-error");
-  } finally {
-    retryStructuredButtonElement.disabled = false;
   }
 }
 
@@ -655,9 +392,6 @@ entryFormElement.addEventListener("submit", function (event) {
   doSaveRecord();
 });
 retrySaveButtonElement.addEventListener("click", doSaveRecord);
-retryStructuredButtonElement.addEventListener("click", retryStructuredRecord);
-loadStructuredOptions();
-resetStructuredForm();
 
 // Restore saved helper email from localStorage on page load
 (function restoreHelperEmail() {
