@@ -13,7 +13,44 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-08-03（構造化ログを sub2 でスキップ＋移動画面から入力欄を削除）
+最終更新: 2026-08-03（village-schedule の8月表示復旧 — 4アプリ目の存在を台帳に登録）
+
+---
+
+## 2026-08-03 [village-schedule] 8月以降が表示されない障害を修正（データ取得を /api/schedule-list に一本化）
+
+**⚠️ このリポジトリは本台帳に未登録だった。** `village-schedule`（本番 https://village-schedule.web.app/ 「移動支援シフトカレンダー」）は3アプリの棚卸し対象から漏れており、8月の sub2 移行時に参照先の切り替えがされなかった。本エントリで4アプリ目として登録する。
+
+- **リポジトリ**: `github.com/tsubasa-okuhara/village-schedule`（ローカルは `~/Downloads/village-schedule`。正規の置き場所ではないため要整理）
+- **Firebase**: プロジェクト `village-tsubasa`（**本体と同一**）/ hosting target `schedule` → サイト `village-schedule`
+
+**症状**: 2026年8月を開くとカレンダーの升目は描画されるが予定が0件。エラー表示は出ない（旧DB が 200 + 空配列を返すため「きれいに空」の症状）。
+
+**原因**: 本アプリは旧DB（`pbqqqwwgswniuomjlhsh` の `schedule` テーブル）をフロントから anon キーで直読みしていた。8月以降の予定は sub2 `schedule_entries` にしか入らないため水源が枯れた。供給側の `gas/village-schedule-sync/★supabase転送本体.gs` は旧スプレッドシート `1mwKCznD…` 由来で、8月以降の同期系統（`1Q1F0pS…` → sub2）とは別系統。
+
+**実測**: 旧DB `schedule` の件数は 2026-06=2,520 / 2026-07=1,982 / **2026-08=0**。
+
+### 修正内容（village-schedule 側のみ）
+
+- `public/js/app.js` のデータ取得を **`GET https://village-tsubasa.web.app/api/schedule-list?year=&month=`** に一本化。旧DB へのアクセスコード（`SB_URL` / `SB_KEY` / `rest/v1/schedule`）を削除し、**anon キーのフロント直書きを撤去**
+- 月データを1回取得してクライアント側で保持。日付指定・ヘルパー検索・月サマリはメモリ上で絞る（同じ月は再取得しない）
+- ヘルパー検索は旧実装の `name.ilike.*XXX*` と同じ**部分一致を維持**（完全一致にすると表記ゆれ「伊藤/伊藤信一」「木野/木野(真)」で予定が丸ごと消えるため）
+- API 障害時は0件表示（「〜のスケジュールがありません」）と**別文言**にし、無言の空表示にしない
+- 副次的に解消: 月サマリのページングが1000件で切れていた既存バグ（4月から発生。7月のカレンダー件数バッジが不正確だった）
+
+### 判明した事実（重要）
+
+**このアプリはサービス種別で絞り込んでいなかった。** 画面名は「移動支援シフトカレンダー」だが、`public/` 配下に種別で絞るコードは1行も存在せず、旧 `schedule` テーブルの全件を表示していた。供給側の GAS も除外しているのは取消行のグレー4色（`#434343` / `#666666` / `#999999` / `#b7b7b7`）のみで、居宅 `#ff9900` / 移動 `#00ffff` の判別は使っていない。**画面名と実装が一致していない状態が4月時点から続いている。** 移動支援のみに絞るには GAS 側で色→種別列を持たせる改修が先に必要（sub2 `schedule_entries` の全20列に種別を判別できる列は無い）。今回は障害復旧に限定し、種別絞り込みは別タスクとした。
+
+- **影響範囲**:
+  - **`village-tsubasa` は未変更**（コード・API・スキーマとも一切触っていない）。`/api/schedule-list` は既存のまま利用。`cors({ origin: true })` と認証なしの既存設定でそのまま動作
+  - `village-admin` / `user-schedule-app` への影響なし
+  - **新たな依存が1本増えた**: `village-schedule` → `village-tsubasa` の `api` Function。この Function が落ちると village-schedule も表示不能になる
+  - cutover 境界は `functions/src/lib/scheduleSource.ts` に一元化されたまま（village-schedule 側での定数の二重持ちを回避）
+- **関連コミット**: `village-schedule` `69043f9`（ブランチ `fix/aug-sub2-datasource`、`main` 未マージ）
+- **デプロイ**: 2026-08-03 実施。`firebase deploy --only hosting:schedule --project village-tsubasa`（hosting 3ファイルのみ。**Functions には触れていない**）
+- **デプロイ後検証**: 本番 `js/app.js` に旧DB残骸0件を確認。API 実測 2026-08=1,428件/30日分、2026-07=1,921件/31日分
+- **残課題**: ①「移動支援のみ」に絞るか否かの判断（要 GAS 改修）②8月は31日中30日分しかデータが無い（`is_published=false` の未公開週の可能性）③ローカルリポジトリが `~/Downloads` 配下にある ④未使用になった `dev-server.js`（旧DB直結）の扱い
 
 ---
 
