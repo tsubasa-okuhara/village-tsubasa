@@ -1,42 +1,20 @@
 import type { Request, Response } from "express";
 
-import { getSupabaseClient } from "../lib/supabase";
+import { RECORD_LIST_CUTOFF_DATE } from "../lib/recordCutoff";
+import {
+  fetchSub2UnwrittenMoveRecords,
+  toUnwrittenMoveItem,
+  type UnwrittenMoveItem,
+} from "../lib/serviceRecordsSub2";
 
-type MoveUnwrittenRow = {
-  id: string;
-  helper_email: string | null;
-  status: string | null;
-  service_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  user_name: string | null;
-  helper_name: string | null;
-  task: string | null;
-  summary: string | null;
-  summary_text: string | null;
-  beneficiary_number: string | null;
-  [key: string]: unknown;
-};
-
-type MoveUnwrittenItem = {
-  taskId: string;
-  helperEmail: string;
-  serviceDate: string;
-  startTime: string;
-  endTime: string;
-  userName: string;
-  helperName: string;
-  task: string;
-  summary: string;
-  summaryText: string;
-  beneficiaryNumber: string;
-  raw: MoveUnwrittenRow;
-};
+// 取得元は sub2 の service_records_move。
+// 旧DB の schedule_tasks_move を見ない理由は居宅版と同じ（listUnwritten.ts 冒頭参照）。
+// 未記入の判定は status 列ではなく「summary_text が空かどうか」。
 
 type ListUnwrittenSuccessResponse = {
   ok: true;
   helperEmail: string;
-  items: MoveUnwrittenItem[];
+  items: UnwrittenMoveItem[];
 };
 
 type ListUnwrittenErrorResponse = {
@@ -52,23 +30,6 @@ function getQueryValue(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function toItem(row: MoveUnwrittenRow): MoveUnwrittenItem {
-  return {
-    taskId: String(row.id ?? ""),
-    helperEmail: String(row.helper_email ?? ""),
-    serviceDate: String(row.service_date ?? ""),
-    startTime: String(row.start_time ?? ""),
-    endTime: String(row.end_time ?? ""),
-    userName: String(row.user_name ?? ""),
-    helperName: String(row.helper_name ?? ""),
-    task: String(row.task ?? ""),
-    summary: String(row.summary ?? ""),
-    summaryText: String(row.summary_text ?? ""),
-    beneficiaryNumber: String(row.beneficiary_number ?? ""),
-    raw: row,
-  };
-}
-
 export async function handleServiceRecordsMoveListUnwritten(
   req: Request,
   res: Response<ListUnwrittenSuccessResponse | ListUnwrittenErrorResponse>,
@@ -80,42 +41,13 @@ export async function handleServiceRecordsMoveListUnwritten(
   });
 
   try {
-    const supabase = getSupabaseClient();
+    // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
+    const rows = await fetchSub2UnwrittenMoveRecords(
+      helperEmail || null,
+      RECORD_LIST_CUTOFF_DATE,
+    );
 
-    let query = supabase
-      .from("schedule_tasks_move")
-      .select(
-        `
-          id,
-          helper_email,
-          status,
-          service_date,
-          start_time,
-          end_time,
-          user_name,
-          helper_name,
-          task,
-          summary,
-          summary_text,
-          beneficiary_number
-        `,
-      )
-      .eq("status", "unwritten")
-      .order("service_date", { ascending: true })
-      .order("start_time", { ascending: true });
-
-    if (helperEmail) {
-      query = query.ilike("helper_email", helperEmail);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("[service-records-move/unwritten] query error:", error);
-      throw error;
-    }
-
-    const items = ((data ?? []) as MoveUnwrittenRow[]).map(toItem);
+    const items = rows.map(toUnwrittenMoveItem);
 
     console.log("[service-records-move/unwritten] success:", {
       helperEmail,

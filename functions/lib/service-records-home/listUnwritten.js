@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleListUnwrittenHome = handleListUnwrittenHome;
-const supabase_1 = require("../lib/supabase");
+const recordCutoff_1 = require("../lib/recordCutoff");
+const serviceRecordsSub2_1 = require("../lib/serviceRecordsSub2");
 function getHelperEmailFilter(req) {
     const helperEmailValue = Array.isArray(req.query.helper_email)
         ? req.query.helper_email[0]
@@ -21,26 +22,12 @@ async function handleListUnwrittenHome(req, res) {
         return;
     }
     try {
-        const supabase = (0, supabase_1.getSupabaseClient)();
         const helperEmailFilter = getHelperEmailFilter(req);
-        let query = supabase
-            .from("home_schedule_tasks")
-            .select("id, schedule_id, service_date, helper_name, helper_email, user_name, start_time, end_time, task, summary, beneficiary_number, status")
-            .eq("status", "unwritten")
-            .is("deleted_at", null)
-            .order("service_date", { ascending: true })
-            .order("start_time", { ascending: true, nullsFirst: true })
-            .order("helper_name", { ascending: true });
-        if (helperEmailFilter) {
-            query = query.ilike("helper_email", helperEmailFilter);
-        }
-        const { data, error } = await query;
-        if (error) {
-            throw error;
-        }
+        // 7/31 以前の未記入は事業所側で精査するためヘルパーには出さない
+        const rows = await (0, serviceRecordsSub2_1.fetchSub2UnwrittenHomeRecords)(helperEmailFilter, recordCutoff_1.RECORD_LIST_CUTOFF_DATE);
         res.status(200).json({
             ok: true,
-            items: (data ?? []),
+            items: rows.map(serviceRecordsSub2_1.toUnwrittenHomeItem),
         });
     }
     catch (error) {

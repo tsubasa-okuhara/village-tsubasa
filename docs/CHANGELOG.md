@@ -13,9 +13,194 @@
 > 記入タイミング: **チャット終了時**、または他アプリに影響しうる変更をデプロイしたとき。
 > **追記型**（削除・改変は原則しない）。誤記の訂正は日付を残したまま `[訂正 2026-04-18: 旧記述は…]` のように追記。
 
-最終更新: 2026-07-16（ひろばダッシュボード: 設定カード移動 / 通知解除の修正 / 通知を18時1本に集約）
+最終更新: 2026-08-03（village-schedule の8月表示復旧 — 4アプリ目の存在を台帳に登録）
 
 ---
+
+## 2026-08-03 [village-schedule] 8月以降が表示されない障害を修正（データ取得を /api/schedule-list に一本化）
+
+**⚠️ このリポジトリは本台帳に未登録だった。** `village-schedule`（本番 https://village-schedule.web.app/ 「移動支援シフトカレンダー」）は3アプリの棚卸し対象から漏れており、8月の sub2 移行時に参照先の切り替えがされなかった。本エントリで4アプリ目として登録する。
+
+- **リポジトリ**: `github.com/tsubasa-okuhara/village-schedule`（ローカルは `~/Downloads/village-schedule`。正規の置き場所ではないため要整理）
+- **Firebase**: プロジェクト `village-tsubasa`（**本体と同一**）/ hosting target `schedule` → サイト `village-schedule`
+
+**症状**: 2026年8月を開くとカレンダーの升目は描画されるが予定が0件。エラー表示は出ない（旧DB が 200 + 空配列を返すため「きれいに空」の症状）。
+
+**原因**: 本アプリは旧DB（`pbqqqwwgswniuomjlhsh` の `schedule` テーブル）をフロントから anon キーで直読みしていた。8月以降の予定は sub2 `schedule_entries` にしか入らないため水源が枯れた。供給側の `gas/village-schedule-sync/★supabase転送本体.gs` は旧スプレッドシート `1mwKCznD…` 由来で、8月以降の同期系統（`1Q1F0pS…` → sub2）とは別系統。
+
+**実測**: 旧DB `schedule` の件数は 2026-06=2,520 / 2026-07=1,982 / **2026-08=0**。
+
+### 修正内容（village-schedule 側のみ）
+
+- `public/js/app.js` のデータ取得を **`GET https://village-tsubasa.web.app/api/schedule-list?year=&month=`** に一本化。旧DB へのアクセスコード（`SB_URL` / `SB_KEY` / `rest/v1/schedule`）を削除し、**anon キーのフロント直書きを撤去**
+- 月データを1回取得してクライアント側で保持。日付指定・ヘルパー検索・月サマリはメモリ上で絞る（同じ月は再取得しない）
+- ヘルパー検索は旧実装の `name.ilike.*XXX*` と同じ**部分一致を維持**（完全一致にすると表記ゆれ「伊藤/伊藤信一」「木野/木野(真)」で予定が丸ごと消えるため）
+- API 障害時は0件表示（「〜のスケジュールがありません」）と**別文言**にし、無言の空表示にしない
+- 副次的に解消: 月サマリのページングが1000件で切れていた既存バグ（4月から発生。7月のカレンダー件数バッジが不正確だった）
+
+### 判明した事実（重要）
+
+**このアプリはサービス種別で絞り込んでいなかった。** 画面名は「移動支援シフトカレンダー」だが、`public/` 配下に種別で絞るコードは1行も存在せず、旧 `schedule` テーブルの全件を表示していた。供給側の GAS も除外しているのは取消行のグレー4色（`#434343` / `#666666` / `#999999` / `#b7b7b7`）のみで、居宅 `#ff9900` / 移動 `#00ffff` の判別は使っていない。**画面名と実装が一致していない状態が4月時点から続いている。** 移動支援のみに絞るには GAS 側で色→種別列を持たせる改修が先に必要（sub2 `schedule_entries` の全20列に種別を判別できる列は無い）。今回は障害復旧に限定し、種別絞り込みは別タスクとした。
+
+- **影響範囲**:
+  - **`village-tsubasa` は未変更**（コード・API・スキーマとも一切触っていない）。`/api/schedule-list` は既存のまま利用。`cors({ origin: true })` と認証なしの既存設定でそのまま動作
+  - `village-admin` / `user-schedule-app` への影響なし
+  - **新たな依存が1本増えた**: `village-schedule` → `village-tsubasa` の `api` Function。この Function が落ちると village-schedule も表示不能になる
+  - cutover 境界は `functions/src/lib/scheduleSource.ts` に一元化されたまま（village-schedule 側での定数の二重持ちを回避）
+- **関連コミット**: `village-schedule` `69043f9`（ブランチ `fix/aug-sub2-datasource`、`main` 未マージ）
+- **デプロイ**: 2026-08-03 実施。`firebase deploy --only hosting:schedule --project village-tsubasa`（hosting 3ファイルのみ。**Functions には触れていない**）
+- **デプロイ後検証**: 本番 `js/app.js` に旧DB残骸0件を確認。API 実測 2026-08=1,428件/30日分、2026-07=1,921件/31日分
+- **残課題**: ①「移動支援のみ」に絞るか否かの判断（要 GAS 改修）②8月は31日中30日分しかデータが無い（`is_published=false` の未公開週の可能性）③ローカルリポジトリが `~/Downloads` 配下にある ④未使用になった `dev-server.js`（旧DB直結）の扱い
+
+---
+
+## 2026-08-03 [village-tsubasa] 構造化ログを sub2 の記録ではスキップし、移動画面から入力欄を削除
+
+**背景**: 前日の sub2 移行で、8月以降の移動記録は sub2 `service_records_move` に移った。一方、構造化ログの3テーブル（`service_record_structured` / `service_action_logs` / `service_irregular_events`）は旧DB にしか無く、sub2 に相当テーブルを作らない判断のため保存先が存在しない。このまま `POST /api/service-records-structured/save` を呼ぶと `source move note not found` で 404 になり、移動画面に「構造化ログの保存に失敗しました。内容を確認して再保存してください」が出る。再保存しても保存先が無いので永久に直らない。
+
+### API
+
+- `POST /api/service-records-structured/save` … `serviceDate` が `isSub2Date()` に該当する場合、**保存せず 200 + `ok: true` を返す**。レスポンスに `skipped: true` を**追加**（既存フィールドは削除・型変更なし。ルール3 準拠）。`structuredRecordId` は空文字。`serviceDate` 無しは従来どおり旧DB 経路
+- **7月以前の挙動は変更なし。** 旧DB の構造化ログはこれまでどおり保存・参照できる
+
+### UI（移動の記録画面）
+
+- `public/service-records-move/index.html` から構造化ログの入力欄（状態記録: 身体状態 / 精神状態 / 介助レベル / リスク、イレギュラー: 種別 / 発生前の状態 / 対応内容）と「構造化ログを再保存する」ボタンを削除
+- `main.js` から関連コードを削除（DOM 取得9件・`buildStructuredPayload` / `hasStructuredInput` / `saveStructuredRecord` / `retryStructuredRecord` / `loadStructuredOptions` / `resetStructuredForm` ほか）。`escapeHtml` は他で15箇所使うため残置
+- **理由**: 保存先が無いのに入力欄だけ残すと「リスク: 転倒リスク にチェックして画面は保存成功と出たのに DB には何も残っていない」状態になる。監査対応の観点で危険（2026-08-03 奥原判断）。記載基準3項目で差し替える予定の場所でもある
+
+### 居宅は対応不要（調査結果）
+
+居宅の記録画面に構造化ログの入力欄は**存在しない**。`buildStructuredLog()` が送る値は全部メモ本文とチェックリストからの派生値で、元の情報は `memo` と `final_note` に保存されている。サーバー側は 2026-08-02 の改修で `structuredLog` を読んでいない。誤解防止の警告コメントのみ追加（`public/service-records-home/main.js:1454`）。
+
+- 影響範囲: 本リポ内のみ（旧DB のテーブル・データには一切変更なし）
+- テスト: `functions/` で `npm test`（計9件）
+
+## 2026-08-02 [village-tsubasa] サービス記録を sub2 に移行（データソース切替のみ・未デプロイ）
+
+**背景**: 2026-08 以降、予定は sub2 `gmellfgcyypfrtjxblla` に一本化済みだが、記録側は旧DB `pbqqqwwgswniuomjlhsh` を向いたままだった。旧DB の記録系テーブルは 8/1 以降 0 件で、8月の記録がどこにも書けない状態。経緯と設計判断は `docs/HANDOFF_2026-08-02_sub2_service_records.md`。
+
+### Supabase スキーマ（sub2 のみ。**旧DB は無変更**）
+
+- sub2 に `service_records_home`（17列）/ `service_records_move`（19列）を新設（RLS 有効、INDEX: `service_date` / `helper_email`）。詳細は `SUPABASE_SCHEMA.md` §13
+- `memo`（home）/ `notes`（move）を追加（`sql/2026-08-02_sub2_service_records_add_memo_notes.sql`）。`memo` は village-admin の `parseMemo` が形式に依存するため必須
+
+### 設計の変更点（旧DB との非互換）
+
+- **アプリは INSERT ではなく UPDATE する。** GAS（独立プロジェクト「サービス記録転送 sub2」）が `record_uuid` を発行して本文が空の行を先に作り、アプリがその行を埋める
+- **`status` 列を持たない。** 未記入判定は「本文（`final_note` / `summary_text`）が NULL または空」に変更
+- **書き込み責任を分離。** 予定由来の列（日付・時刻・氏名・メール・受給者番号・haisha）は GAS が確定させ、アプリは本文とヘルパー入力列だけを書く。`Sub2HomeSavePayload` / `Sub2MoveSavePayload` の型で担保（HANDOFF §11）
+- **7月以前の保存経路を削除。** 旧DB への INSERT / status 更新 / ロールバックを全廃。古いタブから 7月以前が来たら 400 で断る
+
+### API（レスポンス形式は互換）
+
+- `GET /api/service-records-{home,move}/unwritten` … 取得元を sub2 に変更。**キーは据え置き**（`id` / `taskId` に `record_uuid` を載せるためフロント改修は不要）
+- `POST /api/service-records-{home,move}/save` … sub2 の UPDATE に変更。404（記録行が無い）/ 409（保存済み）を日本語 message で返す
+- 移動の未記入一覧に `haisha` を追加（従来はキーが無く、保存時に常に欠落していた）
+
+### ⚠️ 影響範囲: village-admin が 8月分を読めない
+
+village-admin は旧DB の `service_notes_*` を読んでいる。記録が sub2 に移るため **2026-08-01 以降の記録が管理画面から見えなくなる**。本日はヘルパーが記録を書けることを優先し、village-admin 側は**別途対応**（2026-08-02 奥原判断）。RULES.md ルール4 の事前共有対象。
+
+### 未実装（明日以降）
+
+`previous.ts` ×2 / `samples.ts` ×2 は旧DB を見たまま。`service-records-structured/save.ts` は sub2 の記録に 404 を返すため、移動画面で構造化欄を埋めると保存失敗表示が出る。記載基準3項目（`condition` / `special_notes_*` / `transport`）は列だけ作成済みで UI・保存とも未実装。
+
+**未デプロイ**。本番は旧DB のまま動いている。
+
+- 関連コミット: （このエントリと同じコミット）
+
+## 2026-07-31 [village-tsubasa] 遅延通知の二重送信判定を visit_key 化し、開始遅れ／終了遅れの2種別を導入
+
+**背景**: `schedule_entries.id` は週シートの再同期のたびに振り直される（同一予定で `+6259` ずれた実測あり）。そのため `schedule_id` は永続的な参照キーとして使えず、これに依存していた二重送信判定（409）が機能しない。7/30 の sub2 対応で 8/1 から遅延連絡ボタンが実際に表示されるようになるため、その前に差し替えた。
+
+### サーバー（`functions/src/delayNotify.ts`／コミット `25ae848`）
+
+- 予定から引いた値だけで `visit_key = "YYYY-MM-DD|HH:MM|利用者名|ヘルパー名"` を組み立て、`delay_notices` に保存。**HH:MM は終了遅れでも開始時刻基準に固定**（同じ訪問が2つのキーに割れないため）。氏名は `normalizeName()` 済みの値をキーに使い、生値は `visit_user_name` / `visit_helper_name` に保存
+- 時刻整形は `lib/scheduleSource.ts` の `formatClockTime()` を使用（ゼロ詰め維持）。同ファイルの `formatTime()` は LINE 文面用にゼロ詰めを落とす別物なので**流用しない**
+- **409判定を `schedule_id` 単独から `visit_key + destination + notice_type + arrival_time` の60分窓（`DUPLICATE_WINDOW_MINUTES`）に変更**。到着時刻が違えば「時刻の訂正」として通す。窓を過ぎれば再送可能（「さらに遅れた」を塞がない）。destination 違いも通るようになった（旧仕様は同一予定なら一律409）
+- API に **`noticeType: "start" | "end"` を追加（必須）**。`minutes` はクライアント値を使わず、基準時刻（start は `start_time` / end は `end_time`）からサーバーで再計算。日跨ぎは24時間ラップ、12時間超は `null`
+- クライアント由来の `helperName` は**受け取るが使わない**。`schedule.helper_name` を正とする
+- `noticeType="end"` かつ `end_time` が null は **400** で停止
+- `REASON_MAP` に `clientTextEnd` を追加（既存 `clientText` は無変更）。文面は到着予定／終了予定を種別で出し分け
+- 管理者控えの条件を `reason.notifyAdmin` **OR**「計算後の時刻 > 同ヘルパーの当日の次の予定の開始 − `NEXT_VISIT_BUFFER_MINUTES`(20分)」に拡張。次の予定が無ければ送らず、クエリ失敗など判定不能なら送る側に倒す
+- LINE の `X-Line-Retry-Key` のシードを `visit_key + notice_type + arrival_time` ベースに変更（`schedule_id` の再利用による誤った重複判定を避け、正当な再送は通す）
+- `delay_notices` の列追加（`visit_date` / `visit_start_time` / `visit_user_name` / `visit_helper_name` / `visit_key` / `notice_type`）と index `idx_delay_notices_visit_key_sent` は**別途 SQL Editor で適用済み**。既存行のバックフィルはしない（適用時点で0行）
+- `minutes` 列の意味が変わった: 新規行は「基準時刻からのオフセット分」。`notice_type` が null の行は旧仕様（10/20/30 の遅延分数）なので**集計時は分けること**
+
+### クライアント（`public/today-schedule/`／コミット `c82fabc`）
+
+- ステップ2の先頭に種別トグル（開始が遅れます / 終了が遅れます）。既定は `start`
+- `endTime` が空の予定は「終了が遅れます」を disabled にし、理由を画面にも表示
+- 候補時刻（+10/+20/+30分）の基準を種別で切替。**切替時は選択済みの時刻をクリア**（14:00基準で選んだ 14:20 が 16:00 基準では前倒しになるため）
+- 送信ボディに `noticeType` を追加。`minutes` は送らない
+- 確認画面に「種類」行、時刻の見出しを到着予定／終了予定で出し分け
+- バッジの localStorage キーを `{date}_{scheduleId}_{noticeType}` に変更（旧キーは開始遅れとしてフォールバック）。開始遅れと終了遅れは別々に送れるため、**片方のみ送信済みならバッジとボタンを併存**させる
+- 影響範囲: 本リポ内のみ。他アプリ非影響
+- デプロイ: `functions:api` / `hosting` ともに 2026-07-31 実施済み
+- **未検証**: 実データでの動作確認は未実施（7/31 時点では id が UUID でボタンが出ないため）。8/1 に「ボタン表示 → 送信 → 409 → 時刻変更で再送 → 終了遅れ → `delay_notices` の中身」を確認すること。ヘルパー端末に**古い `main.js` がキャッシュされていると `noticeType` 欠落で400**になる点にも注意
+
+---
+
+## 2026-07-30 [village-tsubasa] 当日・翌日系APIを sub2 対応（データ境界を `lib/scheduleSource.ts` に集約）
+
+- **`functions/src/lib/scheduleSource.ts` を新規追加**。旧DB / sub2 のデータ境界（2026年7月以前 = 旧DB、8月以降 = sub2）の判定と、sub2 アクセスの共通処理を集約。`CUTOVER_YEAR` / `CUTOVER_MONTH` の env 名と既定値（2026 / 8）は従来どおりで、**定数の二重持ちを禁止**（判定は必ず `isSub2YearMonth` / `isSub2Date` を使う）
+- `scheduleList.ts` はインラインの cutover 判定を `isSub2YearMonth` の import に差し替え。**挙動は不変**
+- **`todaySchedule.ts`**: 8月以降は sub2 を参照。あわせて **`?date=YYYY-MM-DD` を接続**（未指定なら従来どおり JST の今日。不正な日付は 400 `invalid date`。期間制限なし）
+- `tomorrowSchedule.ts` / `scheduleAll.ts`（today/tomorrow 全体一覧）/ `helperSummary.ts`（today/tomorrow サマリ）/ `nextHelperSchedule.ts` / `scheduledNotifications.ts`（18時通知）も同じ境界で sub2 対応
+- **`index.ts` の `notifyTomorrowSchedule`（18時ジョブ）の `secrets` に `SUPABASE_SUB2_SERVICE_ROLE_KEY` を追加**。未指定だと 8/1 以降に Secret 未解決で18時通知が丸ごと止まる
+- sub2 にはヘルパーのメール列が無いため、`email → helper.helper_name → schedule_entries.helper_name` の2段引き。**突合は完全一致のみ**（`.ilike()` や部分一致は不使用。「木野」が「木野(真)」「木野(遙)」を巻き込まないため）。メール比較は前後空白除去＋小文字化
+- 列マッピング: `transport → haisha` / `support_flow → task` / `helper_note → summary`。**`summary` の出所は `helper_note` で確定**（sub2 に7月データが無く旧DBと突合不可のため。月次一覧 `scheduleList.ts` の既存対応と揃えた）
+- 時刻整形: sub2 の time 型は `"10:00:00"` で返るので `formatClockTime()` で `"HH:MM"` に変換。**ゼロ詰めは維持**（`09:00` を `9:00` にしない）。`delayNotify.ts` の `formatTime()` は文面用にゼロ詰めを落とす別物なので流用していない
+- 合同シフト（`coHelpers`）は sub2 でも同 `(user_name, start_time)` で再現。ただし **sub2 経路のみ `start_time` が null の行を除外**（旧経路は null 同士が一致して誤って合同扱いになる。旧経路は表示を変えないため未修正）
+- `nextHelperSchedule.ts` は境界を跨ぐため、旧DB側の未来検索に `date < 2026-08-01` の上限を追加し、見つからなければ sub2 を引く2段構え
+- **旧DB経路のコードは無改修**（`fetchTodayScheduleByHelperEmail` / `fetchTomorrowScheduleByHelperEmail` ほか）。7月以前の表示・レスポンス形式は一切変えていない
+- 影響範囲: 本リポ内のみ。API のレスポンス形式変更なし（`?date=` はクエリの**追加**）。Supabase のスキーマ変更なし。sub2 への**読み取り追加のみ**で他アプリ非影響
+- **副作用（重要）**: 8月以降は `schedule_entries.id` が数値になるため、today-schedule の遅延連絡ボタンの表示条件（数値の正の整数ID）を満たすようになり、**8/1 から遅延連絡ボタンが実際に表示される**
+- **未対応（8/1 までに必着）**: `delayNotify.ts` の visit_key 化。`schedule_entries.id` は週シート再同期のたびに振り直されるため（同一予定で +6259 ずれた実測あり）、現行の `schedule_id` 単独での二重送信判定（409）が機能しない。`delay_notices` に `visit_date` / `visit_start_time` / `visit_user_name` / `visit_helper_name` / `visit_key` / `notice_type` を追加するマイグレーションとセットで対応する
+- 未デプロイ・未コミット（`firebase deploy --only functions:api` + 18時ジョブの再デプロイが必要）
+
+## 2026-07-22 [village-tsubasa] today-schedule（ヘルパー用）に遅延連絡ボタンを追加
+
+- `public/today-schedule/`（main.js / index.html）に「📢 遅れる連絡」ボタン + 下スライドのシートUIを追加。10/20/30分を選び、確認後 `POST /api/delay-notify { scheduleId, minutes, helperName }` を送信
+- サーバー側 `/api/delay-notify` は変更なし（既存の実装・テスト済みをそのまま利用）
+- `item.id` の無い予定にはボタンを出さない。送信中はボタン disabled（二重タップ防止）、fetch は 15秒タイムアウト（AbortController）
+- 連絡済みバッジは localStorage `village_delay_sent`（`{date}_{scheduleId}` → `{minutes, at}`）に保存し再読込で復元。**表示専用**で、二重送信防止の真実はサーバーの 409
+- 影響範囲: 本リポ内のフロントのみ。API・スキーマ変更なし、他アプリ非影響
+- 追補（同日）: ボタン表示条件を「数値の正の整数ID」に限定。7月以前の旧DB由来（UUID の id）予定はサーバーが `Number(scheduleId)→NaN` で 400 になるため、遅延通知対応は sub2（8月以降）の予定のみとし、UUID 予定にはボタン/バッジを出さない
+- デプロイ: `firebase deploy --only hosting` 済み
+
+## 2026-07-21 [village-tsubasa] LINE Webhook 受信口 `/api/line-webhook` を追加（一時 / ID取得用）
+
+- `functions/src/lineWebhook.ts` を新規追加。LINE の join / message イベントの `source.groupId` を Cloud Logging に `[line-webhook] groupId=Cxxxx type=join` 形式で出力するだけ。DB書き込み・LINE送信はしない
+- `index.ts` に `POST /line-webhook` と `POST /api/line-webhook` を追加。`api` の secrets に `LINE_CHANNEL_SECRET` を追加
+- `X-Line-Signature` を検証（HMAC-SHA256 + timingSafeEqual）。生ボディは Firebase の `req.rawBody` を使用。検証失敗でも 200 を返す（LINE の再送ループ防止）
+- **用途**: テスト用グループの groupId 取得。将来のグループID自動登録の足場でもある
+- **要 Secret 登録**: `firebase functions:secrets:set LINE_CHANNEL_SECRET`（channel secret。アクセストークンとは別物）。未登録のままだと署名検証が必ず失敗し、全イベントが無視される
+- 影響範囲: 本リポ内のみ。新規エンドポイントのみで既存 API の変更なし
+- 未デプロイ
+
+## 2026-07-20 [village-tsubasa] 遅延通知API に送信可否判定（`users.delay_notice_enabled`）を追加
+
+- sub2 の `users` に `delay_notice_enabled`（boolean, default false）を追加済み（列追加は奥原さん実施）。`false` の利用者には LINE を送らず電話連絡へ回す
+- `delayNotify.ts` の users select に `delay_notice_enabled` を追加。判定を `resolveBlockReason()` に集約
+- 判定順: ①users に突合できない → ②`delay_notice_enabled` が false → ③`line_group_id` が無い。**②を③より先に見る**（グループIDが残っていても「送らない」設定を優先するため）
+- `null`（未設定）も `false` と同じく「送らない」に倒す
+- `delay_notices.error_message` は「LINE連絡が無効」「LINE ID が未登録」「users に該当する利用者がいません」を区別して記録
+- 影響範囲: 本リポ内のみ。`users` への **nullable 列追加のみ**でルール2に適合、既存列の変更なし。他アプリは当該列を参照していないため影響なし
+- ⚠️ **既定値が false なので、デプロイ直後は全利用者が「LINE連絡は設定されていません」になる。** 送信対象の利用者を `delay_notice_enabled = true` に更新するまで LINE は1通も飛ばない
+- 未デプロイ
+
+## 2026-07-20 [village-tsubasa] 遅延通知API `/api/delay-notify` を追加
+
+- `functions/src/delayNotify.ts` を新規追加。ヘルパーの遅れ（10/20/30分）を利用者の LINE グループへ push し、`delay_notices`（sub2）に送信ログを残す
+- `functions/src/index.ts` に `POST /delay-notify` と `POST /api/delay-notify` を追加。`api` の secrets に `LINE_CHANNEL_ACCESS_TOKEN` を追加
+- sub2 接続は既存の `getSupabaseSub2Client()` を流用（新規クライアント・新規 Supabase Secret は作っていない）
+- 手順書は `docs/DELAY_NOTIFY_SETUP.md`
+- **フェイルクローズ設計**: 二重送信チェックのクエリが失敗したら送信せず 500 で止める（送信済みか判定できない状態で送ると二重送信になるため）。二重送信チェックは `status = 'sent'` の行のみを見るので、`failed` / `needs_phone_call` の記録が残っていても再送可能
+- **レスポンス規約**: 全レスポンスに画面表示用の日本語 `message` を持たせ、技術的詳細は `error` に分離。送信できなかった全経路（502 / 500）に `needsPhoneCall: true` を付け「送れなかった＝電話連絡」に倒す。4xx には `needsPhoneCall` を付けない（409「すでに連絡済み」で電話に倒すと二重連絡になるため）
+- 影響範囲: 本リポ内のみ。新規エンドポイントのみで既存 API の変更なし。`delay_notices` は sub2 の新規テーブル（作成済み・RLS 有効／ポリシーなし = service_role のみ）で、既存テーブルへの変更はないため他アプリへの影響なし
+- 未デプロイ。デプロイ前に `firebase functions:secrets:set LINE_CHANNEL_ACCESS_TOKEN` が必要
 
 ## 2026-07-16 [village-tsubasa] ひろばダッシュボード — 設定カード移動・通知解除の修正・Push 通知を18時1本に集約
 

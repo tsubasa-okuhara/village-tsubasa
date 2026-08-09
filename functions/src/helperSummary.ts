@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 
+import { fetchSub2SummaryRowsByDate, isSub2Date } from "./lib/scheduleSource";
 import { getSupabaseClient } from "./lib/supabase";
 
 export type HelperSummaryItem = {
@@ -22,8 +23,8 @@ export type HelperSummaryErrorResponse = {
   message: string;
 };
 
-type ScheduleRow = {
-  date: string;
+/** 集計に必要な最小限の形。旧DB経路・sub2 経路のどちらもこの形に揃えてから集計する */
+type SummarySourceRow = {
   name: string | null;
   helper_email: string;
   start_time: string | null;
@@ -94,10 +95,19 @@ function compareStartTime(a: string | null, b: string | null): number {
   return a.localeCompare(b);
 }
 
-export async function fetchHelperSummaryByDate(
+/**
+ * 集計元の行を取得する。2026年8月以降は sub2（schedule_entries + helper マスタ）。
+ * sub2 には helper_email 列が無いので helper マスタで補完している
+ * （メール未登録のヘルパーは旧DB経路と同じく除外。除外分は warn に出る）。
+ */
+async function fetchSummarySourceRows(
   date: string,
-  routePath: string
-): Promise<HelperSummaryItem[]> {
+  logLabel: string
+): Promise<SummarySourceRow[]> {
+  if (isSub2Date(date)) {
+    return fetchSub2SummaryRowsByDate(date, logLabel);
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("schedule_web_v")
@@ -111,7 +121,15 @@ export async function fetchHelperSummaryByDate(
     throw error;
   }
 
-  const rows = (data ?? []) as ScheduleRow[];
+  return (data ?? []) as SummarySourceRow[];
+}
+
+export async function fetchHelperSummaryByDate(
+  date: string,
+  routePath: string,
+  logLabel = "helper-summary"
+): Promise<HelperSummaryItem[]> {
+  const rows = await fetchSummarySourceRows(date, logLabel);
   const helperMap = new Map<string, HelperAccumulator>();
 
   for (const row of rows) {
@@ -176,7 +194,7 @@ export function createHelperSummaryHandler(
   ): Promise<void> {
     try {
       const targetDate = getDateJstByOffset(dayOffset);
-      const helpers = await fetchHelperSummaryByDate(targetDate, routePath);
+      const helpers = await fetchHelperSummaryByDate(targetDate, routePath, logLabel);
 
       res.status(200).json({
         ok: true,

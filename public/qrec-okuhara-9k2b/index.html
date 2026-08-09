@@ -355,6 +355,40 @@
         cursor: pointer;
         color: var(--muted);
       }
+
+      .reference-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .reference-item {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--bg);
+        cursor: pointer;
+        font-size: 0.85rem;
+        line-height: 1.5;
+      }
+      .reference-item.is-checked {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .reference-item.is-disabled {
+        opacity: 0.5;
+      }
+      .reference-item input {
+        margin-top: 3px;
+        flex-shrink: 0;
+      }
+      .reference-item__text {
+        flex: 1;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
     </style>
   </head>
   <body>
@@ -462,6 +496,14 @@
             class="memo"
             placeholder="当日の様子や気づきを入力"
           ></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-row__label">
+            参考記録（過去の書き方の手本・最大3件まで選べます）
+          </div>
+          <p id="reference-status" class="status">参考記録を読み込み中…</p>
+          <div id="reference-list" class="reference-list"></div>
         </div>
 
         <div class="form-row">

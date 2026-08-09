@@ -67,6 +67,8 @@ const formRegenButton = document.getElementById("form-regen-note");
 const formStatus = document.getElementById("form-status");
 const formSaveNext = document.getElementById("form-save-next");
 const formSaveClose = document.getElementById("form-save-close");
+const referenceStatus = document.getElementById("reference-status");
+const referenceListEl = document.getElementById("reference-list");
 
 // ─── 状態 ───────────────────────────────────────────────
 const state = {
@@ -79,7 +81,12 @@ const state = {
   selectedTask: null,
   selectedCategoryValue: null, // 区分（居宅のみ）
   isSaving: false,
+  samples: [], // openForm 時に取得する参考記録（最大10件）
+  selectedRefs: [], // チェックした参考記録の note（最大 MAX_REFS 件）
 };
+
+// 参考記録として AI に渡す上限（バックエンドは最大5件受けるが、UI では絞って3件まで）
+const MAX_REFS = 3;
 
 // ─── ゲート（メールアドレス確認） ────────────────────
 function showGate() {
@@ -338,6 +345,9 @@ function openForm(task) {
   formStatus.textContent = "";
   formStatus.className = "status";
 
+  // 参考記録（過去の記入済み記録）を自動取得して一覧表示する
+  loadSamples(task);
+
   formModal.hidden = false;
   setTimeout(() => formMemo.focus(), 100);
 }
@@ -345,6 +355,104 @@ function openForm(task) {
 function closeForm() {
   formModal.hidden = true;
   state.selectedTask = null;
+  state.samples = [];
+  state.selectedRefs = [];
+}
+
+// ─── 参考記録（samples） ──────────────────────────────────
+async function fetchSamples(task) {
+  const userName = task.user_name || task.userName || "";
+  if (!userName) return [];
+
+  const params = new URLSearchParams({ user_name: userName });
+  // 居宅は user_name + task（統一済み3種別）、移動は user_name のみ
+  if (state.currentCategory === "home") {
+    const taskValue = state.selectedCategoryValue || task.task || "";
+    if (taskValue) params.set("task", taskValue);
+  }
+  const base =
+    state.currentCategory === "home"
+      ? "/service-records-home/samples"
+      : "/service-records-move/samples";
+
+  const res = await fetch(`${API_BASE}${base}?${params.toString()}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.message || "fetch failed");
+  return Array.isArray(data.samples) ? data.samples : [];
+}
+
+async function loadSamples(task) {
+  state.samples = [];
+  state.selectedRefs = [];
+  referenceListEl.innerHTML = "";
+  referenceStatus.hidden = false;
+  referenceStatus.textContent = "参考記録を読み込み中…";
+  referenceStatus.className = "status";
+
+  try {
+    const samples = await fetchSamples(task);
+    // 取得中に別のタスクを開いた場合は、この結果を破棄する
+    if (state.selectedTask !== task) return;
+
+    state.samples = samples;
+    if (samples.length === 0) {
+      referenceStatus.textContent = "参考にできる過去記録がありません。";
+      referenceStatus.className = "status";
+      return;
+    }
+    referenceStatus.hidden = true;
+    renderReferenceList();
+  } catch (err) {
+    console.error("[owner-record] samples error:", err);
+    if (state.selectedTask !== task) return;
+    referenceStatus.textContent =
+      "参考記録の取得に失敗しました（記録は通常どおり入力できます）。";
+    referenceStatus.className = "status is-error";
+  }
+}
+
+function renderReferenceList() {
+  referenceListEl.innerHTML = "";
+  const limitReached = state.selectedRefs.length >= MAX_REFS;
+
+  state.samples.forEach((sample, index) => {
+    const note = sample.note || "";
+    const checked = state.selectedRefs.includes(note);
+    const disabled = !checked && limitReached;
+
+    const label = document.createElement("label");
+    label.className =
+      "reference-item" +
+      (checked ? " is-checked" : "") +
+      (disabled ? " is-disabled" : "");
+
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = checked;
+    box.disabled = disabled;
+    box.addEventListener("change", () => toggleReference(note, box.checked));
+
+    const text = document.createElement("span");
+    text.className = "reference-item__text";
+    const dateLabel = sample.service_date ? `【${sample.service_date}】` : "";
+    text.textContent = `${index + 1}. ${dateLabel}${note}`;
+
+    label.appendChild(box);
+    label.appendChild(text);
+    referenceListEl.appendChild(label);
+  });
+}
+
+function toggleReference(note, isChecked) {
+  if (isChecked) {
+    if (state.selectedRefs.length >= MAX_REFS) return;
+    if (!state.selectedRefs.includes(note)) state.selectedRefs.push(note);
+  } else {
+    state.selectedRefs = state.selectedRefs.filter((n) => n !== note);
+  }
+  // 上限到達で他をグレーアウトする等、チェック状態を反映するため再描画
+  renderReferenceList();
 }
 
 formClose.addEventListener("click", closeForm);
@@ -361,6 +469,8 @@ categoryButtons.addEventListener("click", (e) => {
   // 区分が変わったら本文を再生成（メモがあれば AI、無ければテンプレ）
   if (state.selectedTask) {
     regenerateNote();
+    // 居宅は区分ごとに参考記録が変わるので取り直す（チェックもリセットされる）
+    loadSamples(state.selectedTask);
   }
 });
 
@@ -413,10 +523,10 @@ function generateFinalNote(task, memo) {
 }
 
 // ─── AI 整形（既存 generateSummary エンドポイント流用） ─────
-//   - メモが空のとき: AI を呼ばずテンプレ（generateFinalNote）で即時プレースホルダ
-//   - メモがあるとき: 居宅 → /service-records-home/summary
-//                     移動 → /service-records-move/summary（OpenAI gpt-4o-mini）
-//   - API 失敗時はローカルテンプレにフォールバックして画面を固めない
+//   - メモの有無に関わらず AI を呼ぶ。メモが空でも区分・参考記録の書きぶりから
+//     一般的な支援内容の下書きを生成する（保存前に必ず人間が確認する前提）。
+//   - 居宅 → /service-records-home/summary / 移動 → /service-records-move/summary（gpt-4o-mini）
+//   - API 失敗・空応答時はローカルテンプレにフォールバックして画面を固めない
 const HOME_SUMMARY_ENDPOINT = `${API_BASE}/service-records-home/summary`;
 const MOVE_SUMMARY_ENDPOINT = `${API_BASE}/service-records-move/summary`;
 
@@ -427,12 +537,6 @@ async function regenerateNote() {
 
   const task = state.selectedTask;
   const memo = formMemo.value.trim();
-
-  // メモが無ければ AI を呼ばず、テンプレのプレースホルダを表示
-  if (!memo) {
-    formFinalNote.value = generateFinalNote(task, "");
-    return;
-  }
 
   if (isGenerating) return;
   isGenerating = true;
@@ -489,6 +593,10 @@ async function fetchAiSummaryHome(task, memo) {
     items: [], // 構造化項目（実施項目）は qrec では省略
     otherDetail: "",
     memo,
+    // チェックした参考記録がある場合のみ渡す（0件なら従来どおりの生成）
+    ...(state.selectedRefs.length > 0
+      ? { referenceNotes: state.selectedRefs }
+      : {}),
   };
   const res = await fetch(HOME_SUMMARY_ENDPOINT, {
     method: "POST",
@@ -511,6 +619,10 @@ async function fetchAiSummaryMove(task, memo) {
     endTime: task.end_time || "",
     task: task.task || "",
     notes: memo,
+    // チェックした参考記録がある場合のみ渡す（0件なら従来どおりの生成）
+    ...(state.selectedRefs.length > 0
+      ? { referenceNotes: state.selectedRefs }
+      : {}),
   };
   const res = await fetch(MOVE_SUMMARY_ENDPOINT, {
     method: "POST",
@@ -525,6 +637,11 @@ async function fetchAiSummaryMove(task, memo) {
 }
 
 // ─── 保存処理 ─────────────────────────────────────────
+// タスクの一意キー。移動は taskId、居宅は id を持つため両対応する。
+function taskKey(t) {
+  return t.taskId || t.id;
+}
+
 formSaveNext.addEventListener("click", () => save({ next: true }));
 formSaveClose.addEventListener("click", () => save({ next: false }));
 
@@ -534,12 +651,8 @@ async function save({ next }) {
   const memo = formMemo.value.trim();
   const finalNote = formFinalNote.value.trim();
 
-  if (!memo) {
-    formStatus.textContent = "メモを入力してください。";
-    formStatus.className = "status is-error";
-    formMemo.focus();
-    return;
-  }
+  // メモは任意（空メモでもAI生成した記録本文があれば保存できる）。
+  // 保存を止めるのは記録本文が空のときだけ。
   if (!finalNote) {
     formStatus.textContent = "記録本文が空です。";
     formStatus.className = "status is-error";
@@ -559,15 +672,12 @@ async function save({ next }) {
       await saveMove(state.selectedTask, memo, finalNote);
     }
 
-    // 一覧から削除
+    // 一覧から削除（移動=taskId / 居宅=id の両対応キーで照合）
+    const savedKey = taskKey(state.selectedTask);
     if (state.currentCategory === "home") {
-      state.homeTasks = state.homeTasks.filter(
-        (t) => t.id !== state.selectedTask.id
-      );
+      state.homeTasks = state.homeTasks.filter((t) => taskKey(t) !== savedKey);
     } else {
-      state.moveTasks = state.moveTasks.filter(
-        (t) => t.id !== state.selectedTask.id
-      );
+      state.moveTasks = state.moveTasks.filter((t) => taskKey(t) !== savedKey);
     }
     updateBadges();
 

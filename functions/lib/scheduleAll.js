@@ -3,8 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchScheduleAllByDate = fetchScheduleAllByDate;
 exports.createScheduleAllHandler = createScheduleAllHandler;
 const helperSummary_1 = require("./helperSummary");
+const scheduleSource_1 = require("./lib/scheduleSource");
 const supabase_1 = require("./lib/supabase");
 async function fetchScheduleAllByDate(date) {
+    // 2026年8月以降は sub2（schedule_entries）。以下の旧DB経路は変更していない
+    if ((0, scheduleSource_1.isSub2Date)(date)) {
+        return (0, scheduleSource_1.fetchSub2ScheduleAllByDate)(date);
+    }
     const supabase = (0, supabase_1.getSupabaseClient)();
     const { data, error } = await supabase
         .from("schedule")

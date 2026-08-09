@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 
+import { fetchSub2ScheduleByHelperEmail, isSub2Date } from "./lib/scheduleSource";
 import { getSupabaseClient } from "./lib/supabase";
 
 type TodayScheduleItem = {
@@ -39,6 +40,24 @@ type ScheduleRow = {
   task: string | null;
   summary: string | null;
 };
+
+/** "YYYY-MM-DD" 形式かつ実在する日付か（2026-02-31 のような値を弾く） */
+export function isValidDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
 
 export function getTodayDateJst(): string {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -102,6 +121,22 @@ export async function fetchTodayScheduleByHelperEmail(
   });
 }
 
+/**
+ * 対象日に応じてデータソースを切り替える。
+ * 2026年7月以前は旧DB（schedule_web_v）、8月以降は sub2（schedule_entries）。
+ * 旧DB経路 fetchTodayScheduleByHelperEmail は一切変更していない。
+ */
+export async function fetchTodayScheduleItems(
+  helperEmail: string,
+  date: string
+): Promise<TodayScheduleItem[]> {
+  if (isSub2Date(date)) {
+    return fetchSub2ScheduleByHelperEmail(helperEmail, date, "today-schedule");
+  }
+
+  return fetchTodayScheduleByHelperEmail(helperEmail, date);
+}
+
 export async function handleTodaySchedule(
   req: Request,
   res: Response<TodayScheduleSuccessResponse | TodayScheduleErrorResponse>
@@ -119,9 +154,21 @@ export async function handleTodaySchedule(
     return;
   }
 
+  // date は任意。未指定なら従来どおり JST の今日を見る（既定の挙動は変えない）
+  const dateValue = Array.isArray(req.query.date) ? req.query.date[0] : req.query.date;
+  const requestedDate = typeof dateValue === "string" ? dateValue.trim() : "";
+
+  if (requestedDate !== "" && !isValidDateString(requestedDate)) {
+    res.status(400).json({
+      ok: false,
+      message: "invalid date",
+    });
+    return;
+  }
+
   try {
-    const todayDate = getTodayDateJst();
-    const items = await fetchTodayScheduleByHelperEmail(helperEmail, todayDate);
+    const todayDate = requestedDate !== "" ? requestedDate : getTodayDateJst();
+    const items = await fetchTodayScheduleItems(helperEmail, todayDate);
 
     res.status(200).json({
       ok: true,

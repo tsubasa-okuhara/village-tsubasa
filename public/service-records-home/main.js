@@ -1,3 +1,7 @@
+// 未記入一覧の下限日（表示用ラベル）。実際の絞り込みはサーバー側が行う。
+// 変更するときは functions/src/lib/recordCutoff.ts と必ずセットで直す。
+const RECORD_LIST_CUTOFF_LABEL = "2026年8月1日";
+
 const HOME_UNWRITTEN_API = "/api/service-records-home/unwritten";
 const HOME_SUMMARY_API = "/api/service-records-home/summary";
 const HOME_SAVE_API = "/api/service-records-home/save";
@@ -1089,7 +1093,11 @@ async function loadHomeTasks(helperEmail, options) {
     state.items = Array.isArray(data.items) ? data.items : [];
 
     if (state.items.length === 0) {
-      setStatus(listStatusElement, "未記入の予定はありません。");
+      // 0件でも「壊れた」と誤解されないよう、表示範囲の下限を必ず添える
+      setStatus(
+        listStatusElement,
+        `${RECORD_LIST_CUTOFF_LABEL}以降の未記入予定はありません。（7月以前の記録は事業所側で確認します）`,
+      );
       renderTaskList(listElement, selectedSummaryElement, saveStatusElement);
       return;
     }
@@ -1443,6 +1451,18 @@ function initializeHomeUi() {
     try {
       setStatus(saveStatusElement, "保存しています...");
 
+      // ⚠️ structuredLog は 2026-08-03 時点で **サーバー側が保存していない**。
+      // 旧DB の service_action_logs_home に INSERT していたが、8月以降の記録は
+      // sub2 の service_records_home にあり、sub2 に相当テーブルを作らない判断のため
+      // 保存先が無い（functions/src/service-records-home/saveRecord.ts:20 のコメント参照）。
+      //
+      // 送信をやめていないのは、中身が全部「派生値」で失われる情報が無いため。
+      // physicalState / mentalState / riskFlag はメモ本文からの自動抽出、
+      // actionDetail / assistLevel はチェックリストからの導出で、元の情報は
+      // memo（composedMemo）と final_note に保存されている。
+      // 移動画面の構造化ログは独立した入力欄だったので、そちらは入力欄ごと削除した。
+      //
+      // 送信自体をやめるのは後日（2026-08-03 奥原判断）。
       const structuredLog = buildStructuredLog(
         state.selectedCategory,
         derived.primaryItems,

@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { SUPABASE_SERVICE_ROLE_KEY } from "./lib/supabase";
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SUB2_SERVICE_ROLE_KEY } from "./lib/supabase";
 import { OPENAI_API_KEY } from "./lib/openai";
 import { handleScheduleList } from "./scheduleList";
 import {
@@ -31,6 +31,7 @@ import { selfMatchingRouter } from "./self-matching/routes";
 
 import { handleGenerateHomeSummary } from "./service-records-home/generateSummary";
 import { handleListUnwrittenHome } from "./service-records-home/listUnwritten";
+import { handlePreviousHome } from "./service-records-home/previous";
 import { handleSamplesHome } from "./service-records-home/samples";
 import { handleBonusLeaderboard } from "./bonus/leaderboard";
 import { requireOwner } from "./bonus/requireOwner";
@@ -84,6 +85,9 @@ import { handleScheduleEditorDelete } from "./scheduleEditor/delete";
 import { handleScheduleEditorRestore } from "./scheduleEditor/restore";
 import { handleScheduleEditorListTrash } from "./scheduleEditor/listTrash";
 
+import { handleDelayNotify, LINE_CHANNEL_ACCESS_TOKEN } from "./delayNotify";
+import { handleLineWebhook, LINE_CHANNEL_SECRET } from "./lineWebhook";
+
 const app = express();
 
 app.use(
@@ -125,6 +129,14 @@ app.post("/api/push/unsubscribe", handleUnsubscribePush);
 app.post("/push/test", handleSendTestPush);
 app.post("/api/push/test", handleSendTestPush);
 
+// 遅延通知（ヘルパーが遅れる旨を利用者の LINE グループへ push）
+app.post("/delay-notify", handleDelayNotify);
+app.post("/api/delay-notify", handleDelayNotify);
+
+// LINE Webhook（一時: テスト用グループの groupId 取得。将来のID自動登録の足場）
+app.post("/line-webhook", handleLineWebhook);
+app.post("/api/line-webhook", handleLineWebhook);
+
 app.get("/notifications", handleGetNotifications);
 app.get("/api/notifications", handleGetNotifications);
 app.post("/notifications/read", handleReadNotification);
@@ -163,6 +175,8 @@ app.post("/service-records-home/summary", handleGenerateHomeSummary);
 app.post("/api/service-records-home/summary", handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", handleListUnwrittenHome);
+app.get("/service-records-home/previous", handlePreviousHome);
+app.get("/api/service-records-home/previous", handlePreviousHome);
 app.get("/service-records-home/samples", handleSamplesHome);
 app.get("/api/service-records-home/samples", handleSamplesHome);
 app.get("/bonus/leaderboard", requireOwner, handleBonusLeaderboard);
@@ -246,6 +260,10 @@ export const notifyTomorrowSchedule = onSchedule(
     region: "asia-northeast1",
     secrets: [
       SUPABASE_SERVICE_ROLE_KEY,
+      // 2026年8月以降の予定は sub2 から引くため、スケジューラにも sub2 のキーが要る。
+      // 未指定だと 8/1 以降 getSupabaseSub2Client() が Secret 未解決で落ち、
+      // 18時通知が丸ごと止まる（RLS が絡まないので手前では気付けない）
+      SUPABASE_SUB2_SERVICE_ROLE_KEY,
       WEB_PUSH_VAPID_PUBLIC_KEY,
       WEB_PUSH_VAPID_PRIVATE_KEY,
       WEB_PUSH_SUBJECT,
@@ -261,10 +279,13 @@ export const api = onRequest(
     region: "asia-northeast1",
     secrets: [
       SUPABASE_SERVICE_ROLE_KEY,
+      SUPABASE_SUB2_SERVICE_ROLE_KEY,
       OPENAI_API_KEY,
       WEB_PUSH_VAPID_PUBLIC_KEY,
       WEB_PUSH_VAPID_PRIVATE_KEY,
       WEB_PUSH_SUBJECT,
+      LINE_CHANNEL_ACCESS_TOKEN,
+      LINE_CHANNEL_SECRET,
     ],
   },
   app,

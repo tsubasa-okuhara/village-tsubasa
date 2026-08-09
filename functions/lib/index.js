@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.api = exports.notifyTomorrowSchedule = exports.notifyTodaySchedule = void 0;
+exports.api = exports.notifyTomorrowSchedule = void 0;
 const cors_1 = __importDefault(require("cors"));
 const express_1 = __importDefault(require("express"));
 const https_1 = require("firebase-functions/v2/https");
@@ -28,6 +28,8 @@ const routes_3 = require("./self-matching/routes");
 // ↑ CloudSign secret 未設定のため一時無効化（次回チャットで CloudSign 設定後に復活）
 const generateSummary_1 = require("./service-records-home/generateSummary");
 const listUnwritten_1 = require("./service-records-home/listUnwritten");
+const previous_1 = require("./service-records-home/previous");
+const samples_1 = require("./service-records-home/samples");
 const leaderboard_1 = require("./bonus/leaderboard");
 const requireOwner_1 = require("./bonus/requireOwner");
 const saveRecord_1 = require("./service-records-home/saveRecord");
@@ -42,6 +44,8 @@ const create_1 = require("./scheduleEditor/create");
 const delete_1 = require("./scheduleEditor/delete");
 const restore_1 = require("./scheduleEditor/restore");
 const listTrash_1 = require("./scheduleEditor/listTrash");
+const delayNotify_1 = require("./delayNotify");
+const lineWebhook_1 = require("./lineWebhook");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({
     origin: true,
@@ -72,6 +76,12 @@ app.post("/push/unsubscribe", push_1.handleUnsubscribePush);
 app.post("/api/push/unsubscribe", push_1.handleUnsubscribePush);
 app.post("/push/test", push_1.handleSendTestPush);
 app.post("/api/push/test", push_1.handleSendTestPush);
+// 遅延通知（ヘルパーが遅れる旨を利用者の LINE グループへ push）
+app.post("/delay-notify", delayNotify_1.handleDelayNotify);
+app.post("/api/delay-notify", delayNotify_1.handleDelayNotify);
+// LINE Webhook（一時: テスト用グループの groupId 取得。将来のID自動登録の足場）
+app.post("/line-webhook", lineWebhook_1.handleLineWebhook);
+app.post("/api/line-webhook", lineWebhook_1.handleLineWebhook);
 app.get("/notifications", notifications_1.handleGetNotifications);
 app.get("/api/notifications", notifications_1.handleGetNotifications);
 app.post("/notifications/read", notifications_1.handleReadNotification);
@@ -100,6 +110,10 @@ app.post("/service-records-home/summary", generateSummary_1.handleGenerateHomeSu
 app.post("/api/service-records-home/summary", generateSummary_1.handleGenerateHomeSummary);
 app.get("/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHome);
 app.get("/api/service-records-home/unwritten", listUnwritten_1.handleListUnwrittenHome);
+app.get("/service-records-home/previous", previous_1.handlePreviousHome);
+app.get("/api/service-records-home/previous", previous_1.handlePreviousHome);
+app.get("/service-records-home/samples", samples_1.handleSamplesHome);
+app.get("/api/service-records-home/samples", samples_1.handleSamplesHome);
 app.get("/bonus/leaderboard", requireOwner_1.requireOwner, leaderboard_1.handleBonusLeaderboard);
 app.get("/api/bonus/leaderboard", requireOwner_1.requireOwner, leaderboard_1.handleBonusLeaderboard);
 app.post("/service-records-home/save", saveRecord_1.handleSaveHomeRecord);
@@ -164,27 +178,18 @@ app.get("/api/schedule-editor/trash", listTrash_1.handleScheduleEditorListTrash)
 // スケジュール編集（Phase D2）: 行追加
 app.post("/schedule-editor/create", create_1.handleScheduleEditorCreate);
 app.post("/api/schedule-editor/create", create_1.handleScheduleEditorCreate);
-// 毎朝7時（JST）に今日の予定を通知
-exports.notifyTodaySchedule = (0, scheduler_1.onSchedule)({
-    schedule: "0 7 * * *", // JST 07:00
-    timeZone: "Asia/Tokyo",
-    region: "asia-northeast1",
-    secrets: [
-        supabase_1.SUPABASE_SERVICE_ROLE_KEY,
-        push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
-        push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
-        push_1.WEB_PUSH_SUBJECT,
-    ],
-}, async () => {
-    await (0, scheduledNotifications_1.runNotifyToday)();
-});
-// 毎晩20時（JST）に明日の予定を通知
+// 毎日18時（JST）に明日の予定を通知（2026-07-16: 18時の1本に集約。
+// 朝7時の notifyTodaySchedule は廃止。手動実行は POST /api/notify-today で可能）
 exports.notifyTomorrowSchedule = (0, scheduler_1.onSchedule)({
-    schedule: "0 20 * * *", // JST 20:00
+    schedule: "0 18 * * *", // JST 18:00
     timeZone: "Asia/Tokyo",
     region: "asia-northeast1",
     secrets: [
         supabase_1.SUPABASE_SERVICE_ROLE_KEY,
+        // 2026年8月以降の予定は sub2 から引くため、スケジューラにも sub2 のキーが要る。
+        // 未指定だと 8/1 以降 getSupabaseSub2Client() が Secret 未解決で落ち、
+        // 18時通知が丸ごと止まる（RLS が絡まないので手前では気付けない）
+        supabase_1.SUPABASE_SUB2_SERVICE_ROLE_KEY,
         push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
         push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
         push_1.WEB_PUSH_SUBJECT,
@@ -196,9 +201,12 @@ exports.api = (0, https_1.onRequest)({
     region: "asia-northeast1",
     secrets: [
         supabase_1.SUPABASE_SERVICE_ROLE_KEY,
+        supabase_1.SUPABASE_SUB2_SERVICE_ROLE_KEY,
         openai_1.OPENAI_API_KEY,
         push_1.WEB_PUSH_VAPID_PUBLIC_KEY,
         push_1.WEB_PUSH_VAPID_PRIVATE_KEY,
         push_1.WEB_PUSH_SUBJECT,
+        delayNotify_1.LINE_CHANNEL_ACCESS_TOKEN,
+        lineWebhook_1.LINE_CHANNEL_SECRET,
     ],
 }, app);
