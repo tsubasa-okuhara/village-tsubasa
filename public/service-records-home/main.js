@@ -127,7 +127,6 @@ function buildHomeSavePayload(values) {
     helperName: normalizeRequiredText(values.helperName, "helperName"),
     helperEmail: normalizeOptionalText(values.helperEmail),
     userName: normalizeRequiredText(values.userName, "userName"),
-    task: normalizeOptionalText(values.task),
     memo: normalizeOptionalText(values.memo),
     aiSummary: normalizeOptionalText(values.aiSummary),
     finalNote: normalizeRequiredText(values.finalNote, "finalNote"),
@@ -184,7 +183,11 @@ window.homeServiceRecordsApi = {
 const state = {
   items: [],
   selectedTask: null,
-  selectedCategory: "身体介護",
+  // ラジオで選ばれた区分。null = 未選択。memo と final_note にだけ出る。
+  selectedCategory: null,
+  // 予定の task 原文から推定した種別。表示とラジオの初期選択にだけ使う。
+  // 「重度訪問介護」と null もここには入る。**DB には書かない。**
+  inferredServiceType: null,
   finalNoteTouched: false,
   summaryReady: false,
 };
@@ -197,6 +200,14 @@ function getRequiredElement(id) {
   }
 
   return element;
+}
+
+function clearCategoryRadios(categoryGroupElement) {
+  categoryGroupElement
+    .querySelectorAll('input[name="homeCategory"]')
+    .forEach(function (inputElement) {
+      inputElement.checked = false;
+    });
 }
 
 function escapeHtml(value) {
@@ -264,18 +275,68 @@ function getInitialHelperEmail() {
   return getSavedHelperEmail();
 }
 
-function inferCategory(taskName) {
+/**
+ * 「区分」ラジオが取りうる3値。memo の「区分: 」に出るのもこの3つだけ。
+ * village-admin の parseMemo（functions/src/dashboard/excel-home.ts）が
+ * この文字列を読んで帳票のチェックを付けるので、**勝手に増やさないこと**。
+ */
+const HOME_CATEGORY_CHOICES = [
+  "身体介護",
+  "家事援助",
+  "通院等介助・通院等乗降介助",
+];
+
+/**
+ * 予定の task 原文からサービス種別を推定する規則。
+ *
+ * 判定順は転送側（gas-projects/service-record-transfer-sub2/サービス記録転送.js の
+ * HOME_SERVICE_CONTENT_RULES）と同じ。**「重訪 / 重度」を先に見る**のは
+ * 「重度な身体介護」を身体と誤判定しないため。順序を入れ替えないこと。
+ */
+const HOME_SERVICE_TYPE_RULES = [
+  { keyword: "重訪", serviceType: "重度訪問介護" },
+  { keyword: "重度", serviceType: "重度訪問介護" },
+  { keyword: "身体", serviceType: "身体介護" },
+  { keyword: "家事", serviceType: "家事援助" },
+  { keyword: "通院", serviceType: "通院等介助・通院等乗降介助" },
+];
+
+/**
+ * 予定の task 原文（GAS が転送時に書いた値）からサービス種別を推定する。
+ *
+ * 原文は短い表記（身体 / 家事 / 重訪 / 移動、重訪）で入ってくるので部分一致で見る。
+ * どれにも当たらなければ **null（判定不能）**。身体介護に倒さない。
+ *
+ * 以前は完全一致で「家事援助」「通院等介助・通院等乗降介助」だけを拾い、
+ * それ以外を既定値 "身体介護" にしていた。原文が短縮表記なので実際には
+ * 1件も一致せず、重訪も移動も全部 身体介護 になっていた（2026-09-07 修正）。
+ */
+function inferServiceType(taskName) {
   const text = String(taskName ?? "").trim();
 
-  if (text === "家事援助") {
-    return "家事援助";
+  if (!text) {
+    return null;
   }
 
-  if (text === "通院等介助・通院等乗降介助") {
-    return "通院等介助・通院等乗降介助";
+  for (let index = 0; index < HOME_SERVICE_TYPE_RULES.length; index += 1) {
+    const rule = HOME_SERVICE_TYPE_RULES[index];
+
+    if (text.includes(rule.keyword)) {
+      return rule.serviceType;
+    }
   }
 
-  return "身体介護";
+  return null;
+}
+
+/**
+ * 推定したサービス種別を「区分」ラジオの3択に落とす。
+ * 重度訪問介護と判定不能はラジオに対応する選択肢が無いので null を返し、
+ * ヘルパーに明示的に選ばせる（保存前バリデーションで止まる）。
+ * 既定で身体介護を選ぶと「選んだ値」と「倒れた値」が区別できなくなる。
+ */
+function toCategoryChoice(serviceType) {
+  return HOME_CATEGORY_CHOICES.includes(serviceType) ? serviceType : null;
 }
 
 function isBodyCareCategory(category) {
@@ -726,6 +787,14 @@ function renderChecklist(
   checklistHintElement,
   otherDetailFieldElement,
 ) {
+  if (!state.selectedCategory) {
+    checklistElement.className = "checkbox-grid";
+    checklistElement.innerHTML = "";
+    checklistHintElement.textContent = "区分を選ぶと実施項目が表示されます。";
+    otherDetailFieldElement.classList.add("is-hidden");
+    return;
+  }
+
   if (isBodyCareCategory(state.selectedCategory)) {
     checklistElement.className = "nested-checklist";
     checklistElement.innerHTML = HOME_BODY_CARE_PRIMARY_ITEMS.map(
@@ -833,6 +902,11 @@ function updateBodyCareChecklistVisibility(
   checklistElement,
   otherDetailFieldElement,
 ) {
+  if (!state.selectedCategory) {
+    otherDetailFieldElement.classList.add("is-hidden");
+    return;
+  }
+
   if (!isBodyCareCategory(state.selectedCategory)) {
     otherDetailFieldElement.classList.remove("is-hidden");
     return;
@@ -959,6 +1033,37 @@ function renderSelectedTask(selectedSummaryElement, saveStatusElement) {
   setStatus(saveStatusElement, "メモと記録本文を入力して保存してください。");
 }
 
+/**
+ * 予定の原文から何を推定したかを区分欄の下に出す。
+ * 「重度訪問介護」と判定不能はラジオ3択に無いので、その旨を明示して選択を促す。
+ */
+function renderCategoryHint(categoryHintElement) {
+  if (!state.selectedTask) {
+    categoryHintElement.textContent = "";
+    return;
+  }
+
+  const original = normalizeOptionalText(state.selectedTask.task);
+
+  if (!original) {
+    categoryHintElement.textContent =
+      "予定にサービス内容が入っていません。区分を選択してください。";
+    return;
+  }
+
+  if (!state.inferredServiceType) {
+    categoryHintElement.textContent = `予定の「${original}」から区分を判定できませんでした。区分を選択してください。`;
+    return;
+  }
+
+  if (!toCategoryChoice(state.inferredServiceType)) {
+    categoryHintElement.textContent = `予定の「${original}」は${state.inferredServiceType}です。区分3択に該当が無いため、記録上の区分を選択してください。`;
+    return;
+  }
+
+  categoryHintElement.textContent = `予定の「${original}」から「${state.inferredServiceType}」を選びました。違う場合は選び直してください。`;
+}
+
 function fillFormFromSelectedTask(
   serviceDateElement,
   helperNameElement,
@@ -970,7 +1075,9 @@ function fillFormFromSelectedTask(
   serviceDateElement.value = item ? item.service_date || "" : "";
   helperNameElement.value = item ? item.helper_name || "" : "";
   userNameElement.value = item ? item.user_name || "" : "";
-  taskElement.value = item ? state.selectedCategory : "";
+  // 予定の原文をそのまま出す。区分ラジオの値で上書きしない
+  // （ヘルパーが「重訪」「移動、重訪」を確認できないと区分を選べない）。
+  taskElement.value = item ? item.task || "" : "";
 }
 
 function resetEntryFields(
@@ -992,14 +1099,11 @@ function resetEntryFields(
 }
 
 function syncDerivedFields(
-  taskElement,
   memoElement,
   finalNoteElement,
   otherDetailElement,
   checklistElement,
 ) {
-  taskElement.value = state.selectedTask ? state.selectedCategory : "";
-
   const checkedItems = getSimpleCheckedItems(checklistElement);
   const primaryItems = isBodyCareCategory(state.selectedCategory)
     ? getBodyCarePrimaryItems(checklistElement)
@@ -1055,6 +1159,8 @@ async function loadHomeTasks(helperEmail, options) {
     helperNameElement,
     userNameElement,
     taskElement,
+    categoryGroupElement,
+    categoryHintElement,
     memoElement,
     finalNoteElement,
     otherDetailElement,
@@ -1065,7 +1171,10 @@ async function loadHomeTasks(helperEmail, options) {
   setStatus(saveStatusElement, "");
   state.selectedTask = null;
   state.items = [];
-  state.selectedCategory = inferCategory("");
+  state.inferredServiceType = null;
+  state.selectedCategory = null;
+  clearCategoryRadios(categoryGroupElement);
+  renderCategoryHint(categoryHintElement);
   renderChecklist(
     checklistElement,
     checklistHintElement,
@@ -1137,6 +1246,7 @@ function initializeHomeUi() {
   const userNameElement = getRequiredElement("home-user-name");
   const taskElement = getRequiredElement("home-task");
   const categoryGroupElement = getRequiredElement("home-category-group");
+  const categoryHintElement = getRequiredElement("home-category-hint");
   const checklistElement = getRequiredElement("home-checklist");
   const checklistHintElement = getRequiredElement("home-checklist-hint");
   const otherDetailFieldElement = getRequiredElement("home-other-detail-field");
@@ -1173,6 +1283,8 @@ function initializeHomeUi() {
       helperNameElement,
       userNameElement,
       taskElement,
+      categoryGroupElement,
+      categoryHintElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1181,12 +1293,17 @@ function initializeHomeUi() {
   });
 
   listElement.addEventListener("click", function () {
-    state.selectedCategory = inferCategory(state.selectedTask?.task);
+    state.inferredServiceType = inferServiceType(state.selectedTask?.task);
+    // 3択に落ちない（重度訪問介護 / 判定不能）ときは null のまま = ラジオ未選択。
+    state.selectedCategory = toCategoryChoice(state.inferredServiceType);
     categoryGroupElement
       .querySelectorAll('input[name="homeCategory"]')
       .forEach(function (inputElement) {
-        inputElement.checked = inputElement.value === state.selectedCategory;
+        inputElement.checked =
+          state.selectedCategory !== null &&
+          inputElement.value === state.selectedCategory;
       });
+    renderCategoryHint(categoryHintElement);
     renderChecklist(
       checklistElement,
       checklistHintElement,
@@ -1209,7 +1326,6 @@ function initializeHomeUi() {
       checklistElement,
     );
     syncDerivedFields(
-      taskElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1230,7 +1346,6 @@ function initializeHomeUi() {
       otherDetailFieldElement,
     );
     syncDerivedFields(
-      taskElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1245,6 +1360,7 @@ function initializeHomeUi() {
     .forEach(function (inputElement) {
       inputElement.addEventListener("change", function () {
         state.selectedCategory = inputElement.value;
+        renderCategoryHint(categoryHintElement);
         renderChecklist(
           checklistElement,
           checklistHintElement,
@@ -1258,7 +1374,6 @@ function initializeHomeUi() {
         state.finalNoteTouched = false;
         state.summaryReady = false;
         syncDerivedFields(
-          taskElement,
           memoElement,
           finalNoteElement,
           otherDetailElement,
@@ -1275,7 +1390,6 @@ function initializeHomeUi() {
     );
     state.summaryReady = false;
     syncDerivedFields(
-      taskElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1287,7 +1401,6 @@ function initializeHomeUi() {
   otherDetailElement.addEventListener("input", function () {
     state.summaryReady = false;
     syncDerivedFields(
-      taskElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1299,7 +1412,6 @@ function initializeHomeUi() {
   memoElement.addEventListener("input", function () {
     state.summaryReady = false;
     syncDerivedFields(
-      taskElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1329,7 +1441,6 @@ function initializeHomeUi() {
     }
 
     const derived = syncDerivedFields(
-      taskElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1421,7 +1532,6 @@ function initializeHomeUi() {
     }
 
     const derived = syncDerivedFields(
-      taskElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,
@@ -1478,7 +1588,9 @@ function initializeHomeUi() {
         helperName: state.selectedTask.helper_name,
         helperEmail: state.selectedTask.helper_email,
         userName: state.selectedTask.user_name,
-        task: state.selectedCategory,
+        // task は送らない。予定側（GAS 転送）の原文をそのまま残す。
+        // 「重訪」「移動、重訪」の原文が 4900 の移動介護加算の判定に使われており、
+        // 画面の区分3択で上書きすると加算が落ちる（2026-09-07 修正）。
         memo: derived.composedMemo,
         aiSummary: null,
         finalNote,
@@ -1491,6 +1603,11 @@ function initializeHomeUi() {
         return item.id !== state.selectedTask.id;
       });
       state.selectedTask = null;
+      // 区分も未選択に戻す。残すと次の予定を選ぶまで前回の区分が選ばれて見える。
+      state.inferredServiceType = null;
+      state.selectedCategory = null;
+      clearCategoryRadios(categoryGroupElement);
+      renderCategoryHint(categoryHintElement);
       fillFormFromSelectedTask(
         serviceDateElement,
         helperNameElement,
@@ -1502,6 +1619,11 @@ function initializeHomeUi() {
         finalNoteElement,
         otherDetailElement,
         checklistElement,
+      );
+      renderChecklist(
+        checklistElement,
+        checklistHintElement,
+        otherDetailFieldElement,
       );
       updateBodyCareChecklistVisibility(
         checklistElement,
@@ -1541,6 +1663,8 @@ function initializeHomeUi() {
       helperNameElement,
       userNameElement,
       taskElement,
+      categoryGroupElement,
+      categoryHintElement,
       memoElement,
       finalNoteElement,
       otherDetailElement,

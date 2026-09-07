@@ -236,12 +236,16 @@ async function updateSub2Record(
  * リクエスト側の値で上書きすると、古いタブが開きっぱなしのときに
  * 転送済みの正しい値を壊す経路ができるため。
  *
- * task は居宅では「身体介護 / 家事援助 / 通院等介助」をヘルパーが選ぶ入力なので書き込む。
+ * task も**書き込まない**（移動側と同じ扱い）。
+ * 以前は「ヘルパーが区分3択で選ぶ入力だから」として書き込んでいたが、
+ * task には GAS が転送時に原文（身体 / 家事 / 重訪 / 移動、重訪 など）を入れており、
+ * 4900（重度訪問介護）の移動介護加算はこの原文の「移動」の有無で判定している。
+ * 3択で上書きすると加算判定の入力が消える（2026-09-07 修正）。
+ * ヘルパーが選んだ区分は memo の「区分: 」行に残る。
  */
 export interface Sub2HomeSavePayload {
   final_note: string;
   memo: string | null;
-  task: string | null;
 }
 
 export function saveSub2HomeRecord(

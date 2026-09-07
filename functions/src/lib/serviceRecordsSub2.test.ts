@@ -64,7 +64,6 @@ function createFakeClient(rowsByUuid: Record<string, FakeRow>) {
 const PAYLOAD = {
   final_note: "2026-08-01 10:00:00〜11:00:00、記録本文です。",
   memo: "区分: 身体介護",
-  task: "身体介護",
 };
 
 test("isBlankBody は NULL・空文字・空白のみを未記入とみなす", () => {
@@ -88,6 +87,13 @@ test("本文が空文字の行は updated が返り、UPDATE が実行される"
   assert.equal(updates[0].payload.final_note, PAYLOAD.final_note);
   // updated_at は UPDATE 時に必ず更新する
   assert.ok(updates[0].payload.updated_at);
+  // task は**絶対に書き込まない**。GAS が転送時に入れた原文
+  //（身体 / 家事 / 重訪 / 移動、重訪 …）を残す。4900 の移動介護加算は
+  // この原文の「移動」の有無で判定しているため、上書きすると加算が落ちる。
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(updates[0].payload, "task"),
+    false,
+  );
 });
 
 test("本文が NULL の行も updated が返る（GAS がどちらで作るか不定のため）", async () => {

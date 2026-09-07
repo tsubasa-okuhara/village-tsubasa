@@ -25,11 +25,12 @@ function parseSaveHomeRecordBody(body) {
     if (!recordUuid || !serviceDate || !finalNote) {
         return null;
     }
+    // body.task は受け取っても捨てる。予定側（GAS 転送）が入れた原文を残すため。
+    // 古いタブが task を送ってきても無視される。
     return {
         recordUuid,
         serviceDate,
         finalNote,
-        task: normalizeText(body.task),
         memo: normalizeText(body.memo),
     };
 }
@@ -60,7 +61,6 @@ async function handleSaveHomeRecord(req, res) {
         const outcome = await (0, serviceRecordsSub2_1.saveSub2HomeRecord)(parsedBody.recordUuid, {
             final_note: parsedBody.finalNote,
             memo: parsedBody.memo,
-            task: parsedBody.task,
         });
         if (outcome.status === "not_found") {
             res.status(404).json({
