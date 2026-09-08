@@ -183,11 +183,9 @@ window.homeServiceRecordsApi = {
 const state = {
   items: [],
   selectedTask: null,
-  // ラジオで選ばれた区分。null = 未選択。memo と final_note にだけ出る。
-  selectedCategory: null,
-  // 予定の task 原文から推定した種別。表示とラジオの初期選択にだけ使う。
-  // 「重度訪問介護」と null もここには入る。**DB には書かない。**
-  inferredServiceType: null,
+  // 予定の task 原文から導出した区分。ヘルパーは選べない（表示のみ）。
+  // null = 判定不能。memo と final_note にだけ出る。**DB の task には書かない。**
+  category: null,
   finalNoteTouched: false,
   summaryReady: false,
 };
@@ -202,13 +200,6 @@ function getRequiredElement(id) {
   return element;
 }
 
-function clearCategoryRadios(categoryGroupElement) {
-  categoryGroupElement
-    .querySelectorAll('input[name="homeCategory"]')
-    .forEach(function (inputElement) {
-      inputElement.checked = false;
-    });
-}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -276,14 +267,21 @@ function getInitialHelperEmail() {
 }
 
 /**
- * 「区分」ラジオが取りうる3値。memo の「区分: 」に出るのもこの3つだけ。
- * village-admin の parseMemo（functions/src/dashboard/excel-home.ts）が
- * この文字列を読んで帳票のチェックを付けるので、**勝手に増やさないこと**。
+ * memo の「区分: 」に出る値。**この4種類以外を出さないこと。**
+ *
+ * village-admin の parseMemo → excel-home.ts:208-212 が
+ * `cat.includes("身体"/"家事"/"通院"/"重度")` の部分一致で帳票のチェックを付ける。
+ * 4値はそれぞれ**ちょうど1つ**の分岐に当たる（「重度訪問介護」は身体/家事/通院の
+ * どれも含まないので isJudo だけ true になる）。値を足すと帳票が多重チェックになる。
+ *
+ * 「重度訪問介護」は 2026-09-08 に追加（奥原承認・ルール4 の事前共有済み）。
+ * village-admin 側は無変更。既にある isJudo 分岐に初めて到達するようになる。
  */
-const HOME_CATEGORY_CHOICES = [
+const HOME_MEMO_CATEGORIES = [
   "身体介護",
   "家事援助",
   "通院等介助・通院等乗降介助",
+  "重度訪問介護",
 ];
 
 /**
@@ -330,17 +328,14 @@ function inferServiceType(taskName) {
 }
 
 /**
- * 推定したサービス種別を「区分」ラジオの3択に落とす。
- * 重度訪問介護と判定不能はラジオに対応する選択肢が無いので null を返し、
- * ヘルパーに明示的に選ばせる（保存前バリデーションで止まる）。
- * 既定で身体介護を選ぶと「選んだ値」と「倒れた値」が区別できなくなる。
+ * 入れ子（主チェック→子チェック→食事量）の身体介護フォームを使う区分。
+ * 重度訪問介護は専用UIを後日作るまでの**暫定**で身体介護のものを流用する
+ * （2026-09-08 奥原判断）。memo の「区分: 」には 重度訪問介護 と出る。
  */
-function toCategoryChoice(serviceType) {
-  return HOME_CATEGORY_CHOICES.includes(serviceType) ? serviceType : null;
-}
+const BODY_CARE_FORM_CATEGORIES = ["身体介護", "重度訪問介護"];
 
-function isBodyCareCategory(category) {
-  return category === "身体介護";
+function usesBodyCareForm(category) {
+  return BODY_CARE_FORM_CATEGORIES.includes(category);
 }
 
 function getSimpleCheckedItems(checklistElement) {
@@ -409,7 +404,7 @@ function getBodyCareAmounts(checklistElement) {
 }
 
 function getSelectedItems(checklistElement) {
-  if (isBodyCareCategory(state.selectedCategory)) {
+  if (usesBodyCareForm(state.category)) {
     return getBodyCarePrimaryItems(checklistElement);
   }
 
@@ -634,7 +629,7 @@ function buildStructuredLog(
   freeMemo,
   amounts,
 ) {
-  if (!isBodyCareCategory(category) || primaryItems.length === 0) {
+  if (!usesBodyCareForm(category) || primaryItems.length === 0) {
     return undefined;
   }
 
@@ -667,7 +662,7 @@ function buildMemoText(
   subItems,
   amounts,
 ) {
-  if (isBodyCareCategory(category)) {
+  if (usesBodyCareForm(category)) {
     const normalizedOtherDetail = normalizeOptionalText(otherDetail);
     const normalizedFreeMemo = normalizeOptionalText(freeMemo);
     const safeAmounts = amounts && typeof amounts === "object" ? amounts : {};
@@ -760,11 +755,11 @@ function buildFinalNoteText(
   const timeRange = formatTimeRange(task);
   const normalizedOtherDetail = normalizeOptionalText(otherDetail);
   const normalizedFreeMemo = normalizeOptionalText(freeMemo);
-  const detailTexts = isBodyCareCategory(category)
+  const detailTexts = usesBodyCareForm(category)
     ? getBodyCareItemsForSummary(primaryItems, subItems, otherDetail, amounts)
     : checkedItems.slice();
 
-  if (normalizedOtherDetail && !isBodyCareCategory(category)) {
+  if (normalizedOtherDetail && !usesBodyCareForm(category)) {
     detailTexts.push(normalizedOtherDetail);
   }
 
@@ -787,7 +782,7 @@ function renderChecklist(
   checklistHintElement,
   otherDetailFieldElement,
 ) {
-  if (!state.selectedCategory) {
+  if (!state.category) {
     checklistElement.className = "checkbox-grid";
     checklistElement.innerHTML = "";
     checklistHintElement.textContent = "区分を選ぶと実施項目が表示されます。";
@@ -795,7 +790,7 @@ function renderChecklist(
     return;
   }
 
-  if (isBodyCareCategory(state.selectedCategory)) {
+  if (usesBodyCareForm(state.category)) {
     checklistElement.className = "nested-checklist";
     checklistElement.innerHTML = HOME_BODY_CARE_PRIMARY_ITEMS.map(
       function (item, index) {
@@ -873,7 +868,7 @@ function renderChecklist(
     return;
   }
 
-  const items = HOME_SIMPLE_CATEGORY_ITEMS[state.selectedCategory] || [];
+  const items = HOME_SIMPLE_CATEGORY_ITEMS[state.category] || [];
 
   checklistElement.className = "checkbox-grid";
   checklistElement.innerHTML = items
@@ -902,12 +897,12 @@ function updateBodyCareChecklistVisibility(
   checklistElement,
   otherDetailFieldElement,
 ) {
-  if (!state.selectedCategory) {
+  if (!state.category) {
     otherDetailFieldElement.classList.add("is-hidden");
     return;
   }
 
-  if (!isBodyCareCategory(state.selectedCategory)) {
+  if (!usesBodyCareForm(state.category)) {
     otherDetailFieldElement.classList.remove("is-hidden");
     return;
   }
@@ -1037,31 +1032,28 @@ function renderSelectedTask(selectedSummaryElement, saveStatusElement) {
  * 予定の原文から何を推定したかを区分欄の下に出す。
  * 「重度訪問介護」と判定不能はラジオ3択に無いので、その旨を明示して選択を促す。
  */
-function renderCategoryHint(categoryHintElement) {
+function renderCategoryHint(categoryDisplayElement, categoryHintElement) {
   if (!state.selectedTask) {
+    categoryDisplayElement.value = "";
     categoryHintElement.textContent = "";
     return;
   }
 
   const original = normalizeOptionalText(state.selectedTask.task);
 
-  if (!original) {
-    categoryHintElement.textContent =
-      "予定にサービス内容が入っていません。区分を選択してください。";
+  if (!state.category) {
+    // 転送側（サービス記録転送.js:1100-1110）が判定不能の居宅行を見つけると
+    // バッチごと中断するので、本来ここには到達しない。到達したらデータ異常。
+    // 既定の区分に倒すと誤った値が memo と帳票に入るため、保存を止める。
+    categoryDisplayElement.value = "判定できません";
+    categoryHintElement.textContent = original
+      ? `予定の「${original}」から区分を判定できません。この記録は保存できないため、事業所に連絡してください。`
+      : "予定にサービス内容が入っていません。この記録は保存できないため、事業所に連絡してください。";
     return;
   }
 
-  if (!state.inferredServiceType) {
-    categoryHintElement.textContent = `予定の「${original}」から区分を判定できませんでした。区分を選択してください。`;
-    return;
-  }
-
-  if (!toCategoryChoice(state.inferredServiceType)) {
-    categoryHintElement.textContent = `予定の「${original}」は${state.inferredServiceType}です。区分3択に該当が無いため、記録上の区分を選択してください。`;
-    return;
-  }
-
-  categoryHintElement.textContent = `予定の「${original}」から「${state.inferredServiceType}」を選びました。違う場合は選び直してください。`;
+  categoryDisplayElement.value = state.category;
+  categoryHintElement.textContent = `予定の「${original}」から自動判定しました。変更が必要な場合は事業所に連絡してください。`;
 }
 
 function fillFormFromSelectedTask(
@@ -1105,17 +1097,17 @@ function syncDerivedFields(
   checklistElement,
 ) {
   const checkedItems = getSimpleCheckedItems(checklistElement);
-  const primaryItems = isBodyCareCategory(state.selectedCategory)
+  const primaryItems = usesBodyCareForm(state.category)
     ? getBodyCarePrimaryItems(checklistElement)
     : checkedItems;
-  const subItems = isBodyCareCategory(state.selectedCategory)
+  const subItems = usesBodyCareForm(state.category)
     ? getBodyCareSubItems(checklistElement)
     : {};
-  const amounts = isBodyCareCategory(state.selectedCategory)
+  const amounts = usesBodyCareForm(state.category)
     ? getBodyCareAmounts(checklistElement)
     : {};
   const composedMemo = buildMemoText(
-    state.selectedCategory,
+    state.category,
     checkedItems,
     otherDetailElement.value,
     memoElement.value,
@@ -1127,7 +1119,7 @@ function syncDerivedFields(
   if (!state.finalNoteTouched) {
     finalNoteElement.value = buildFinalNoteText(
       state.selectedTask,
-      state.selectedCategory,
+      state.category,
       checkedItems,
       otherDetailElement.value,
       memoElement.value,
@@ -1159,7 +1151,7 @@ async function loadHomeTasks(helperEmail, options) {
     helperNameElement,
     userNameElement,
     taskElement,
-    categoryGroupElement,
+    categoryDisplayElement,
     categoryHintElement,
     memoElement,
     finalNoteElement,
@@ -1171,10 +1163,8 @@ async function loadHomeTasks(helperEmail, options) {
   setStatus(saveStatusElement, "");
   state.selectedTask = null;
   state.items = [];
-  state.inferredServiceType = null;
-  state.selectedCategory = null;
-  clearCategoryRadios(categoryGroupElement);
-  renderCategoryHint(categoryHintElement);
+  state.category = null;
+  renderCategoryHint(categoryDisplayElement, categoryHintElement);
   renderChecklist(
     checklistElement,
     checklistHintElement,
@@ -1245,7 +1235,7 @@ function initializeHomeUi() {
   const helperNameElement = getRequiredElement("home-helper-name");
   const userNameElement = getRequiredElement("home-user-name");
   const taskElement = getRequiredElement("home-task");
-  const categoryGroupElement = getRequiredElement("home-category-group");
+  const categoryDisplayElement = getRequiredElement("home-category-display");
   const categoryHintElement = getRequiredElement("home-category-hint");
   const checklistElement = getRequiredElement("home-checklist");
   const checklistHintElement = getRequiredElement("home-checklist-hint");
@@ -1283,7 +1273,7 @@ function initializeHomeUi() {
       helperNameElement,
       userNameElement,
       taskElement,
-      categoryGroupElement,
+      categoryDisplayElement,
       categoryHintElement,
       memoElement,
       finalNoteElement,
@@ -1293,17 +1283,9 @@ function initializeHomeUi() {
   });
 
   listElement.addEventListener("click", function () {
-    state.inferredServiceType = inferServiceType(state.selectedTask?.task);
-    // 3択に落ちない（重度訪問介護 / 判定不能）ときは null のまま = ラジオ未選択。
-    state.selectedCategory = toCategoryChoice(state.inferredServiceType);
-    categoryGroupElement
-      .querySelectorAll('input[name="homeCategory"]')
-      .forEach(function (inputElement) {
-        inputElement.checked =
-          state.selectedCategory !== null &&
-          inputElement.value === state.selectedCategory;
-      });
-    renderCategoryHint(categoryHintElement);
+    // 精査済みの task を正とする。ヘルパーは区分を選ばない。
+    state.category = inferServiceType(state.selectedTask?.task);
+    renderCategoryHint(categoryDisplayElement, categoryHintElement);
     renderChecklist(
       checklistElement,
       checklistHintElement,
@@ -1354,34 +1336,6 @@ function initializeHomeUi() {
     setStatus(saveStatusElement, "");
     setSaveEnabled(saveButtonElement, false);
   });
-
-  categoryGroupElement
-    .querySelectorAll('input[name="homeCategory"]')
-    .forEach(function (inputElement) {
-      inputElement.addEventListener("change", function () {
-        state.selectedCategory = inputElement.value;
-        renderCategoryHint(categoryHintElement);
-        renderChecklist(
-          checklistElement,
-          checklistHintElement,
-          otherDetailFieldElement,
-        );
-        updateBodyCareChecklistVisibility(
-          checklistElement,
-          otherDetailFieldElement,
-        );
-        otherDetailElement.value = "";
-        state.finalNoteTouched = false;
-        state.summaryReady = false;
-        syncDerivedFields(
-          memoElement,
-          finalNoteElement,
-          otherDetailElement,
-          checklistElement,
-        );
-        setSaveEnabled(saveButtonElement, false);
-      });
-    });
 
   checklistElement.addEventListener("change", function () {
     updateBodyCareChecklistVisibility(
@@ -1435,8 +1389,12 @@ function initializeHomeUi() {
       return;
     }
 
-    if (!state.selectedCategory) {
-      setStatus(saveStatusElement, "区分を選択してください。", "is-error");
+    if (!state.category) {
+      setStatus(
+        saveStatusElement,
+        "この予定は区分を判定できないため保存できません。事業所に連絡してください。",
+        "is-error",
+      );
       return;
     }
 
@@ -1474,8 +1432,8 @@ function initializeHomeUi() {
         serviceDate: state.selectedTask.service_date,
         startTime: state.selectedTask.start_time,
         endTime: state.selectedTask.end_time,
-        category: state.selectedCategory,
-        items: isBodyCareCategory(state.selectedCategory)
+        category: state.category,
+        items: usesBodyCareForm(state.category)
           ? getBodyCareItemsForSummary(
               derived.primaryItems,
               derived.subItems,
@@ -1539,8 +1497,12 @@ function initializeHomeUi() {
     );
     const finalNote = String(finalNoteElement.value || "").trim();
 
-    if (!state.selectedCategory) {
-      setStatus(saveStatusElement, "区分を選択してください。", "is-error");
+    if (!state.category) {
+      setStatus(
+        saveStatusElement,
+        "この予定は区分を判定できないため保存できません。事業所に連絡してください。",
+        "is-error",
+      );
       return;
     }
 
@@ -1574,7 +1536,7 @@ function initializeHomeUi() {
       //
       // 送信自体をやめるのは後日（2026-08-03 奥原判断）。
       const structuredLog = buildStructuredLog(
-        state.selectedCategory,
+        state.category,
         derived.primaryItems,
         derived.subItems,
         otherDetailElement.value,
@@ -1604,10 +1566,8 @@ function initializeHomeUi() {
       });
       state.selectedTask = null;
       // 区分も未選択に戻す。残すと次の予定を選ぶまで前回の区分が選ばれて見える。
-      state.inferredServiceType = null;
-      state.selectedCategory = null;
-      clearCategoryRadios(categoryGroupElement);
-      renderCategoryHint(categoryHintElement);
+      state.category = null;
+      renderCategoryHint(categoryDisplayElement, categoryHintElement);
       fillFormFromSelectedTask(
         serviceDateElement,
         helperNameElement,
@@ -1663,7 +1623,7 @@ function initializeHomeUi() {
       helperNameElement,
       userNameElement,
       taskElement,
-      categoryGroupElement,
+      categoryDisplayElement,
       categoryHintElement,
       memoElement,
       finalNoteElement,

@@ -197,38 +197,6 @@
         cursor: default;
       }
 
-      .segmented-control {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-      }
-
-      .segmented-control input {
-        position: absolute;
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .segmented-control label {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 48px;
-        padding: 10px 12px;
-        border: 1px solid #d9c4b6;
-        border-radius: 14px;
-        background: #fff;
-        color: var(--muted);
-        text-align: center;
-        cursor: pointer;
-      }
-
-      .segmented-control input:checked + label {
-        border-color: var(--accent);
-        background: var(--accent-soft);
-        color: var(--text);
-      }
-
       .checkbox-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -409,7 +377,6 @@
       }
 
       @media (max-width: 640px) {
-        .segmented-control,
         .checkbox-grid {
           grid-template-columns: 1fr;
         }
@@ -486,36 +453,8 @@
                   <input id="home-task" name="task" type="text" readonly />
                 </div>
                 <div class="field">
-                  <label>区分</label>
-                  <div id="home-category-group" class="segmented-control">
-                    <div>
-                      <input
-                        id="home-category-body"
-                        name="homeCategory"
-                        type="radio"
-                        value="身体介護"
-                      />
-                      <label for="home-category-body">身体介護</label>
-                    </div>
-                    <div>
-                      <input
-                        id="home-category-housework"
-                        name="homeCategory"
-                        type="radio"
-                        value="家事援助"
-                      />
-                      <label for="home-category-housework">家事援助</label>
-                    </div>
-                    <div>
-                      <input
-                        id="home-category-hospital"
-                        name="homeCategory"
-                        type="radio"
-                        value="通院等介助・通院等乗降介助"
-                      />
-                      <label for="home-category-hospital">通院等介助・通院等乗降介助</label>
-                    </div>
-                  </div>
+                  <label for="home-category-display">区分</label>
+                  <input id="home-category-display" name="categoryDisplay" type="text" readonly />
                   <p id="home-category-hint" class="hint-text"></p>
                 </div>
                 <div class="field">
