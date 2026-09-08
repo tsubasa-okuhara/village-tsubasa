@@ -98,6 +98,53 @@ Notion「2026-07-26 ヘルパー向けサービス記録 記載基準対応（�
   3経路を sub2 に向ける。前2者は `fetchAllUsersMonthlyAuto` / `fetchUserMonthlyAuto` が
   既にあるので差し替えるだけ。フロントは `{year, month}` しか送っておらず mode 指定は無い。
 
+  **[訂正2 2026-09-08: 上の「Excel 3経路は旧DBのみ」「8月以降が1件も出ていない」は取り消し。実測で反証]**
+
+  **実測（奥原さん、2026-09-08）**:
+  1. 管理者アプリで 2026年8月・受給者7055 の実績記録票 Excel を出力
+     → 家事15件・身体23件が正しく出力。合計欄も 家事30時間 / 身体23時間。失敗0・警告0。
+  2. 旧DB `SELECT count(*) FROM service_notes_home WHERE service_date >= '2026-08-01'
+     AND service_date < '2026-09-01'` → **0**
+
+  **誤りの原因（2つ）**:
+
+  1. **駆動表を取り違えた。** 実績記録票の `fetchTasksRange`（`records-home.ts:297`）が
+     読む主表は **`home_schedule_tasks`** であり、`service_notes_home` ではない。
+     `service_notes_home` は `schedule_task_id` で後から結合するだけで、
+     0件でも `final_note` / `memo` が欠けるだけ。**出力自体は止まらない。**
+     実績記録票の区分と時間は `home_schedule_tasks` の `task` / `start_time` / `end_time`
+     から作るので、`service_notes_home` が0件でも8月分は正しく出る。
+     奥原さんの SQL が示したのは「`service_notes_home` に8月分が無い」であって、
+     「旧DBに8月分が無い」ではなかった。
+  2. **コード内コメントを実測せずに事実として扱った。** `records-home.ts` の
+     「8月提供分から旧DB(home_schedule_tasks)は 0 件になり、実績は sub2 にしか無い」
+     というコメントを裏取りせずに前提にした。**これが誤りの根。**
+
+  **画面の説明文「home_schedule_tasks + service_notes_home を集約」は古くない。**
+  読んだコードと完全に一致している。文言の修正は不要。
+
+  **さらに訂正1の(3)も誤り**: 「9/7 の `task` 保護が実績記録票を直接守っている」は誤り。
+  実績記録票の区分は 旧DB `home_schedule_tasks.task` または
+  sub2 `service_results_home.service_content`（`billing-source-sub2.ts:216`）から来ており、
+  **アプリが書く `service_records_home.task` は使っていない。**
+
+  **では `service_records_home.task` の原文は何に効くのか**（今回確認できた範囲）:
+  `excel-jisseki.ts:544-547` は移動介護分（U列・AI列・U40・AI40）を
+  **自動出力せず、必ず warning を出して手入力を促す**（§7 C案）。
+  つまり移動介護加算は**人が原文を読んで判断する**運用。
+  9/7 の修正の価値は「コード経路を守る」ことではなく
+  **「人が判断するための原文を消さない」**ことだった。9/3 の件がまさにこれ。
+
+  **未確認**: 本番にデプロイされているコードが、ここで読んだ `feat/billing-sub2` と
+  同じかは git からは判断できない。次の1本で切り分けられる:
+  ```sql
+  SELECT count(*) FROM home_schedule_tasks
+  WHERE deleted_at IS NULL
+    AND service_date >= '2026-08-01' AND service_date < '2026-09-01';
+  ```
+  **0 より大きい** → 旧DB経路で出力を説明できる。デプロイ版と読んだ版は整合。
+  **0** → デプロイ版は読んだ版と違い、sub2 経路（Auto）で出ている。
+
 ---
 
 ## 2026-09-08 [横断] Desktop 配下の重複リポジトリ3件を整理候補として記録（ルール9）
