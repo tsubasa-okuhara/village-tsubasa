@@ -145,6 +145,44 @@ Notion「2026-07-26 ヘルパー向けサービス記録 記載基準対応（�
   **0 より大きい** → 旧DB経路で出力を説明できる。デプロイ版と読んだ版は整合。
   **0** → デプロイ版は読んだ版と違い、sub2 経路（Auto）で出ている。
 
+  **[確定 2026-09-08: 実測 0。「Excel 3経路は旧DBのみ」は完全に取り消し]**
+
+  **実測（奥原さん）**:
+  - 旧DB `home_schedule_tasks` の 2026-08 は **0件**（`deleted_at IS NULL`）
+  - sub2 に `home_schedule_tasks` は存在しない（`ERROR 42P01`）。**設計どおり**。
+    sub2 の予定は `schedule_entries`、実績は `service_results_home`
+  - それでも 2026年8月の実績記録票 Excel は正しく出力された（家事15件・身体23件、失敗0・警告0）
+
+  **こちらで確認したこと**: `village-admin` の**ローカル8ブランチすべて**で
+  `handleRecordsHomeExportSingle` / `handleRecordsHomeExportZip` / `ExportHiMacro` は
+  非Auto の `fetchUserMonthly` / `fetchAllUsersMonthly` を呼んでいる
+  （`main` / `feat/billing-sub2` は 660 / 706 / 738 行目）。
+  worktree の未コミット変更は `docs/juryosho_notice.md` と受領書テンプレのみで
+  `records-home.ts` は含まない。stash も無し。
+  非Auto 経路は `home_schedule_tasks` が 0件なら `return []` → 404 になる。
+
+  **結論: 本番にデプロイされているコードは、ローカルのどのブランチ・worktree・
+  作業ツリーにも存在しない。** 本番だけが sub2 対応済みで、その差分が git に無い。
+
+  **⚠️ これはルール9 の 🔴（ロストリスク）。2026-04-19 の
+  `public/training-reports/main.js`（354行が Hosting にだけ存在した）と同じ型。**
+  ローカルが壊れたら本番のロジックを復元できない。**最優先で回収すること。**
+
+  回収手段（`village-admin-bd316` / Function 名 `api`）:
+  ```bash
+  # gen2 の場合
+  gcloud functions describe api --gen2 --region asia-northeast1 \
+    --project village-admin-bd316 \
+    --format="value(buildConfig.source.storageSource.bucket,buildConfig.source.storageSource.object)"
+  # gen1 の場合
+  gcloud functions describe api --region asia-northeast1 \
+    --project village-admin-bd316 --format="value(sourceArchiveUrl)"
+  # 出てきた gs:// をローカルに落として records-home.ts を突き合わせる
+  gsutil cp gs://<bucket>/<object> /tmp/deployed-api.zip
+  ```
+
+  **本件が確定するまで、village-admin のコードを読んで挙動を断定しない。**
+
 ---
 
 ## 2026-09-08 [横断] Desktop 配下の重複リポジトリ3件を整理候補として記録（ルール9）
