@@ -57,6 +57,47 @@ Notion「2026-07-26 ヘルパー向けサービス記録 記載基準対応（�
   上記の区分4値化の効果も、この経路を sub2 に向けるまで帳票には現れない。
   **監査で使う書類のため、別タスクとして要対応。**
 
+  **[訂正 2026-09-08: 上の記述は2点誤り。調査対象のブランチと帳票の取り違え]**
+
+  1. **読んだブランチが古かった。** `village-admin` の `main` は 2026-08-29 で、
+     sub2 対応（2026-09-01〜09-05）は未マージの `feat/billing-sub2`
+     （worktree `.claude/worktrees/july-billing-straddle`、origin より 14 コミット先行）にある。
+     `main` だけを見て「sub2 分岐なし」と判断したのが誤り。
+  2. **帳票を取り違えた。** `export-home.ts` が出すのは
+     **「サービス提供記録」**（1訪問1枚。memo の `区分: ` を読んで
+     身体介護／家事援助／通院等介助／重度訪問介護 のチェックを付ける様式）。
+     ナビ「実績記録票」は**別経路**（`records-home.ts` → `excel-records-home.ts`、
+     月次・区分ごとに別ファイル）。
+
+  **`feat/billing-sub2` 時点の実際のデータ元**（`records-home.ts`）:
+
+  | 経路 | ハンドラ | データ元 |
+  |---|---|---|
+  | 一覧（画面） | `handleRecordsHomeUsers` | **Auto（sub2 対応済み）** |
+  | プレビュー | `handleRecordsHomePreview` | **Auto（sub2 対応済み）** |
+  | 請求CSV | `handleRecordsHomeExportCsv` | **Auto（sub2 対応済み）** |
+  | J111 CSV | `handleRecordsHomeExportJ111Csv` | **Auto（sub2 対応済み）** |
+  | 請求ZIP | `handleRecordsHomeExportBillingZip` | **Auto（sub2 対応済み）** |
+  | **実績記録票 Excel（単票）** | `handleRecordsHomeExportSingle` | 🔴 旧DB のみ |
+  | **実績記録票 Excel（一括ZIP）** | `handleRecordsHomeExportZip` | 🔴 旧DB のみ |
+  | HiMacro | `handleRecordsHomeExportHiMacro` | 🔴 旧DB のみ |
+  | **サービス提供記録 Excel** | `export-home.ts` | 🔴 旧DB のみ |
+
+  つまり **「1件も出ていない」は Excel の3経路については成立するが、
+  請求CSV・J111・請求ZIP・一覧・プレビューは sub2 対応済み**で、
+  「帳票全体が8月以降を見ていない」という前回の書き方は言い過ぎだった。
+
+  3. **区分4値化が効くのはサービス提供記録のほう。**
+     実績記録票の区分は `records-home.ts:368` の `service_category: t.task ?? null`、
+     すなわち **`task` から導出**していて memo は使わない。
+     したがって 2026-09-07 の「`task` を上書きしない」修正が実績記録票を直接守っており、
+     今回の memo 4値化はサービス提供記録の区分チェックに効く。**どちらも必要な修正だった。**
+  4. **デプロイ状況は不明。** `feat/billing-sub2` が本番に出ているかは git からは判断できない。
+
+- **残課題（更新）**: 実績記録票 Excel（single/zip）・HiMacro・サービス提供記録 Excel の
+  3経路を sub2 に向ける。前2者は `fetchAllUsersMonthlyAuto` / `fetchUserMonthlyAuto` が
+  既にあるので差し替えるだけ。フロントは `{year, month}` しか送っておらず mode 指定は無い。
+
 ---
 
 ## 2026-09-08 [横断] Desktop 配下の重複リポジトリ3件を整理候補として記録（ルール9）
