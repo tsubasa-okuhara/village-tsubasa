@@ -228,6 +228,23 @@
         gap: 12px;
       }
 
+      /* 重訪の実施項目だけがグループ見出しを持つ（身体/家事/重度訪問介護/外出・移動）。
+         身体介護は従来どおり .nested-checklist の直下に __group が並ぶ。 */
+      .nested-checklist__section {
+        display: grid;
+        gap: 8px;
+      }
+
+      .nested-checklist__section-title {
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        padding: 2px 0 0 4px;
+        border-left: 3px solid var(--accent-soft);
+        padding-left: 8px;
+      }
+
       .nested-checklist__group {
         display: grid;
         gap: 8px;

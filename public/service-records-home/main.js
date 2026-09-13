@@ -42,6 +42,103 @@ const HOME_BODY_CARE_PRIMARY_ITEMS = [
   { label: "その他", children: [] },
 ];
 
+/**
+ * 重度訪問介護の実施項目（2026-09-13 に身体介護の暫定流用をやめて専用化）。
+ *
+ * village-admin の「サービス提供記録」様式（excel-home.ts:388-410）が持つ
+ * 重訪セクション（B28「※上記のチェック欄も使用」）と同じ組み立てにしてある。
+ * 身体・家事の欄も併用したうえで、外出介助を**追加**する様式なので、
+ * 「移動、重訪」の日でも身体・家事を隠す切り替えにはしない。
+ *
+ * 身体介護（HOME_BODY_CARE_PRIMARY_ITEMS）からの差分は2つだけ:
+ *   - 「移動介助」を外し、外出・移動グループの「外出介助」に統合した
+ *     （様式 D29「□外出介助」に対応する語。旧ラベルは身体介護欄 B23 の語）
+ *   - 「利用者とともに行う家事」の入れ子をやめ、調理/掃除/洗濯/買い物 を独立させた
+ *
+ * ⚠️ ラベルは memo の「主チェック:」にそのまま出て、village-admin の
+ * hasCheck（excel-home.ts:148）が**部分一致**で帳票のチェック位置を決める。
+ * 変えるときは docs/CHANGELOG.md の「サービス提供記録 Excel を sub2 に向けるとき」
+ * の残課題（①〜③）とセットで見ること。
+ */
+const HOME_JUDO_ITEM_GROUPS = [
+  {
+    title: "身体",
+    items: [
+      { label: "排泄介助", children: ["トイレ", "おむつ", "ポータブルトイレ利用"] },
+      {
+        label: "食事介助",
+        children: ["全介", "一部介助", "見守り"],
+        amountGroup: { label: "食事量", options: ["全量", "少量", "拒否"] },
+      },
+      { label: "清拭", children: ["全清拭", "上半身", "下半身", "陰部清浄"] },
+      {
+        label: "入浴介助",
+        children: [
+          "全介助",
+          "半介助",
+          "シャワー浴",
+          "全身浴",
+          "部分浴",
+          "手浴",
+          "足浴",
+          "洗髪",
+        ],
+      },
+      { label: "洗面等", children: ["洗面", "歯磨き"] },
+      {
+        label: "身体整容",
+        children: ["爪切", "耳掃除", "髭の手入れ", "身だしなみ"],
+      },
+      { label: "更衣介助", children: [] },
+      { label: "移乗介助", children: [] },
+      { label: "起床介助", children: [] },
+      { label: "就寝介助", children: [] },
+      { label: "服薬介助", children: [] },
+    ],
+  },
+  {
+    title: "家事",
+    items: [
+      { label: "調理", children: [] },
+      { label: "掃除", children: [] },
+      { label: "洗濯", children: [] },
+      { label: "買い物", children: [] },
+    ],
+  },
+  {
+    title: "重度訪問介護",
+    items: [
+      { label: "コミュニケーション支援", children: [] },
+      { label: "相談・助言", children: [] },
+      { label: "見守り", children: [] },
+    ],
+  },
+  {
+    // 予定の task 原文に「移動」を含むときだけ出す。身体・家事の**追加**であって
+    // 切り替えではない（「移動、重訪」の日でも居宅内の支援はある）。
+    title: "外出・移動",
+    requiresOuting: true,
+    items: [{ label: "外出介助", children: [] }],
+  },
+  {
+    // 見出しは出さない。「その他」の見出しの直下に「その他」のチェックが
+    // 並ぶと誤表示に見えるため。
+    title: null,
+    items: [{ label: "その他", children: [] }],
+  },
+];
+
+/**
+ * 外出・移動グループを出すかどうか。予定の task 原文に「移動」を含むかで見る。
+ *
+ * village-admin の移動介護欄（U列/AI列）の判定
+ * （dashboard/jisseki-source.ts:86 `(r.task ?? "").includes("移動")`）と**同じ規則**。
+ * 別リポなので実体は共有できない。片方を変えるならもう片方も見ること。
+ */
+function requiresOutingSection(taskName) {
+  return String(taskName ?? "").includes("移動");
+}
+
 const HOME_SIMPLE_CATEGORY_ITEMS = {
   家事援助: [
     "調理",
@@ -328,14 +425,23 @@ function inferServiceType(taskName) {
 }
 
 /**
- * 入れ子（主チェック→子チェック→食事量）の身体介護フォームを使う区分。
- * 重度訪問介護は専用UIを後日作るまでの**暫定**で身体介護のものを流用する
- * （2026-09-08 奥原判断）。memo の「区分: 」には 重度訪問介護 と出る。
+ * 入れ子（主チェック→子チェック→食事量）のフォームを使う区分。
+ *
+ * 2026-09-13 に重度訪問介護の**項目**を専用のもの（HOME_JUDO_ITEM_GROUPS）に
+ * 分けたが、**入力の仕組みと memo の書式は共通のまま**にしてある。
+ * ここから重訪を外すと buildMemoText が「実施項目: …」の平坦な書式に落ち、
+ * village-admin の parseMemo（excel-home.ts:36-79）が読む
+ * 「主チェック:」「子チェック:」が出なくなって帳票が空になる。**外さないこと。**
  */
 const BODY_CARE_FORM_CATEGORIES = ["身体介護", "重度訪問介護"];
 
 function usesBodyCareForm(category) {
   return BODY_CARE_FORM_CATEGORIES.includes(category);
+}
+
+// 実施項目だけが専用。区分名そのものは HOME_MEMO_CATEGORIES の値と一致させる。
+function usesJudoItems(category) {
+  return category === "重度訪問介護";
 }
 
 function getSimpleCheckedItems(checklistElement) {
@@ -777,29 +883,25 @@ function buildFinalNoteText(
   return sentences.join("");
 }
 
-function renderChecklist(
-  checklistElement,
-  checklistHintElement,
-  otherDetailFieldElement,
-) {
-  if (!state.category) {
-    checklistElement.className = "checkbox-grid";
-    checklistElement.innerHTML = "";
-    checklistHintElement.textContent = "区分を選ぶと実施項目が表示されます。";
-    otherDetailFieldElement.classList.add("is-hidden");
-    return;
-  }
+/**
+ * 主項目1件ぶんのマークアップ。
+ *
+ * ⚠️ `index` は **チェックリスト全体で一意な通し番号**であること。
+ * グループごとに 0 から振り直すと `home-body-primary-0` が複数でき、
+ * `<label for>` が別のチェックボックスを開閉し、食事量ラジオの `name` も
+ * 合体する（どちらも例外を出さず黙って誤動作する）。
+ *
+ * 属性（data-level / data-parent / data-subgroup-for / data-amount-group-for）は
+ * 収集側（getBodyCarePrimaryItems ほか）と updateBodyCareChecklistVisibility が
+ * そのまま使う。**セレクタの契約なので変えないこと。**
+ */
+function buildBodyCarePrimaryItemHtml(item, index) {
+  const primaryId = `home-body-primary-${index}`;
+  const childrenHtml = item.children
+    .map(function (childLabel, childIndex) {
+      const childId = `home-body-child-${index}-${childIndex}`;
 
-  if (usesBodyCareForm(state.category)) {
-    checklistElement.className = "nested-checklist";
-    checklistElement.innerHTML = HOME_BODY_CARE_PRIMARY_ITEMS.map(
-      function (item, index) {
-        const primaryId = `home-body-primary-${index}`;
-        const childrenHtml = item.children
-          .map(function (childLabel, childIndex) {
-            const childId = `home-body-child-${index}-${childIndex}`;
-
-            return `
+      return `
             <label class="nested-checklist__child" for="${escapeHtml(childId)}">
               <input
                 id="${escapeHtml(childId)}"
@@ -811,11 +913,11 @@ function renderChecklist(
               <span>${escapeHtml(childLabel)}</span>
             </label>
           `;
-          })
-          .join("");
+    })
+    .join("");
 
-        const amountGroupHtml = item.amountGroup
-          ? `<div class="nested-checklist__amount-group" data-amount-group-for="${escapeHtml(item.label)}">
+  const amountGroupHtml = item.amountGroup
+    ? `<div class="nested-checklist__amount-group" data-amount-group-for="${escapeHtml(item.label)}">
               <div class="nested-checklist__amount-label">${escapeHtml(item.amountGroup.label)}</div>
               <div class="nested-checklist__amount-options">
                 ${item.amountGroup.options
@@ -838,9 +940,9 @@ function renderChecklist(
                   .join("")}
               </div>
             </div>`
-          : "";
+    : "";
 
-        return `
+  return `
         <div class="nested-checklist__group">
           <label class="checkbox-item" for="${escapeHtml(primaryId)}">
             <input
@@ -859,11 +961,70 @@ function renderChecklist(
           ${amountGroupHtml}
         </div>
       `;
-      },
-    ).join("");
+}
 
-    checklistHintElement.textContent =
-      "主チェックを選ぶと必要な子チェックだけ表示します。";
+/**
+ * 重訪のチェックリスト。外出・移動グループは task 原文に「移動」を含むときだけ出す。
+ * 通し番号は**表示するグループだけ**を通して振る（隠したグループの番号は使わない）。
+ */
+function buildJudoChecklistHtml(taskName) {
+  const includeOuting = requiresOutingSection(taskName);
+  let itemIndex = 0;
+
+  return HOME_JUDO_ITEM_GROUPS.filter(function (group) {
+    return !group.requiresOuting || includeOuting;
+  })
+    .map(function (group) {
+      const itemsHtml = group.items
+        .map(function (item) {
+          const html = buildBodyCarePrimaryItemHtml(item, itemIndex);
+          itemIndex += 1;
+          return html;
+        })
+        .join("");
+
+      const titleHtml = group.title
+        ? `<div class="nested-checklist__section-title">${escapeHtml(group.title)}</div>`
+        : "";
+
+      return `<div class="nested-checklist__section">${titleHtml}${itemsHtml}</div>`;
+    })
+    .join("");
+}
+
+function renderChecklist(
+  checklistElement,
+  checklistHintElement,
+  otherDetailFieldElement,
+) {
+  if (!state.category) {
+    checklistElement.className = "checkbox-grid";
+    checklistElement.innerHTML = "";
+    checklistHintElement.textContent = "区分を選ぶと実施項目が表示されます。";
+    otherDetailFieldElement.classList.add("is-hidden");
+    return;
+  }
+
+  if (usesBodyCareForm(state.category)) {
+    checklistElement.className = "nested-checklist";
+
+    if (usesJudoItems(state.category)) {
+      checklistElement.innerHTML = buildJudoChecklistHtml(
+        state.selectedTask?.task,
+      );
+      checklistHintElement.textContent = requiresOutingSection(
+        state.selectedTask?.task,
+      )
+        ? "予定に「移動」が入っているため、外出・移動の項目も表示しています。居宅内の支援とあわせて選択します。"
+        : "主チェックを選ぶと必要な子チェックだけ表示します。";
+    } else {
+      checklistElement.innerHTML = HOME_BODY_CARE_PRIMARY_ITEMS.map(
+        buildBodyCarePrimaryItemHtml,
+      ).join("");
+      checklistHintElement.textContent =
+        "主チェックを選ぶと必要な子チェックだけ表示します。";
+    }
+
     otherDetailFieldElement.classList.add("is-hidden");
     return;
   }
