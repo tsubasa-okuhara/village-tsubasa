@@ -101,6 +101,10 @@ const helperEmailElement = getRequiredElement("helper-email");
 const statusCardElement = getRequiredElement("status-card");
 const emptyCardElement = getRequiredElement("empty-card");
 const scheduleListElement = getRequiredElement("schedule-list");
+const okuriSummaryElement = getRequiredElement("okuri-summary");
+const okuriSectionElement = getRequiredElement("okuri-section");
+const okuriListElement = getRequiredElement("okuri-list");
+const okuriDoneElement = getRequiredElement("okuri-done");
 
 function escapeHtml(value) {
   return String(value)
@@ -878,13 +882,217 @@ async function postDelayNotify(payload) {
   return { kind: "error", message: data?.message };
 }
 
+// ========== 送り枠（🚐 迎えに行った / ✅ 送り届けた）==========
+//
+// オーナー（奥原さん）専用。OKURI_OWNER_EMAILS に無いメールでは
+// ボタンもセクションも一切出ないので、他のヘルパーの画面は今までどおり。
+//
+// 状態は端末の localStorage だけに持つ（DB・Functions は触らない）。
+//   riding = 迎えに行った（乗せている） → 予定カードが消えて送り枠に出る
+//   done   = 送り届けた               → 送り枠からも消える（「送り済み」に畳んで残す）
+// キーは schedule id ではなく「日付|開始|終了|利用者名」。
+// sub2 の schedule_entries.id は週シート再同期のたびに振り直されるので、
+// id で持つと日中の同期で状態が迷子になる。
+const OKURI_STORAGE_KEY = "village_okuri";
+const OKURI_OWNER_EMAILS = [
+  "village.tsubasa_4499@icloud.com",
+  "admin@village-support.jp",
+];
+
+function normalizeEmail(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isOkuriEnabled() {
+  return OKURI_OWNER_EMAILS.includes(normalizeEmail(state.helperEmail));
+}
+
+function getOkuriData() {
+  try {
+    return JSON.parse(localStorage.getItem(OKURI_STORAGE_KEY) || "{}");
+  } catch { return {}; }
+}
+
+function saveOkuriData(data) {
+  localStorage.setItem(OKURI_STORAGE_KEY, JSON.stringify(data));
+}
+
+function buildOkuriKey(dateStr, item) {
+  return `${dateStr}|${item.startTime ?? ""}|${item.endTime ?? ""}|${item.userName ?? ""}`;
+}
+
+function getOkuriRecord(item) {
+  if (!state.date) return null;
+  return getOkuriData()[buildOkuriKey(state.date, item)] || null;
+}
+
+function getOkuriStatus(item) {
+  if (!isOkuriEnabled()) return "";
+  const record = getOkuriRecord(item);
+  return record ? record.status : "";
+}
+
+/** status: "riding" | "done" | ""（空で予定に戻す） */
+function setOkuriStatus(item, status) {
+  const data = getOkuriData();
+  const key = buildOkuriKey(state.date, item);
+
+  if (!status) {
+    delete data[key];
+  } else {
+    const previous = data[key] || {};
+    data[key] = {
+      status,
+      pickedAt: status === "riding" ? (previous.pickedAt || Date.now()) : previous.pickedAt,
+      droppedAt: status === "done" ? Date.now() : undefined,
+    };
+  }
+
+  saveOkuriData(data);
+}
+
+/** 日付が変わったら前日までの状態は捨てる（端末に溜めない） */
+function pruneOkuriData(dateStr) {
+  if (!dateStr) return;
+  const data = getOkuriData();
+  const prefix = `${dateStr}|`;
+  let changed = false;
+
+  Object.keys(data).forEach(function (key) {
+    if (!key.startsWith(prefix)) {
+      delete data[key];
+      changed = true;
+    }
+  });
+
+  if (changed) saveOkuriData(data);
+}
+
+// 「送り済み」の開閉状態。render() のたびに DOM を作り直すので、ここに覚えておく
+let okuriDoneOpen = false;
+
+function renderOkuri() {
+  const enabled = isOkuriEnabled() && state.status === "success";
+
+  if (!enabled) {
+    okuriSummaryElement.hidden = true;
+    okuriSectionElement.hidden = true;
+    okuriListElement.innerHTML = "";
+    okuriDoneElement.innerHTML = "";
+    return;
+  }
+
+  const riding = [];
+  const done = [];
+  state.items.forEach(function (item, index) {
+    const record = getOkuriRecord(item);
+    if (!record) return;
+    if (record.status === "riding") riding.push({ item, index, record });
+    if (record.status === "done") done.push({ item, index, record });
+  });
+
+  // 画面上部のバッジ。スクロールしなくても「乗せている人がいる」と分かるように
+  okuriSummaryElement.hidden = riding.length === 0;
+  okuriSummaryElement.textContent = `🚐 乗車中 ${riding.length}名`;
+
+  // 送り枠そのもの。乗車中も送り済みも 0 なら出さない
+  okuriSectionElement.hidden = riding.length === 0 && done.length === 0;
+
+  okuriListElement.innerHTML = riding.map(function (entry) {
+    const item = entry.item;
+    return `
+      <article class="okuri-card">
+        <div class="okuri-card-head">
+          <div class="okuri-name">${escapeHtml(getDisplayValue(item.userName))}</div>
+          <span class="okuri-badge">乗車中 ${escapeHtml(formatClock(entry.record.pickedAt))}〜</span>
+        </div>
+        <div class="schedule-details">
+          <div class="schedule-row">
+            <div class="schedule-label">🕒 予定</div>
+            <div class="schedule-value">${escapeHtml(formatTimeRange(item))}</div>
+          </div>
+          <div class="schedule-row">
+            <div class="schedule-label">📍 送り先</div>
+            <div class="schedule-value">${escapeHtml(getDisplayValue(item.task))}</div>
+          </div>
+          <div class="schedule-row">
+            <div class="schedule-label">🚗 配車</div>
+            <div class="schedule-value">${escapeHtml(getDisplayValue(item.haisha))}</div>
+          </div>
+        </div>
+        <div class="cal-buttons">
+          <button class="okuri-btn okuri-btn--drop" data-index="${entry.index}">✅ 送り届けた</button>
+          <button class="okuri-link" data-index="${entry.index}" data-okuri="undo">予定に戻す</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  if (riding.length === 0) {
+    okuriListElement.innerHTML = `<p class="okuri-empty">本日の送りはすべて完了しました</p>`;
+  }
+
+  // 送り済みは畳んで残す。間違えて押したときに「戻す」で乗車中に復帰できる
+  okuriDoneElement.innerHTML = done.length === 0 ? "" : `
+    <details class="okuri-done"${okuriDoneOpen ? " open" : ""}>
+      <summary>送り済み ${done.length}件</summary>
+      <div class="okuri-done-list">
+        ${done.map(function (entry) {
+          const item = entry.item;
+          return `
+            <div class="okuri-done-row">
+              <div class="okuri-done-text">
+                <span class="okuri-done-name">${escapeHtml(getDisplayValue(item.userName))}</span>
+                <span class="okuri-done-meta">${escapeHtml(formatTimeRange(item))} ／ ${escapeHtml(formatClock(entry.record.droppedAt))} 送り済み</span>
+              </div>
+              <button class="okuri-link" data-index="${entry.index}" data-okuri="reride">戻す</button>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </details>
+  `;
+
+  const details = okuriDoneElement.querySelector("details");
+  if (details) {
+    details.addEventListener("toggle", function () {
+      okuriDoneOpen = details.open;
+    });
+  }
+
+  okuriListElement.querySelectorAll(".okuri-btn--drop").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const item = state.items[parseInt(btn.dataset.index, 10)];
+      if (!item) return;
+      setOkuriStatus(item, "done");
+      render();
+    });
+  });
+
+  okuriSectionElement.querySelectorAll(".okuri-link").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const item = state.items[parseInt(btn.dataset.index, 10)];
+      if (!item) return;
+      // undo = 乗車中 → 予定へ戻す / reride = 送り済み → 乗車中へ戻す
+      setOkuriStatus(item, btn.dataset.okuri === "reride" ? "riding" : "");
+      render();
+    });
+  });
+}
+
 function renderItems() {
   if (state.status !== "success" || state.items.length === 0) {
     scheduleListElement.innerHTML = "";
     return;
   }
 
+  const okuriEnabled = isOkuriEnabled();
+
   scheduleListElement.innerHTML = state.items.map(function (item, index) {
+    // 送り枠に移った予定（乗車中・送り済み）は予定一覧から外す。
+    // index は state.items の添字のまま使う（カレンダー追加済みのキーが index 依存のため）
+    if (getOkuriStatus(item)) return "";
+
     const googleAdded = isCalAdded(state.date, index, "google");
     const appleAdded = isCalAdded(state.date, index, "apple");
 
@@ -913,6 +1121,11 @@ function renderItems() {
     const delayHtml = hasDelayId && delayBadges.length < DELAY_NOTICE_TYPES.length
       ? delayBadges.join("") + `<button class="delay-btn" data-index="${index}">📢 遅れる連絡</button>`
       : delayBadges.join("");
+
+    // 送り枠（オーナー専用）。押すとこのカードが下の送り枠へ移る
+    const okuriHtml = okuriEnabled
+      ? `<button class="okuri-btn okuri-btn--pickup" data-index="${index}">🚐 迎えに行った</button>`
+      : "";
 
     const coHelpers = Array.isArray(item.coHelpers) ? item.coHelpers : [];
     const coHelpersHtml = coHelpers.length > 0
@@ -945,6 +1158,7 @@ function renderItems() {
           <button class="cal-btn ${googleAdded ? "cal-btn--added" : "cal-btn--google"}" data-index="${index}" data-cal="google">${googleAdded ? "Google追加済み" : "Googleカレンダーに追加"}</button>
           <button class="cal-btn ${appleAdded ? "cal-btn--added" : "cal-btn--apple"}" data-index="${index}" data-cal="apple">${appleAdded ? "iPhone追加済み" : "iPhoneカレンダー"}</button>
           ${delayHtml}
+          ${okuriHtml}
         </div>
       </article>
     `;
@@ -983,6 +1197,16 @@ function renderItems() {
       const item = state.items[idx];
       if (!item) return;
       openDelaySheet(item);
+    });
+  });
+
+  scheduleListElement.querySelectorAll(".okuri-btn--pickup").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const idx = parseInt(btn.dataset.index, 10);
+      const item = state.items[idx];
+      if (!item) return;
+      setOkuriStatus(item, "riding");
+      render();
     });
   });
 }
@@ -1083,6 +1307,7 @@ function render() {
   renderEmpty();
   renderBulkButton();
   renderItems();
+  renderOkuri();
 }
 
 async function fetchTodaySchedule(helperEmail) {
@@ -1129,6 +1354,7 @@ async function initializePage() {
     state.date = result.date || "";
     state.helperEmail = result.helperEmail || state.helperEmail;
     state.items = Array.isArray(result.items) ? result.items : [];
+    pruneOkuriData(state.date);
     setStatus("success", "");
     render();
   } catch (error) {

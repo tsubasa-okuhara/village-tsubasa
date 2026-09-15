@@ -297,6 +297,165 @@
         border-radius: 12px;
       }
 
+      /* 送り枠（🚐 迎えに行った / ✅ 送り届けた）: オーナー専用。main.js が表示可否を決める */
+      .okuri-summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        padding: 8px 14px;
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #2f6b45;
+        background: rgba(93, 160, 110, 0.14);
+        border: 1px solid rgba(93, 160, 110, 0.45);
+        border-radius: 999px;
+      }
+      .okuri-summary[hidden] { display: none; }
+
+      .okuri-btn {
+        flex: 1 1 100%;
+        min-height: 44px;
+        padding: 12px 18px;
+        font-size: 0.98rem;
+        font-weight: 700;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+      .okuri-btn--pickup {
+        color: #2f6b45;
+        background: rgba(93, 160, 110, 0.12);
+        border: 2px solid rgba(93, 160, 110, 0.7);
+      }
+      .okuri-btn--pickup:hover { background: rgba(93, 160, 110, 0.2); }
+      .okuri-btn--pickup:active { background: rgba(93, 160, 110, 0.3); }
+      .okuri-btn--drop {
+        color: #fff;
+        background: #3f8f5a;
+        border: none;
+        box-shadow: 0 2px 8px rgba(63, 143, 90, 0.28);
+      }
+      .okuri-btn--drop:hover { background: #367d4e; }
+      .okuri-btn--drop:active { background: #2e6c43; }
+
+      .okuri-link {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--muted);
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .okuri-link:hover { background: rgba(0, 0, 0, 0.04); }
+
+      .okuri-section {
+        margin-top: 24px;
+        padding-top: 18px;
+        border-top: 2px dashed var(--line);
+      }
+      .okuri-section[hidden] { display: none; }
+
+      .okuri-heading {
+        margin: 0;
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: #7a5d63;
+      }
+
+      .okuri-lead {
+        margin: 6px 0 0;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .okuri-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .okuri-card {
+        padding: 18px;
+        border: 1px solid rgba(224, 138, 60, 0.45);
+        border-left: 6px solid #e08a3c;
+        border-radius: 22px;
+        background: rgba(255, 250, 244, 0.92);
+      }
+
+      .okuri-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .okuri-name {
+        font-size: 1.25rem;
+        font-weight: 800;
+      }
+
+      .okuri-badge {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #8a5420;
+        background: rgba(224, 138, 60, 0.16);
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+
+      .okuri-empty {
+        margin: 0;
+        padding: 16px 18px;
+        color: var(--muted);
+        border: 1px dashed var(--line);
+        border-radius: 22px;
+      }
+
+      .okuri-done {
+        margin-top: 14px;
+        padding: 12px 16px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.6);
+      }
+      .okuri-done summary {
+        cursor: pointer;
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .okuri-done-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .okuri-done-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+      }
+      .okuri-done-text {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+      .okuri-done-name {
+        font-weight: 700;
+      }
+      .okuri-done-meta {
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+
       /* 遅延連絡シート（画面下から出るモーダル） */
       .delay-overlay {
         position: fixed;
@@ -567,6 +726,10 @@
         .schedule-card {
           padding: 16px;
         }
+
+        .okuri-card {
+          padding: 16px;
+        }
       }
       .back-home-btn {
         display: inline-block;
@@ -598,6 +761,7 @@
         <div class="eyebrow">Village Tsubasa</div>
         <h1>今日の予定</h1>
         <p class="lead">本日の担当予定を確認できます</p>
+        <div id="okuri-summary" class="okuri-summary" hidden aria-live="polite"></div>
 
         <div class="hero-meta">
           <section class="meta-card">
@@ -623,6 +787,13 @@
 
           <button id="cal-bulk-btn" class="cal-bulk">全件まとめてGoogleカレンダーに追加</button>
           <section id="schedule-list" class="list" aria-live="polite"></section>
+
+          <section id="okuri-section" class="okuri-section" hidden aria-live="polite">
+            <h2 class="okuri-heading">🚐 送り枠</h2>
+            <p class="okuri-lead">「迎えに行った」を押した予定がここに入ります。送り届けたら消えます。</p>
+            <div id="okuri-list" class="okuri-list"></div>
+            <div id="okuri-done"></div>
+          </section>
         </div>
       </section>
     </main>
