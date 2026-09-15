@@ -49,10 +49,40 @@ const state = {
   pushSupported: false,
 };
 
+// バッジ抑止フラグ（端末ごと）。「通知を止める」を押した端末では、未読があっても
+// ホーム画面アイコンの赤い数字を出さない。「通知を受け取る」で解除される。
+// 未読の数え方やサーバ側は変えない。この端末で「見せるかどうか」だけを持つ。
+const BADGE_MUTED_KEY = "village_badge_muted";
+
+function isBadgeMuted() {
+  try {
+    return localStorage.getItem(BADGE_MUTED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setBadgeMuted(muted) {
+  try {
+    if (muted) {
+      localStorage.setItem(BADGE_MUTED_KEY, "1");
+    } else {
+      localStorage.removeItem(BADGE_MUTED_KEY);
+    }
+  } catch (error) {
+    console.error("[badge] mute flag error:", error);
+  }
+}
+
 async function updateAppBadge(count) {
   try {
     if (typeof navigator === "undefined") {
       return;
+    }
+
+    // この端末で「通知を止める」済みなら、未読があってもバッジは消す
+    if (isBadgeMuted()) {
+      count = 0;
     }
 
     if (!count || count <= 0) {
@@ -974,6 +1004,7 @@ function setupPushControls() {
       setPushMessage("端末通知を登録しています...", "default");
       enableButtonElement.disabled = true;
       await subscribeCurrentDevice();
+      setBadgeMuted(false);
       setPushMessage(
         "端末通知を登録しました。必要ならテスト通知も送れます。",
         "success",
@@ -990,17 +1021,19 @@ function setupPushControls() {
       setPushStatusLabel("解除中");
       setPushMessage("端末登録を解除しています...", "default");
       disableButtonElement.disabled = true;
+      setBadgeMuted(true);
+      updateAppBadge(0);
       const result = await unsubscribeCurrentDevice();
 
       if (result.scope === "email") {
         setPushMessage(
-          "この端末に登録が見つからなかったため、保存中のメールアドレスに紐づく通知登録をすべて解除しました。",
+          "この端末に登録が見つからなかったため、保存中のメールアドレスに紐づく通知登録をすべて解除しました。この端末ではアイコンの赤い数字も出なくなります。",
           "success",
         );
       } else if (result.scope === "none") {
         setPushMessage("この端末は通知を受け取る設定になっていません。", "default");
       } else {
-        setPushMessage("この端末の通知設定を解除しました。", "success");
+        setPushMessage("この端末の通知設定を解除しました。アイコンの赤い数字も出なくなります。", "success");
       }
     } catch (error) {
       // ローカル購読の解除は済んでいるが、サーバ側の解除に失敗した状態

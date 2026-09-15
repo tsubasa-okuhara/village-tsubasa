@@ -11,10 +11,28 @@ const state = {
   message: "読み込み中...",
 };
 
+// バッジ抑止フラグ（端末ごと）。「通知を止める」を押した端末では、未読があっても
+// ホーム画面アイコンの赤い数字を出さない。「通知を受け取る」で解除される。
+// 未読の数え方やサーバ側は変えない。この端末で「見せるかどうか」だけを持つ。
+const BADGE_MUTED_KEY = "village_badge_muted";
+
+function isBadgeMuted() {
+  try {
+    return localStorage.getItem(BADGE_MUTED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 async function updateAppBadge(count) {
   try {
     if (typeof navigator === "undefined") {
       return;
+    }
+
+    // この端末で「通知を止める」済みなら、未読があってもバッジは消す
+    if (isBadgeMuted()) {
+      count = 0;
     }
 
     if (!count || count <= 0) {
